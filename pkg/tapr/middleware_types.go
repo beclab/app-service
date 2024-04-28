@@ -1,0 +1,47 @@
+package tapr
+
+// Middleware describe middleware config.
+type Middleware struct {
+	Postgres   *PostgresConfig   `yaml:"postgres,omitempty"`
+	Redis      *RedisConfig      `yaml:"redis,omitempty"`
+	MongoDB    *MongodbConfig    `yaml:"mongodb,omitempty"`
+	ZincSearch *ZincSearchConfig `yaml:"zincSearch,omitempty"`
+}
+
+// Database specify database name and if distributed.
+type Database struct {
+	Name        string `json:"name"`
+	Distributed bool   `json:"distributed,omitempty"`
+}
+
+// PostgresConfig contains fields for postgresql config.
+type PostgresConfig struct {
+	Username  string     `yaml:"username" json:"username"`
+	Password  string     `yaml:"password,omitempty" json:"password"`
+	Databases []Database `yaml:"databases" json:"databases"`
+}
+
+// RedisConfig contains fields for redis config.
+type RedisConfig struct {
+	Password  string `yaml:"password,omitempty" json:"password"`
+	Namespace string `yaml:"namespace" json:"namespace"`
+}
+
+// MongodbConfig contains fields for mongodb config.
+type MongodbConfig struct {
+	Username  string     `yaml:"username" json:"username"`
+	Password  string     `yaml:"password,omitempty" json:"password"`
+	Databases []Database `yaml:"databases" json:"databases"`
+}
+
+// ZincSearchConfig contains fields for zinc search config.
+type ZincSearchConfig struct {
+	Username string  `yaml:"username" json:"username"`
+	Password string  `yaml:"password" json:"password"`
+	Indexes  []Index `yaml:"indexes" json:"indexes"`
+}
+
+// Index zinc search index.
+type Index struct {
+	Name string `yaml:"name" json:"name"`
+}
