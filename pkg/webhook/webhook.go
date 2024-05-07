@@ -325,14 +325,12 @@ func isNamespaceInjectable(namespace string) bool {
 }
 
 func isInjectedPod(pod *corev1.Pod) (bool, string) {
-	if pod.Annotations == nil {
-		return false, ""
-	}
-
-	if uuid, ok := pod.Annotations[UUIDAnnotation]; ok {
-		for _, c := range pod.Spec.Containers {
-			if c.Name == constants.EnvoyContainerName {
-				return true, uuid
+	if pod.Annotations != nil {
+		if proxyUUID, ok := pod.Annotations[UUIDAnnotation]; ok {
+			for _, c := range pod.Spec.Containers {
+				if c.Name == constants.EnvoyContainerName {
+					return true, proxyUUID
+				}
 			}
 		}
 	}
