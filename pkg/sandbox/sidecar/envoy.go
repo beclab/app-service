@@ -25,6 +25,7 @@ import (
 	originaldst "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/listener/original_dst/v3"
 	http_connection_manager "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
 	matcherv3 "github.com/envoyproxy/go-control-plane/envoy/type/matcher/v3"
+	"github.com/golang/protobuf/ptypes/any"
 	"github.com/golang/protobuf/ptypes/duration"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
@@ -127,12 +128,12 @@ func getEnvoyContainerPorts() []corev1.ContainerPort {
 	return containerPorts
 }
 
-func getEnvoyConfig(username string, injectPolicy, injectWs, injectUpload bool, appDomains []string) string {
+func getEnvoyConfig(username string, injectPolicy, injectWs, injectUpload bool, appDomains []string, pod *corev1.Pod) string {
 	setCookieInlineCode, err := genEnvoySetCookieScript(appDomains)
 	if err != nil {
 		klog.Errorf("Failed to get setCookieInlineCode err=%v", err)
 	}
-	ec := New(username, setCookieInlineCode)
+	ec := New(username, setCookieInlineCode, getHTTProbePath(pod))
 	if injectPolicy {
 		ec.WithPolicy()
 	}
@@ -291,7 +292,7 @@ var httpM *http_connection_manager.HttpConnectionManager
 var routeConfig *routev3.RouteConfiguration
 
 // New build a new envoy config.
-func New(username string, inlineCode []byte) *envoyConfig {
+func New(username string, inlineCode []byte, probesPath []string) *envoyConfig {
 	httpFilters = []*http_connection_manager.HttpFilter{
 		{
 			Name: "envoy.filters.http.router",
@@ -318,6 +319,17 @@ func New(username string, inlineCode []byte) *envoyConfig {
 			{
 				Name:    "service",
 				Domains: []string{"*"},
+				TypedPerFilterConfig: map[string]*any.Any{
+					"envoy.filters.http.ext_authz": utils.MessageToAny(&envoy_authz.ExtAuthzPerRoute{
+						Override: &envoy_authz.ExtAuthzPerRoute_CheckSettings{
+							CheckSettings: &envoy_authz.CheckSettings{
+								ContextExtensions: map[string]string{
+									"virtual_host": "service",
+								},
+							},
+						},
+					}),
+				},
 				Routes: []*routev3.Route{
 					{
 						Match: &routev3.RouteMatch{
@@ -336,6 +348,30 @@ func New(username string, inlineCode []byte) *envoyConfig {
 				},
 			},
 		},
+	}
+	for _, path := range probesPath {
+		routeConfig.VirtualHosts[0].Routes = append(
+			[]*routev3.Route{{
+				Match: &routev3.RouteMatch{
+					PathSpecifier: &routev3.RouteMatch_Prefix{
+						Prefix: path,
+					},
+				},
+				Action: &routev3.Route_Route{
+					Route: &routev3.RouteAction{
+						ClusterSpecifier: &routev3.RouteAction_Cluster{
+							Cluster: "original_dst",
+						},
+					},
+				},
+				TypedPerFilterConfig: map[string]*any.Any{
+					"envoy.filters.http.ext_authz": utils.MessageToAny(&envoy_authz.ExtAuthzPerRoute{
+						Override: &envoy_authz.ExtAuthzPerRoute_Disabled{
+							Disabled: true,
+						},
+					}),
+				},
+			}}, routeConfig.VirtualHosts[0].Routes...)
 	}
 
 	httpM = &http_connection_manager.HttpConnectionManager{

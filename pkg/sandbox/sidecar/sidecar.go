@@ -8,14 +8,14 @@ import (
 )
 
 // GetSidecarConfigMap returns a configmap that data is envoy.yaml.
-func GetSidecarConfigMap(configMapName, namespace, username string, injectPolicy, injectWs, injectUpload bool, appDomains []string) *corev1.ConfigMap {
+func GetSidecarConfigMap(configMapName, namespace, username string, injectPolicy, injectWs, injectUpload bool, appDomains []string, pod *corev1.Pod) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      configMapName,
 			Namespace: namespace,
 		},
 		Data: map[string]string{
-			constants.EnvoyConfigFileName: getEnvoyConfig(username, injectPolicy, injectWs, injectUpload, appDomains),
+			constants.EnvoyConfigFileName: getEnvoyConfig(username, injectPolicy, injectWs, injectUpload, appDomains, pod),
 		},
 	}
 }

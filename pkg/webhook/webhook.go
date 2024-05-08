@@ -131,7 +131,7 @@ func (wh *Webhook) CreatePatch(
 		return makePatches(req, pod)
 	}
 
-	configMapName, err := wh.createSidecarConfigMap(ctx, proxyUUID.String(), req.Namespace, injectPolicy, injectWs, injectUpload)
+	configMapName, err := wh.createSidecarConfigMap(ctx, pod, proxyUUID.String(), req.Namespace, injectPolicy, injectWs, injectUpload)
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +254,7 @@ func (wh *Webhook) isAppEntrancePod(ctx context.Context, appname, host string, p
 }
 
 func (wh *Webhook) createSidecarConfigMap(
-	ctx context.Context,
+	ctx context.Context, pod *corev1.Pod,
 	proxyUUID, namespace string, injectPolicy, injectWs, injectUpload bool,
 ) (string, error) {
 	configMapName := fmt.Sprintf("%s-%s", constants.SidecarConfigMapVolumeName, proxyUUID)
@@ -290,7 +290,7 @@ func (wh *Webhook) createSidecarConfigMap(
 		}
 	}
 
-	newConfigMap := sidecar.GetSidecarConfigMap(configMapName, namespace, appcfg.OwnerName, injectPolicy, injectWs, injectUpload, appDomains)
+	newConfigMap := sidecar.GetSidecarConfigMap(configMapName, namespace, appcfg.OwnerName, injectPolicy, injectWs, injectUpload, appDomains, pod)
 	if e == nil {
 		// configmap found
 		cm.Data = newConfigMap.Data
