@@ -25,6 +25,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"helm.sh/helm/v3/pkg/action"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -317,6 +318,17 @@ func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv
 				if e != nil {
 					klog.Errorf("Failed to get applicationmanagers name=%s err=%v", appMgr.Name, e)
 				}
+				var ns corev1.Namespace
+				e = r.Get(ctx, types.NamespacedName{Name: appMgr.Spec.AppNamespace}, &ns)
+				if e != nil && !apierrors.IsNotFound(e) {
+					klog.Errorf("Failed to get namespace name=%s err=%v", appMgr.Spec.AppNamespace, e)
+				}
+				if e == nil {
+					e = r.Delete(ctx, &ns)
+					if e != nil {
+						klog.Errorf("Failed to delete namespace name=%s err=%v", appMgr.Spec.AppNamespace, e)
+					}
+				}
 
 				opRecord := appv1alpha1.OpRecord{
 					OpType:     appv1alpha1.InstallOp,
@@ -380,9 +392,9 @@ func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv
 		Status:     appv1alpha1.Completed,
 		StatusTime: &now,
 	}
-	e := r.updateStatus(appMgr, appv1alpha1.Completed, &opRecord, appv1alpha1.AppRunning, message)
-	if e != nil {
-		klog.Errorf("Failed to update applicationmanagers status name=%s err=%v", appMgr.Name, e)
+	err = r.updateStatus(appMgr, appv1alpha1.Completed, &opRecord, appv1alpha1.AppRunning, message)
+	if err != nil {
+		klog.Errorf("Failed to update applicationmanagers status name=%s err=%v", appMgr.Name, err)
 	}
 	return err
 }
