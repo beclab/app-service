@@ -274,6 +274,18 @@ func (h *Handler) installModel(req *restful.Request, resp *restful.Response) {
 					}
 					return
 				}
+
+				// check applicationmanager again, because it's state can be changed by cancel operation,
+				// if task has been canceled, return.
+				a, err = kClient.AppV1alpha1().ApplicationManagers().Get(context.TODO(),
+					utils.FmtModelMgrName(modelID), metav1.GetOptions{})
+				if err != nil {
+					klog.Errorf("Failed to get applicationmanager name=%s err=%v", a.Name, err)
+					return
+				}
+				if a.Status.OpType == v1alpha1.CancelOp && a.Status.State == v1alpha1.Canceling {
+					return
+				}
 				now = metav1.Now()
 				state := v1alpha1.Installing
 				message := "installing"
@@ -583,6 +595,8 @@ func (h *Handler) cancelHandler(req *restful.Request, resp *restful.Response) {
 	}
 	now := metav1.Now()
 	_, err = utils.UpdateAppMgrStatus(utils.FmtModelMgrName(modelID), v1alpha1.ApplicationManagerStatus{
+		OpType: v1alpha1.CancelOp,
+		State:  v1alpha1.Canceling,
 		Payload: map[string]string{
 			"cancelType": cancelType,
 		},
