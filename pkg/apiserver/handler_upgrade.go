@@ -2,6 +2,7 @@ package apiserver
 
 import (
 	"errors"
+	"os"
 	"time"
 
 	"github.com/emicklei/go-restful/v3"
@@ -30,7 +31,6 @@ const (
 	StatusUnschedulable = "unschedulable"
 
 	UpgradeJobName = "system-upgrade"
-	JobImage       = "bytetrade/upgrade-job:0.1.0"
 	JobNamespace   = "os-system"
 )
 
@@ -129,7 +129,7 @@ func (h *Handler) upgrade(req *restful.Request, resp *restful.Response) {
 						Containers: []corev1.Container{
 							{
 								Name:            "upgrade",
-								Image:           JobImage,
+								Image:           os.Getenv("JOB_IMAGE"),
 								ImagePullPolicy: corev1.PullAlways,
 								Env: []corev1.EnvVar{
 									{
