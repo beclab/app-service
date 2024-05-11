@@ -80,6 +80,10 @@ func GetTerminusReleaseVersion(ctx context.Context, terminus *sysv1alpha1.Termin
 			return nil, nil, errors.New(version.Message)
 		}
 
+		if len(version.Data) == 0 {
+			return nil, nil, nil
+		}
+
 		v, err := gover.NewSemver(version.Data["tag"])
 		if err != nil {
 			klog.Errorf("Terminus cloud response version is invalid err=%v tag=%s", err, version.Data["tag"])
