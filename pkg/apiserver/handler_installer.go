@@ -818,7 +818,7 @@ func (h *Handler) upgradeRecommend(req *restful.Request, resp *restful.Response)
 	defer func() {
 		now := metav1.Now()
 		opRecord := v1alpha1.OpRecord{
-			OpType:     v1alpha1.UninstallOp,
+			OpType:     v1alpha1.UpgradeOp,
 			Message:    fmt.Sprintf(constants.UpgradeOperationCompletedTpl, recommendMgr.Spec.Type.String(), recommendMgr.Spec.AppName),
 			Source:     recommendMgr.Spec.Source,
 			Version:    workflowCfg.Cfg.Metadata.Version,
