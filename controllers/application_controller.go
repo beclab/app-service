@@ -392,13 +392,10 @@ func (r *ApplicationReconciler) updateApplication(ctx context.Context, req ctrl.
 	icon := deployment.GetAnnotations()[constants.ApplicationIconLabel]
 	entrances, _ := getEntranceFromAnnotations(deployment)
 
-	es := make(map[string]string)
-	for _, e := range appCopy.Spec.Entrances {
-		es[e.Name] = e.AuthLevel
-	}
-
 	for i := range entrances {
-		entrances[i].AuthLevel = es[entrances[i].Name]
+		if entrances[i].AuthLevel == "" {
+			entrances[i].AuthLevel = constants.AuthorizationLevelOfPrivate
+		}
 	}
 
 	appCopy.Spec.Name = name
