@@ -390,12 +390,64 @@ func (r *ApplicationReconciler) updateApplication(ctx context.Context, req ctrl.
 	owner := deployment.GetLabels()[constants.ApplicationOwnerLabel]
 	name := deployment.GetLabels()[constants.ApplicationNameLabel]
 	icon := deployment.GetAnnotations()[constants.ApplicationIconLabel]
-	entrances, _ := getEntranceFromAnnotations(deployment)
+	var policyStr string
+	if appCopy.Spec.IsSysApp {
+		entrances, _ := getEntranceFromAnnotations(deployment)
 
-	for i := range entrances {
-		if entrances[i].AuthLevel == "" {
-			entrances[i].AuthLevel = constants.AuthorizationLevelOfPrivate
+		for i := range entrances {
+			if entrances[i].AuthLevel == "" {
+				entrances[i].AuthLevel = constants.AuthorizationLevelOfPrivate
+			}
 		}
+		appCopy.Spec.Entrances = entrances
+
+		// sys applications.
+		type Policies struct {
+			Policies []appinstaller.Policy `json:"policies"`
+		}
+		applicationPoliciesFromAnnotation, ok := deployment.GetAnnotations()[constants.ApplicationPolicies]
+
+		var policy Policies
+		if ok {
+			err := json.Unmarshal([]byte(applicationPoliciesFromAnnotation), &policy)
+			if err != nil {
+				klog.Errorf("Failed to unmarshal applicationPoliciesFromAnnotation err=%v", err)
+			}
+		}
+
+		// transform from Policy to AppPolicy
+		var appPolicies []appinstaller.AppPolicy
+		for _, p := range policy.Policies {
+			d, _ := time.ParseDuration(p.Duration)
+			appPolicies = append(appPolicies, appinstaller.AppPolicy{
+				EntranceName: p.EntranceName,
+				URIRegex:     p.URIRegex,
+				Level:        p.Level,
+				OneTime:      p.OneTime,
+				Duration:     d,
+			})
+		}
+		entrances, err := getEntranceFromAnnotations(deployment)
+		if err != nil {
+			klog.Errorf("Failed to get entrances from annotations err=%v", err)
+		}
+		policyStr, err = getApplicationPolicy(appPolicies, entrances)
+		if err != nil {
+			klog.Errorf("Failed to encode json err=%v", err)
+		}
+	} else {
+
+		if appCfg, err := appinstaller.GetAppInstallationConfig(app.Spec.Name, owner); err != nil {
+			klog.Infof("Failed to get app configuration appName=%s owner=%s err=%v", app.Spec.Name, owner, err)
+		} else {
+			policyStr, err = getApplicationPolicy(appCfg.Policies, app.Spec.Entrances)
+			if err != nil {
+				klog.Errorf("Failed to encode json err=%v", err)
+			}
+		}
+	}
+	if len(policyStr) > 0 {
+		appCopy.Spec.Settings[applicationSettingsPolicyKey] = policyStr
 	}
 
 	appCopy.Spec.Name = name
@@ -403,7 +455,6 @@ func (r *ApplicationReconciler) updateApplication(ctx context.Context, req ctrl.
 	appCopy.Spec.Owner = owner
 	appCopy.Spec.DeploymentName = deployment.GetName()
 	appCopy.Spec.Icon = icon
-	appCopy.Spec.Entrances = entrances
 
 	actionConfig, _, err := helm.InitConfig(r.Kubeconfig, appCopy.Spec.Namespace)
 	if err != nil {
