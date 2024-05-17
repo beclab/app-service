@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+
 	"strings"
 
+	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
@@ -16,8 +18,10 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 
 	"github.com/emicklei/go-restful/v3"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 )
 
@@ -314,7 +318,7 @@ func (h *Handler) setupAppAuthLevel(req *restful.Request, resp *restful.Response
 			}
 			if authLevel == constants.AuthorizationLevelOfPrivate &&
 				entrances[i].AuthLevel == constants.AuthorizationLevelOfPublic {
-				policy[entrances[i].Name]["default_policy"] = "one_factor"
+				policy[entrances[i].Name]["default_policy"] = "two_factor"
 			}
 		}
 	}
@@ -326,6 +330,11 @@ func (h *Handler) setupAppAuthLevel(req *restful.Request, resp *restful.Response
 	}
 
 	appCopy.Spec.Entrances = entrances
+	entrancesByte, err := json.Marshal(entrances)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
 
 	policyStr, err := json.Marshal(policy)
 	if err != nil {
@@ -333,10 +342,23 @@ func (h *Handler) setupAppAuthLevel(req *restful.Request, resp *restful.Response
 		return
 	}
 	appCopy.Spec.Settings["policy"] = string(policyStr)
-	client := req.Attribute(constants.KubeSphereClientAttribute).(*clientset.ClientSet)
+	kclient := req.Attribute(constants.KubeSphereClientAttribute).(*clientset.ClientSet)
 
-	appUpdated, err := client.AppClient.AppV1alpha1().Applications().Update(req.Request.Context(), appCopy, metav1.UpdateOptions{})
+	appUpdated, err := kclient.AppClient.AppV1alpha1().Applications().Update(req.Request.Context(), appCopy, metav1.UpdateOptions{})
 
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	// also update sys app's deployment or statefulset annotations of 'applications.app.bytetrade.io/entrances',
+	patchData := map[string]interface{}{
+		"metadata": map[string]interface{}{
+			"annotations": map[string]string{
+				constants.ApplicationEntrancesKey: string(entrancesByte),
+			},
+		},
+	}
+	err = h.tryToPatchDeploymentAnnotations(patchData, app)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -412,4 +434,56 @@ func (h *Handler) setupAppEntrancePolicy(req *restful.Request, resp *restful.Res
 	}
 
 	resp.WriteAsJson(appUpdated.Spec.Settings)
+}
+
+func (h *Handler) tryToPatchDeploymentAnnotations(patchData map[string]interface{}, app *v1alpha1.Application) error {
+	clientset, err := kubernetes.NewForConfig(h.kubeConfig)
+	if err != nil {
+		return err
+	}
+	patchByte, err := json.Marshal(patchData)
+	if err != nil {
+		return err
+	}
+	deployment, err := clientset.AppsV1().Deployments(app.Spec.Namespace).
+		Get(context.TODO(), app.Spec.DeploymentName, metav1.GetOptions{})
+	if err != nil {
+		if kerrors.IsNotFound(err) {
+			return h.tryToPatchStatefulSetAnnotations(patchData, app)
+		}
+		return err
+	}
+	a, err := clientset.AppsV1().Deployments(app.Spec.Namespace).
+		Patch(context.TODO(), deployment.Name,
+			types.MergePatchType,
+			patchByte,
+			metav1.PatchOptions{})
+	klog.Infof("update annotations: %v", a.Annotations)
+	return err
+}
+
+func (h *Handler) tryToPatchStatefulSetAnnotations(patchData map[string]interface{}, app *v1alpha1.Application) error {
+	clientset, err := kubernetes.NewForConfig(h.kubeConfig)
+	if err != nil {
+		return err
+	}
+	patchByte, err := json.Marshal(patchData)
+	if err != nil {
+		return err
+	}
+	statefulSet, err := clientset.AppsV1().StatefulSets(app.Spec.Namespace).
+		Get(context.TODO(), app.Spec.DeploymentName, metav1.GetOptions{})
+	if err != nil {
+		if kerrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	_, err = clientset.AppsV1().StatefulSets(app.Spec.Namespace).
+		Patch(context.TODO(), statefulSet.Name,
+			types.MergePatchType,
+			patchByte,
+			metav1.PatchOptions{})
+
+	return err
 }

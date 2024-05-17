@@ -647,12 +647,11 @@ func (h *HelmOps) upgrade() error {
 			return err
 		}
 	}
-
+	appClient, err := versioned.NewForConfig(h.kubeConfig)
+	if err != nil {
+		return err
+	}
 	if userspace.IsSysApp(h.app.AppName) {
-		appClient, err := versioned.NewForConfig(h.kubeConfig)
-		if err != nil {
-			return err
-		}
 		application, err := appClient.AppV1alpha1().Applications().Get(context.Background(),
 			appv1alpha1.AppResourceName(h.app.AppName, h.app.Namespace), metav1.GetOptions{})
 		if err != nil {
@@ -680,6 +679,26 @@ func (h *HelmOps) upgrade() error {
 		}
 		h.app.Entrances = entrances
 	}
+	for i, v := range h.app.Entrances {
+		if v.AuthLevel == "" {
+			h.app.Entrances[i].AuthLevel = constants.AuthorizationLevelOfPrivate
+		}
+	}
+	patchData := map[string]interface{}{
+		"spec": map[string]interface{}{
+			"entrances": h.app.Entrances,
+		},
+	}
+	patchByte, err := json.Marshal(patchData)
+	if err != nil {
+		return err
+	}
+	_, err = appClient.AppV1alpha1().Applications().Patch(h.ctx, utils.FmtAppMgrName(h.app.AppName, h.app.OwnerName),
+		types.MergePatchType, patchByte, metav1.PatchOptions{})
+	if err != nil {
+		return err
+	}
+
 	ok := h.waitForLaunch()
 	if !ok {
 		// canceled
