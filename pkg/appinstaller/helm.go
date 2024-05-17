@@ -651,6 +651,7 @@ func (h *HelmOps) upgrade() error {
 	if err != nil {
 		return err
 	}
+	var deployment client.Object
 	if userspace.IsSysApp(h.app.AppName) {
 		application, err := appClient.AppV1alpha1().Applications().Get(context.Background(),
 			appv1alpha1.AppResourceName(h.app.AppName, h.app.Namespace), metav1.GetOptions{})
@@ -661,7 +662,6 @@ func (h *HelmOps) upgrade() error {
 		if err != nil {
 			return err
 		}
-		var deployment client.Object
 		deployment, err = clientset.AppsV1().Deployments(h.app.Namespace).
 			Get(context.Background(), application.Spec.DeploymentName, metav1.GetOptions{})
 		if err != nil && !kerrors.IsNotFound(err) {
@@ -684,15 +684,69 @@ func (h *HelmOps) upgrade() error {
 			h.app.Entrances[i].AuthLevel = constants.AuthorizationLevelOfPrivate
 		}
 	}
+
+	var policyStr string
+	if !userspace.IsSysApp(h.app.AppName) {
+		if appCfg, err := GetAppInstallationConfig(h.app.AppName, h.app.OwnerName); err != nil {
+			klog.Infof("Failed to get app configuration appName=%s owner=%s err=%v", h.app.AppName, h.app.OwnerName, err)
+		} else {
+			policyStr, err = getApplicationPolicy(appCfg.Policies, h.app.Entrances)
+			if err != nil {
+				klog.Errorf("Failed to encode json err=%v", err)
+			}
+		}
+	} else {
+		// sys applications.
+		type Policies struct {
+			Policies []Policy `json:"policies"`
+		}
+		applicationPoliciesFromAnnotation, ok := deployment.GetAnnotations()[constants.ApplicationPolicies]
+
+		var policy Policies
+		if ok {
+			err := json.Unmarshal([]byte(applicationPoliciesFromAnnotation), &policy)
+			if err != nil {
+				klog.Errorf("Failed to unmarshal applicationPoliciesFromAnnotation err=%v", err)
+			}
+		}
+
+		// transform from Policy to AppPolicy
+		var appPolicies []AppPolicy
+		for _, p := range policy.Policies {
+			d, _ := time.ParseDuration(p.Duration)
+			appPolicies = append(appPolicies, AppPolicy{
+				EntranceName: p.EntranceName,
+				URIRegex:     p.URIRegex,
+				Level:        p.Level,
+				OneTime:      p.OneTime,
+				Duration:     d,
+			})
+		}
+		policyStr, err = getApplicationPolicy(appPolicies, h.app.Entrances)
+		if err != nil {
+			klog.Errorf("Failed to encode json err=%v", err)
+		}
+	}
 	patchData := map[string]interface{}{
 		"spec": map[string]interface{}{
 			"entrances": h.app.Entrances,
 		},
 	}
+	if len(policyStr) > 0 {
+		patchData = map[string]interface{}{
+			"spec": map[string]interface{}{
+				"entrances": h.app.Entrances,
+				"settings": map[string]string{
+					"policy": policyStr,
+				},
+			},
+		}
+	}
 	patchByte, err := json.Marshal(patchData)
 	if err != nil {
 		return err
 	}
+
 	_, err = appClient.AppV1alpha1().Applications().Patch(h.ctx, utils.FmtAppMgrName(h.app.AppName, h.app.OwnerName),
 		types.MergePatchType, patchByte, metav1.PatchOptions{})
 	if err != nil {
@@ -766,4 +820,53 @@ func (h *HelmOps) waitForLaunch() bool {
 			return false
 		}
 	}
+}
+
+type applicationSettingsSubPolicy struct {
+	URI      string `json:"uri"`
+	Policy   string `json:"policy"`
+	OneTime  bool   `json:"one_time"`
+	Duration int32  `json:"valid_duration"`
+}
+
+type applicationSettingsPolicy struct {
+	DefaultPolicy string                          `json:"default_policy"`
+	SubPolicies   []*applicationSettingsSubPolicy `json:"sub_policies"`
+	OneTime       bool                            `json:"one_time"`
+	Duration      int32                           `json:"valid_duration"`
+}
+
+func getApplicationPolicy(policies []AppPolicy, entrances []appv1alpha1.Entrance) (string, error) {
+	subPolicy := make(map[string][]*applicationSettingsSubPolicy)
+
+	for _, p := range policies {
+		subPolicy[p.EntranceName] = append(subPolicy[p.EntranceName],
+			&applicationSettingsSubPolicy{
+				URI:      p.URIRegex,
+				Policy:   p.Level,
+				OneTime:  p.OneTime,
+				Duration: int32(p.Duration / time.Second),
+			})
+	}
+
+	policy := make(map[string]applicationSettingsPolicy)
+	for _, e := range entrances {
+		defaultPolicy := "two_factor"
+		sp := subPolicy[e.Name]
+		if e.AuthLevel == constants.AuthorizationLevelOfPublic {
+			defaultPolicy = constants.AuthorizationLevelOfPublic
+		}
+		policy[e.Name] = applicationSettingsPolicy{
+			DefaultPolicy: defaultPolicy,
+			OneTime:       false,
+			Duration:      0,
+			SubPolicies:   sp,
+		}
+	}
+
+	policyStr, err := json.Marshal(policy)
+	if err != nil {
+		return "", err
+	}
+	return string(policyStr), nil
 }
