@@ -3,7 +3,6 @@ package utils
 import (
 	"context"
 	"fmt"
-	"k8s.io/client-go/util/retry"
 	"net"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 	"helm.sh/helm/v3/pkg/action"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
@@ -38,47 +38,50 @@ func UpdateAppState(appmgr *v1alpha1.ApplicationManager, state v1alpha1.Applicat
 	if err != nil {
 		return err
 	}
-	app, err := client.AppV1alpha1().Applications().Get(context.TODO(), appmgr.Name, metav1.GetOptions{})
-	if err != nil {
-		if errors.IsNotFound(err) {
-			// dev mode, try to find app in user-space
-			apps, err := client.AppV1alpha1().Applications().List(context.TODO(), metav1.ListOptions{})
-			if err != nil {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		app, err := client.AppV1alpha1().Applications().Get(context.TODO(), appmgr.Name, metav1.GetOptions{})
+		if err != nil {
+			if errors.IsNotFound(err) {
+				// dev mode, try to find app in user-space
+				apps, err := client.AppV1alpha1().Applications().List(context.TODO(), metav1.ListOptions{})
+				if err != nil {
+					return err
+				}
+
+				for _, a := range apps.Items {
+					if a.Spec.Name == appmgr.Spec.AppName &&
+						a.Spec.Owner == appmgr.Spec.AppOwner &&
+						a.Spec.Namespace == "user-space-"+a.Spec.Owner {
+						app = &a
+
+						break
+					}
+				}
+
+			} else {
 				return err
 			}
-
-			for _, a := range apps.Items {
-				if a.Spec.Name == appmgr.Spec.AppName &&
-					a.Spec.Owner == appmgr.Spec.AppOwner &&
-					a.Spec.Namespace == "user-space-"+a.Spec.Owner {
-					app = &a
-
-					break
-				}
-			}
-
-		} else {
-			return err
 		}
-	}
-	now := metav1.Now()
-	appCopy := app.DeepCopy()
-	appCopy.Status.State = state.String()
-	appCopy.Status.StatusTime = &now
-	appCopy.Status.UpdateTime = &now
+		now := metav1.Now()
+		appCopy := app.DeepCopy()
+		appCopy.Status.State = state.String()
+		appCopy.Status.StatusTime = &now
+		appCopy.Status.UpdateTime = &now
 
-	if appCopy.Name == "" {
-		return nil
-	}
+		if appCopy.Name == "" {
+			return nil
+		}
 
-	_, err = client.AppV1alpha1().Applications().Get(context.TODO(), appCopy.Name, metav1.GetOptions{})
-	if errors.IsNotFound(err) {
-		return nil
-	}
+		_, err = client.AppV1alpha1().Applications().Get(context.TODO(), appCopy.Name, metav1.GetOptions{})
+		if errors.IsNotFound(err) {
+			return nil
+		}
 
-	_, err = client.AppV1alpha1().Applications().UpdateStatus(context.TODO(), appCopy, metav1.UpdateOptions{})
+		_, err = client.AppV1alpha1().Applications().UpdateStatus(context.TODO(), appCopy, metav1.UpdateOptions{})
 
-	return err
+		return err
+	})
+
 }
 
 // UpdateAppMgrStatus update applicationmanager status, if filed in parameter status is empty that field will not be set.
@@ -266,14 +269,12 @@ func GetPendingOrRunningTask(ctx context.Context) (ams []v1alpha1.ApplicationMan
 // UpdateStatus update application state and applicationmanager state.
 func UpdateStatus(appMgr *v1alpha1.ApplicationManager, state v1alpha1.ApplicationManagerState,
 	opRecord *v1alpha1.OpRecord, appState v1alpha1.ApplicationState, message string) error {
-	errs := make([]error, 0)
 	client, _ := GetClient()
 	var err error
 	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		appMgr, err = client.AppV1alpha1().ApplicationManagers().Get(context.TODO(), appMgr.Name, metav1.GetOptions{})
 		if err != nil {
-			errs = append(errs, err)
-			return AggregateErrs(errs)
+			return err
 		}
 		now := metav1.Now()
 		appMgrCopy := appMgr.DeepCopy()
@@ -290,14 +291,14 @@ func UpdateStatus(appMgr *v1alpha1.ApplicationManager, state v1alpha1.Applicatio
 
 		_, err = client.AppV1alpha1().ApplicationManagers().UpdateStatus(context.TODO(), appMgrCopy, metav1.UpdateOptions{})
 		if err != nil {
-			errs = append(errs, err)
+			return err
 		}
 		if len(appState) > 0 {
 			err = UpdateAppState(appMgr, appState)
 			if err != nil {
-				errs = append(errs, err)
+				return err
 			}
 		}
-		return AggregateErrs(errs)
+		return err
 	})
 }

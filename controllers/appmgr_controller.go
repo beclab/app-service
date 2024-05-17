@@ -277,7 +277,8 @@ func (r *ApplicationManagerController) preEnqueueCheckForUpdate(old, new client.
 
 func (r *ApplicationManagerController) updateStatus(appMgr *appv1alpha1.ApplicationManager, state appv1alpha1.ApplicationManagerState,
 	opRecord *appv1alpha1.OpRecord, appState appv1alpha1.ApplicationState, message string) error {
-	errs := make([]error, 0)
+	var err error
+
 	now := metav1.Now()
 	appMgrCopy := appMgr.DeepCopy()
 	appMgr.Status.State = state
@@ -291,17 +292,17 @@ func (r *ApplicationManagerController) updateStatus(appMgr *appv1alpha1.Applicat
 		appMgr.Status.OpRecords = appMgr.Status.OpRecords[:20:20]
 	}
 
-	err := r.Status().Patch(context.TODO(), appMgr, client.MergeFrom(appMgrCopy))
+	err = r.Status().Patch(context.TODO(), appMgr, client.MergeFrom(appMgrCopy))
 	if err != nil {
-		errs = append(errs, err)
+		return err
 	}
 	if len(appState) > 0 {
 		err = utils.UpdateAppState(appMgr, appState)
 		if err != nil {
-			errs = append(errs, err)
+			return err
 		}
 	}
-	return utils.AggregateErrs(errs)
+	return nil
 }
 
 func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv1alpha1.ApplicationManager) (err error) {
