@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
 	"strings"
 	"time"
 
@@ -153,11 +152,6 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return ctrl.Result{}, err
 		}
 
-		entrances, err := getEntranceFromAnnotations(validAppObject)
-		if err != nil {
-			ctrl.Log.Error(err, "get entrance error")
-			return ctrl.Result{}, err
-		}
 		versionChanged := false
 		if !userspace.IsSysApp(app.Spec.Name) {
 			version, _, err := utils.GetDeployedReleaseVersion(actionConfig, name)
@@ -175,8 +169,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			app.Spec.Owner != owner ||
 			app.Spec.DeploymentName != validAppObject.GetName() ||
 			app.Spec.Settings["analyticsEnabled"] != analyticsEnabled ||
-			versionChanged ||
-			!reflect.DeepEqual(entrances, app.Spec.Entrances) {
+			versionChanged {
 			ctrl.Log.Info("Application update", "name", app.Name, "spec.name", app.Spec.Name, "spec.owner", app.Spec.Owner)
 			err = r.updateApplication(ctx, req, validAppObject, app)
 			if err != nil {
@@ -390,65 +383,6 @@ func (r *ApplicationReconciler) updateApplication(ctx context.Context, req ctrl.
 	owner := deployment.GetLabels()[constants.ApplicationOwnerLabel]
 	name := deployment.GetLabels()[constants.ApplicationNameLabel]
 	icon := deployment.GetAnnotations()[constants.ApplicationIconLabel]
-	var policyStr string
-	if appCopy.Spec.IsSysApp {
-		entrances, _ := getEntranceFromAnnotations(deployment)
-
-		for i := range entrances {
-			if entrances[i].AuthLevel == "" {
-				entrances[i].AuthLevel = constants.AuthorizationLevelOfPrivate
-			}
-		}
-		appCopy.Spec.Entrances = entrances
-
-		// sys applications.
-		type Policies struct {
-			Policies []appinstaller.Policy `json:"policies"`
-		}
-		applicationPoliciesFromAnnotation, ok := deployment.GetAnnotations()[constants.ApplicationPolicies]
-
-		var policy Policies
-		if ok {
-			err := json.Unmarshal([]byte(applicationPoliciesFromAnnotation), &policy)
-			if err != nil {
-				klog.Errorf("Failed to unmarshal applicationPoliciesFromAnnotation err=%v", err)
-			}
-		}
-
-		// transform from Policy to AppPolicy
-		var appPolicies []appinstaller.AppPolicy
-		for _, p := range policy.Policies {
-			d, _ := time.ParseDuration(p.Duration)
-			appPolicies = append(appPolicies, appinstaller.AppPolicy{
-				EntranceName: p.EntranceName,
-				URIRegex:     p.URIRegex,
-				Level:        p.Level,
-				OneTime:      p.OneTime,
-				Duration:     d,
-			})
-		}
-		entrances, err := getEntranceFromAnnotations(deployment)
-		if err != nil {
-			klog.Errorf("Failed to get entrances from annotations err=%v", err)
-		}
-		policyStr, err = getApplicationPolicy(appPolicies, entrances)
-		if err != nil {
-			klog.Errorf("Failed to encode json err=%v", err)
-		}
-	} else {
-
-		if appCfg, err := appinstaller.GetAppInstallationConfig(app.Spec.Name, owner); err != nil {
-			klog.Infof("Failed to get app configuration appName=%s owner=%s err=%v", app.Spec.Name, owner, err)
-		} else {
-			policyStr, err = getApplicationPolicy(appCfg.Policies, app.Spec.Entrances)
-			if err != nil {
-				klog.Errorf("Failed to encode json err=%v", err)
-			}
-		}
-	}
-	if len(policyStr) > 0 {
-		appCopy.Spec.Settings[applicationSettingsPolicyKey] = policyStr
-	}
 
 	appCopy.Spec.Name = name
 	appCopy.Spec.Namespace = deployment.GetNamespace()

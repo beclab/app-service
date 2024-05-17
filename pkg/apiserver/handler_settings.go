@@ -330,11 +330,6 @@ func (h *Handler) setupAppAuthLevel(req *restful.Request, resp *restful.Response
 	}
 
 	appCopy.Spec.Entrances = entrances
-	entrancesByte, err := json.Marshal(entrances)
-	if err != nil {
-		api.HandleError(resp, req, err)
-		return
-	}
 
 	policyStr, err := json.Marshal(policy)
 	if err != nil {
@@ -346,19 +341,6 @@ func (h *Handler) setupAppAuthLevel(req *restful.Request, resp *restful.Response
 
 	appUpdated, err := kclient.AppClient.AppV1alpha1().Applications().Update(req.Request.Context(), appCopy, metav1.UpdateOptions{})
 
-	if err != nil {
-		api.HandleError(resp, req, err)
-		return
-	}
-	// also update sys app's deployment or statefulset annotations of 'applications.app.bytetrade.io/entrances',
-	patchData := map[string]interface{}{
-		"metadata": map[string]interface{}{
-			"annotations": map[string]string{
-				constants.ApplicationEntrancesKey: string(entrancesByte),
-			},
-		},
-	}
-	err = h.tryToPatchDeploymentAnnotations(patchData, app)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
