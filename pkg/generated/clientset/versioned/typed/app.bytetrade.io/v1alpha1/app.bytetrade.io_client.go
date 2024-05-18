@@ -14,6 +14,7 @@ type AppV1alpha1Interface interface {
 	RESTClient() rest.Interface
 	ApplicationsGetter
 	ApplicationManagersGetter
+	ImageManagersGetter
 }
 
 // AppV1alpha1Client is used to interact with features provided by the app.bytetrade.io group.
@@ -27,6 +28,10 @@ func (c *AppV1alpha1Client) Applications() ApplicationInterface {
 
 func (c *AppV1alpha1Client) ApplicationManagers() ApplicationManagerInterface {
 	return newApplicationManagers(c)
+}
+
+func (c *AppV1alpha1Client) ImageManagers() ImageManagerInterface {
+	return newImageManagers(c)
 }
 
 // NewForConfig creates a new AppV1alpha1Client for the given config.

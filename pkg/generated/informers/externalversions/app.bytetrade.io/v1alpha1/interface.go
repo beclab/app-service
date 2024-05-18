@@ -12,6 +12,8 @@ type Interface interface {
 	Applications() ApplicationInformer
 	// ApplicationManagers returns a ApplicationManagerInformer.
 	ApplicationManagers() ApplicationManagerInformer
+	// ImageManagers returns a ImageManagerInformer.
+	ImageManagers() ImageManagerInformer
 }
 
 type version struct {
@@ -33,4 +35,9 @@ func (v *version) Applications() ApplicationInformer {
 // ApplicationManagers returns a ApplicationManagerInformer.
 func (v *version) ApplicationManagers() ApplicationManagerInformer {
 	return &applicationManagerInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+}
+
+// ImageManagers returns a ImageManagerInformer.
+func (v *version) ImageManagers() ImageManagerInformer {
+	return &imageManagerInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }

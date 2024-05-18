@@ -144,6 +144,7 @@ func (h *HelmOps) Install() error {
 	if !ok {
 		// install operation has been canceled, so to uninstall it.
 		h.Uninstall()
+		//return context.Canceled
 		return errors.New("canceled")
 	}
 	klog.Infof("app: %s launched success", h.app.AppName)
@@ -288,7 +289,6 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 	}
 
 	entries := make(map[string]interface{})
-
 	for i, entrance := range h.app.Entrances {
 		var url string
 		if len(h.app.Entrances) == 1 {

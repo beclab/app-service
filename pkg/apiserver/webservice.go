@@ -426,11 +426,11 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 
 	ws.Route(ws.GET("/apps/{"+ParamAppName+"}").
 		To(handler.getApp).
-		Doc("get list of app").
+		Doc("get an app").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of application")).
 		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
-		Returns(http.StatusOK, "success to get list of app", nil))
+		Returns(http.StatusOK, "success to get an app", nil))
 
 	ws.Route(ws.GET("/apps/pending-installing/task").
 		To(handler.pendingOrInstallingApps).

@@ -26,6 +26,8 @@ const (
 	// Stopping means that the suspend operation is underway.
 	Stopping ApplicationManagerState = "stopping"
 
+	Downloading ApplicationManagerState = "downloading"
+
 	// Processing means that the intermediate state of an operation, include
 	// installing,upgrading,uninstalling,resuming,canceling,stopping.
 	Processing ApplicationManagerState = "processing"

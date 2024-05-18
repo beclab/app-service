@@ -20,6 +20,10 @@ func (c *FakeAppV1alpha1) ApplicationManagers() v1alpha1.ApplicationManagerInter
 	return &FakeApplicationManagers{c}
 }
 
+func (c *FakeAppV1alpha1) ImageManagers() v1alpha1.ImageManagerInterface {
+	return &FakeImageManagers{c}
+}
+
 // RESTClient returns a RESTClient that is used to communicate
 // with API server by this client implementation.
 func (c *FakeAppV1alpha1) RESTClient() rest.Interface {

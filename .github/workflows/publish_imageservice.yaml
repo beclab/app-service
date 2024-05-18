@@ -1,4 +1,4 @@
-name: Publish app-service to Dockerhub
+name: Publish image-service to Dockerhub
 
 on:
     workflow_dispatch:
@@ -23,6 +23,6 @@ jobs:
               uses: docker/build-push-action@v3
               with:
                   push: true
-                  tags: beclab/app-service:${{ github.event.inputs.tags }}
-                  file: Dockerfile
+                  tags: beclab/image-service:${{ github.event.inputs.tags }}
+                  file: Dockerfile.image
 
