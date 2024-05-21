@@ -32,10 +32,7 @@ func createOrUpdateMiddlewareRequest(client dynamic.Interface, namespace string,
 	if err != nil {
 		return nil, err
 	}
-	err = mr.Delete(context.Background(), namespace, obj.GetName(), metav1.DeleteOptions{})
-	if err != nil && !errors.IsNotFound(err) {
-		return nil, err
-	}
+
 	ret, err := mr.Create(context.Background(), namespace, obj, metav1.CreateOptions{})
 	if err != nil {
 		if errors.IsAlreadyExists(err) {
