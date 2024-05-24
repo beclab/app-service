@@ -360,7 +360,7 @@ type patchOp struct {
 	Value interface{} `json:"value,omitempty"`
 }
 
-var resourcePath = "/spec/template/spec/containers/%d/resources"
+var resourcePath = "/spec/template/spec/containers/%d/resources/limits"
 var envPath = "/spec/template/spec/containers/%d/env/%s"
 
 // CreatePatchForDeployment add gpu env for deployment and returns patch bytes.
@@ -381,9 +381,7 @@ func addResourceLimits(tpl *corev1.PodTemplateSpec, namespace string, gpuRequire
 				Op:   constants.PatchOpAdd,
 				Path: fmt.Sprintf(resourcePath, i),
 				Value: map[string]interface{}{
-					"limits": map[string]interface{}{
-						typeKey: "1",
-					},
+					typeKey: "1",
 				},
 			})
 		} else {
@@ -399,7 +397,7 @@ func addResourceLimits(tpl *corev1.PodTemplateSpec, namespace string, gpuRequire
 			patch = append(patch, patchOp{
 				Op:    constants.PatchOpReplace,
 				Path:  fmt.Sprintf(resourcePath, i),
-				Value: t,
+				Value: t["limits"],
 			})
 		}
 		if typeKey == constants.VirtAiTechVGPU {
