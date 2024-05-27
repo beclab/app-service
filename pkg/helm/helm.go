@@ -104,7 +104,7 @@ func UninstallCharts(cfg *action.Configuration, releaseName string) error {
 	uninstall := action.NewUninstall(cfg)
 	uninstall.KeepHistory = false
 	r, err := uninstall.Run(releaseName)
-	if err != nil {
+	if err != nil && r.Release.Info.Status != release.StatusUninstalled {
 		return err
 	}
 	logUninstallReleaseInfo(r)
