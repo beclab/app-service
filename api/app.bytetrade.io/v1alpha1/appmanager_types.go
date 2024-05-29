@@ -64,6 +64,14 @@ type OpRecord struct {
 	StatusTime *metav1.Time            `json:"statusTime"`
 }
 
+//type ImageProgress struct {
+//	AppName   string `json:"appName"`
+//	OwnerName string `json:"ownerName"`
+//	NodeName  string `json:"nodeName"`
+//	ImageRef  string `json:"imageRef"`
+//	Progress  string `json:"progress"`
+//}
+
 //+kubebuilder:object:root=true
 //+k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 

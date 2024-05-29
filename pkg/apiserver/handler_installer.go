@@ -51,7 +51,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	appconfig, err := GetAppConfig(req.Request.Context(), app, owner,
+	appconfig, _, err := GetAppConfig(req.Request.Context(), app, owner,
 		insReq.CfgURL, insReq.RepoURL, "", token)
 	if err != nil {
 		klog.Errorf("Failed to get appconfig err=%v", err)
@@ -168,6 +168,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 			"repoURL": insReq.RepoURL,
 			"version": appconfig.Version,
 		},
+		Progress:   "0.00",
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
@@ -194,6 +195,7 @@ func (h *Handler) uninstall(req *restful.Request, resp *restful.Response) {
 		Payload: map[string]string{
 			"token": token,
 		},
+		Progress:   "0.00",
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
@@ -220,6 +222,7 @@ func (h *Handler) cancel(req *restful.Request, resp *restful.Response) {
 	now := metav1.Now()
 	status := v1alpha1.ApplicationManagerStatus{
 		OpType:     v1alpha1.CancelOp,
+		Progress:   "0.00",
 		Message:    cancelType,
 		StatusTime: &now,
 		UpdateTime: &now,
@@ -282,25 +285,26 @@ func (h *Handler) checkDependencies(req *restful.Request, resp *restful.Response
 }
 
 // GetAppConfig get app installation configuration from app store
-func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, token string) (*appinstaller.ApplicationConfig, error) {
+func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, token string) (*appinstaller.ApplicationConfig, string, error) {
 	if repoURL == "" {
-		return nil, fmt.Errorf("url info is empty, cfg [%s], repo [%s]", cfgURL, repoURL)
+		return nil, "", fmt.Errorf("url info is empty, cfg [%s], repo [%s]", cfgURL, repoURL)
 	}
 
 	var (
-		appcfg *appinstaller.ApplicationConfig
-		err    error
+		appcfg    *appinstaller.ApplicationConfig
+		chartPath string
+		err       error
 	)
 
 	if cfgURL != "" {
-		appcfg, err = getAppConfigFromURL(ctx, app, cfgURL)
+		appcfg, chartPath, err = getAppConfigFromURL(ctx, app, cfgURL)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 	} else {
-		appcfg, err = getAppConfigFromRepo(ctx, app, repoURL, version, token)
+		appcfg, chartPath, err = getAppConfigFromRepo(ctx, app, repoURL, version, token)
 		if err != nil {
-			return nil, err
+			return nil, chartPath, err
 		}
 	}
 
@@ -309,57 +313,57 @@ func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, tok
 	appcfg.Namespace = namespace
 	appcfg.OwnerName = owner
 	appcfg.RepoURL = repoURL
-	return appcfg, nil
+	return appcfg, chartPath, nil
 }
 
-func getAppConfigFromConfigurationFile(app, chart string) (*appinstaller.ApplicationConfig, error) {
+func getAppConfigFromConfigurationFile(app, chart string) (*appinstaller.ApplicationConfig, string, error) {
 	f, err := os.Open(filepath.Join(chart, AppCfgFileName))
 	if err != nil {
-		return nil, err
+		return nil, chart, err
 	}
 	defer f.Close()
 
 	data, err := ioutil.ReadAll(f)
 	if err != nil {
-		return nil, err
+		return nil, chart, err
 	}
 
 	var cfg appinstaller.AppConfiguration
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, err
+		return nil, chart, err
 	}
 
 	return toApplicationConfig(app, chart, &cfg)
 }
 
-func getAppConfigFromURL(ctx context.Context, app, url string) (*appinstaller.ApplicationConfig, error) {
+func getAppConfigFromURL(ctx context.Context, app, url string) (*appinstaller.ApplicationConfig, string, error) {
 	client := resty.New().SetTimeout(2 * time.Second)
 	resp, err := client.R().Get(url)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	if resp.StatusCode() >= 400 {
-		return nil, fmt.Errorf("app config url returns unexpected status code, %d", resp.StatusCode())
+		return nil, "", fmt.Errorf("app config url returns unexpected status code, %d", resp.StatusCode())
 	}
 
 	var cfg appinstaller.AppConfiguration
 	if err := yaml.Unmarshal(resp.Body(), &cfg); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	return toApplicationConfig(app, app, &cfg)
 }
 
-func getAppConfigFromRepo(ctx context.Context, app, repoURL, version, token string) (*appinstaller.ApplicationConfig, error) {
+func getAppConfigFromRepo(ctx context.Context, app, repoURL, version, token string) (*appinstaller.ApplicationConfig, string, error) {
 	chartPath, err := GetIndexAndDownloadChart(ctx, app, repoURL, version, token)
 	if err != nil {
-		return nil, err
+		return nil, chartPath, err
 	}
 	return getAppConfigFromConfigurationFile(app, chartPath)
 }
 
-func toApplicationConfig(app, chart string, cfg *appinstaller.AppConfiguration) (*appinstaller.ApplicationConfig, error) {
+func toApplicationConfig(app, chart string, cfg *appinstaller.AppConfiguration) (*appinstaller.ApplicationConfig, string, error) {
 	var permission []appinstaller.AppPermission
 	if cfg.Permission.AppData {
 		permission = append(permission, appinstaller.AppDataRW)
@@ -385,7 +389,7 @@ func toApplicationConfig(app, chart string, cfg *appinstaller.AppConfiguration) 
 	}
 
 	valuePtr := func(v resource.Quantity, err error) (*resource.Quantity, error) {
-		if err == resource.ErrFormatWrong {
+		if errors.Is(err, resource.ErrFormatWrong) {
 			return nil, nil
 		}
 
@@ -394,22 +398,22 @@ func toApplicationConfig(app, chart string, cfg *appinstaller.AppConfiguration) 
 
 	mem, err := valuePtr(resource.ParseQuantity(cfg.Spec.RequiredMemory))
 	if err != nil {
-		return nil, err
+		return nil, chart, err
 	}
 
 	disk, err := valuePtr(resource.ParseQuantity(cfg.Spec.RequiredDisk))
 	if err != nil {
-		return nil, err
+		return nil, chart, err
 	}
 
 	cpu, err := valuePtr(resource.ParseQuantity(cfg.Spec.RequiredCPU))
 	if err != nil {
-		return nil, err
+		return nil, chart, err
 	}
 
 	gpu, err := valuePtr(resource.ParseQuantity(cfg.Spec.RequiredGPU))
 	if err != nil {
-		return nil, err
+		return nil, chart, err
 	}
 
 	// transform from Policy to AppPolicy
@@ -428,7 +432,7 @@ func toApplicationConfig(app, chart string, cfg *appinstaller.AppConfiguration) 
 	// check dependencies version format
 	for _, dep := range cfg.Options.Dependencies {
 		if err = checkVersionFormat(dep.Version); err != nil {
-			return nil, err
+			return nil, chart, err
 		}
 	}
 
@@ -447,13 +451,13 @@ func toApplicationConfig(app, chart string, cfg *appinstaller.AppConfiguration) 
 
 			if err != nil {
 				klog.Errorf("Failed to get or parse zinc index json file err=%v", err)
-				return nil, err
+				return nil, chart, err
 			}
 		}
 	}
 	if cfg.Middleware != nil && cfg.Middleware.Redis != nil {
 		if len(cfg.Middleware.Redis.Namespace) == 0 {
-			return nil, errors.New("middleware of Redis namespace can not be empty")
+			return nil, chart, errors.New("middleware of Redis namespace can not be empty")
 		}
 	}
 	var appid string
@@ -487,7 +491,7 @@ func toApplicationConfig(app, chart string, cfg *appinstaller.AppConfiguration) 
 		AppScope:           cfg.Options.AppScope,
 		WsConfig:           cfg.Options.WsConfig,
 		Upload:             cfg.Options.Upload,
-	}, nil
+	}, chart, nil
 }
 
 func (h *Handler) installRecommend(req *restful.Request, resp *restful.Response) {

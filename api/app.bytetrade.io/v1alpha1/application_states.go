@@ -19,7 +19,8 @@ const (
 	// AppUpgrading means that an upgrade operation is underway.
 	AppUpgrading ApplicationState = "upgrading"
 	// AppResuming means that a resume operation is underway.
-	AppResuming ApplicationState = "resuming"
+	AppResuming    ApplicationState = "resuming"
+	AppDownloading ApplicationState = "downloading"
 )
 
 func (a ApplicationState) String() string {

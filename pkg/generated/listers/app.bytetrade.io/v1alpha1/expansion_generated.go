@@ -9,3 +9,7 @@ type ApplicationListerExpansion interface{}
 // ApplicationManagerListerExpansion allows custom methods to be added to
 // ApplicationManagerLister.
 type ApplicationManagerListerExpansion interface{}
+
+// ImageManagerListerExpansion allows custom methods to be added to
+// ImageManagerLister.
+type ImageManagerListerExpansion interface{}

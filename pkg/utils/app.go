@@ -90,35 +90,42 @@ func UpdateAppMgrStatus(name string, status v1alpha1.ApplicationManagerStatus) (
 	if err != nil {
 		return nil, err
 	}
-	appMgr, err := client.AppV1alpha1().ApplicationManagers().Get(context.TODO(), name, metav1.GetOptions{})
-	if err != nil {
-		return nil, err
-	}
-	appMgrCopy := appMgr.DeepCopy()
+	var appMgr *v1alpha1.ApplicationManager
 
-	status.OpGeneration = appMgrCopy.Status.OpGeneration + 1
-	status.OpRecords = appMgrCopy.Status.OpRecords
-	if status.State == "" {
-		status.State = appMgrCopy.Status.State
-	}
-	if status.Message == "" {
-		status.Message = appMgrCopy.Status.Message
-	}
-	payload := status.Payload
-	if payload == nil {
-		payload = make(map[string]string)
-	}
-	for k, v := range appMgrCopy.Status.Payload {
-		if _, ok := payload[k]; !ok {
-			payload[k] = v
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		appMgr, err = client.AppV1alpha1().ApplicationManagers().Get(context.TODO(), name, metav1.GetOptions{})
+		if err != nil {
+			return err
 		}
-	}
-	status.Payload = payload
+		appMgrCopy := appMgr.DeepCopy()
 
-	appMgrCopy.Status = status
+		status.OpGeneration = appMgrCopy.Status.OpGeneration + 1
+		status.OpRecords = appMgrCopy.Status.OpRecords
 
-	a, err := client.AppV1alpha1().ApplicationManagers().UpdateStatus(context.TODO(), appMgrCopy, metav1.UpdateOptions{})
-	return a, err
+		if status.State == "" {
+			status.State = appMgrCopy.Status.State
+		}
+		if status.Message == "" {
+			status.Message = appMgrCopy.Status.Message
+		}
+		payload := status.Payload
+		if payload == nil {
+			payload = make(map[string]string)
+		}
+		for k, v := range appMgrCopy.Status.Payload {
+			if _, ok := payload[k]; !ok {
+				payload[k] = v
+			}
+		}
+		status.Payload = payload
+
+		appMgrCopy.Status = status
+
+		appMgr, err = client.AppV1alpha1().ApplicationManagers().UpdateStatus(context.TODO(), appMgrCopy, metav1.UpdateOptions{})
+		return err
+	})
+
+	return appMgr, err
 }
 
 // GetDeployedReleaseVersion check whether app has been deployed and return release chart version
@@ -288,6 +295,7 @@ func UpdateStatus(appMgr *v1alpha1.ApplicationManager, state v1alpha1.Applicatio
 		if len(appMgr.Status.OpRecords) > 20 {
 			appMgrCopy.Status.OpRecords = appMgr.Status.OpRecords[:20:20]
 		}
+		//klog.Infof("utils: UpdateStatus: %v", appMgrCopy.Status.Conditions)
 
 		_, err = client.AppV1alpha1().ApplicationManagers().UpdateStatus(context.TODO(), appMgrCopy, metav1.UpdateOptions{})
 		if err != nil {

@@ -185,6 +185,7 @@ func (h *Handler) operate(req *restful.Request, resp *restful.Response) {
 		Message:           am.Status.Message,
 		CreationTimestamp: am.CreationTimestamp,
 		Source:            am.Spec.Source,
+		Progress:          am.Status.Progress,
 	}
 
 	resp.WriteAsJson(operate)
@@ -219,6 +220,7 @@ func (h *Handler) appsOperate(req *restful.Request, resp *restful.Response) {
 				Message:           am.Status.Message,
 				CreationTimestamp: am.CreationTimestamp,
 				Source:            am.Spec.Source,
+				Progress:          am.Status.Progress,
 			}
 			filteredOperates = append(filteredOperates, operate)
 		}
@@ -385,7 +387,8 @@ func (h *Handler) getApp(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	if apierrors.IsNotFound(err) && am.Status.State != v1alpha1.Pending && am.Status.State != v1alpha1.Installing {
+	if apierrors.IsNotFound(err) && am.Status.State != v1alpha1.Pending &&
+		am.Status.State != v1alpha1.Installing && am.Status.State != v1alpha1.Downloading {
 		api.HandleNotFound(resp, req, err)
 		return
 	}
@@ -424,8 +427,10 @@ func (h *Handler) apps(req *restful.Request, resp *restful.Response) {
 			continue
 		}
 
-		if am.Spec.AppOwner == owner && (am.Status.State == v1alpha1.Pending || am.Status.State == v1alpha1.Installing) {
-			if !stateSet.Has(v1alpha1.Pending.String()) || !stateSet.Has(v1alpha1.Installing.String()) {
+		if am.Spec.AppOwner == owner && (am.Status.State == v1alpha1.Pending || am.Status.State == v1alpha1.Installing ||
+			am.Status.State == v1alpha1.Downloading) {
+			if !stateSet.Has(v1alpha1.Pending.String()) || !stateSet.Has(v1alpha1.Installing.String()) ||
+				!stateSet.Has(v1alpha1.Downloading.String()) {
 				continue
 			}
 			if len(isSysApp) > 0 && isSysApp == "true" {

@@ -377,7 +377,7 @@ func (h *Handler) resumeHandler(req *restful.Request, resp *restful.Response) {
 	}()
 
 	client := resty.New()
-	response, err := client.R().Post(fmt.Sprintf("http://dify.user-space-%s/nitro/model/%s/load", owner, modelID))
+	response, err := client.SetTimeout(60 * time.Second).R().Post(fmt.Sprintf("http://dify.user-space-%s/nitro/model/%s/load", owner, modelID))
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return

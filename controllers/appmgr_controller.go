@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"path/filepath"
 	"reflect"
@@ -206,7 +207,7 @@ func (r *ApplicationManagerController) reconcile2(cur *appv1alpha1.ApplicationMa
 	case appv1alpha1.UninstallOp:
 		err = r.uninstall(ctx, cur)
 	case appv1alpha1.CancelOp:
-		if cur.Status.State == appv1alpha1.Installing {
+		if cur.Status.State == appv1alpha1.Installing || cur.Status.State == appv1alpha1.Downloading {
 			err = r.cancel(cur)
 		}
 		if cur.Status.State == appv1alpha1.Pending {
@@ -278,7 +279,6 @@ func (r *ApplicationManagerController) preEnqueueCheckForUpdate(old, new client.
 func (r *ApplicationManagerController) updateStatus(appMgr *appv1alpha1.ApplicationManager, state appv1alpha1.ApplicationManagerState,
 	opRecord *appv1alpha1.OpRecord, appState appv1alpha1.ApplicationState, message string) error {
 	var err error
-
 	now := metav1.Now()
 	appMgrCopy := appMgr.DeepCopy()
 	appMgr.Status.State = state
@@ -291,7 +291,6 @@ func (r *ApplicationManagerController) updateStatus(appMgr *appv1alpha1.Applicat
 	if len(appMgr.Status.OpRecords) > 20 {
 		appMgr.Status.OpRecords = appMgr.Status.OpRecords[:20:20]
 	}
-
 	err = r.Status().Patch(context.TODO(), appMgr, client.MergeFrom(appMgrCopy))
 	if err != nil {
 		return err
@@ -310,58 +309,150 @@ func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv
 	var ops *appinstaller.HelmOps
 	defer func() {
 		if err != nil {
-			if err.Error() != "canceled" {
-				state := appv1alpha1.Failed
-				now := metav1.Now()
-				message := err.Error()
-				var appMgrCur appv1alpha1.ApplicationManager
-				e := r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &appMgrCur)
-				if e != nil {
-					klog.Errorf("Failed to get applicationmanagers name=%s err=%v", appMgr.Name, e)
-				}
+			klog.Infof("install failed .......err=%v", err)
 
-				e = ops.Uninstall()
-				if e != nil {
-					klog.Errorf("Failed to uninstall app name=%s err=%v", appMgr.Spec.AppName, e)
-				}
+			//todo
+			if errors.Is(err, context.Canceled) {
+				klog.Infof("isfkls;f;s ..... canceled")
+			} else {
+				klog.Infof("isfkls;f;s ..... not canceled")
+			}
+			if err.Error() == "canceled" {
+				return
+			}
+			//todo
 
-				opRecord := appv1alpha1.OpRecord{
-					OpType:     appv1alpha1.InstallOp,
-					Message:    message,
-					Source:     appMgr.Spec.Source,
-					Version:    version,
-					Status:     state,
-					StatusTime: &now,
-				}
+			state := appv1alpha1.Failed
+			now := metav1.Now()
+			message := err.Error()
+			var appMgrCur appv1alpha1.ApplicationManager
+			e := r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &appMgrCur)
+			if e != nil {
+				klog.Errorf("Failed to get applicationmanagers name=%s err=%v", appMgr.Name, e)
+			}
+			// TODO: check release if exits, if exist do uninstall
+			e = ops.Uninstall()
+			if e != nil {
+				klog.Errorf("Failed to uninstall app name=%s err=%v", appMgr.Spec.AppName, e)
+			}
 
-				e = r.updateStatus(appMgr, state, &opRecord, "", message)
-				if e != nil {
-					klog.Errorf("Failed to update applicationmanagers status name=%s err=%v", appMgr.Name, e)
-				}
+			opRecord := appv1alpha1.OpRecord{
+				OpType:     appv1alpha1.InstallOp,
+				Message:    message,
+				Source:     appMgr.Spec.Source,
+				Version:    version,
+				Status:     state,
+				StatusTime: &now,
+			}
+			if errors.Is(err, context.Canceled) {
+				klog.Errorf("CCCCCCCCCCCCCCCCC")
+				opRecord.Status = appv1alpha1.Canceled
+				opRecord.OpType = appv1alpha1.CancelOp
+				opRecord.Message = constants.OperationCanceledByUserTpl
+			}
+			klog.Infof("opercordexxefwf: %#v", opRecord)
+			e = r.updateStatus(appMgr, opRecord.Status, &opRecord, "", opRecord.Message)
+			if e != nil {
+				klog.Errorf("Failed to update applicationmanagers status name=%s err=%v", appMgr.Name, e)
 			}
 		}
+
 	}()
+	payload := appMgr.Status.Payload
+	version = payload["version"]
+	token := payload["token"]
+	cfgURL := payload["cfgURL"]
+	repoURL := payload["repoURL"]
+
+	var appconfig *appinstaller.ApplicationConfig
+	var chartPath string
+	kubeConfig, err := ctrl.GetConfig()
+	if err != nil {
+		return err
+	}
+
+	appconfig, chartPath, err = apiserver.GetAppConfig(ctx, appMgr.Spec.AppName, appMgr.Spec.AppOwner, cfgURL, repoURL, "", token)
+	if err != nil {
+		return err
+	}
+	klog.Infof("chartPath: %v", chartPath)
+	ops, err = appinstaller.NewHelmOps(ctx, kubeConfig, appconfig, token, appinstaller.Opt{Source: appMgr.Spec.Source})
+	if err != nil {
+		return err
+	}
+	// get images that need to download
+	refs, err := utils.GetRefFromResourceList(chartPath)
+	if err != nil {
+		klog.Infof("get ref err=%v", err)
+		return err
+	}
+	klog.Infof("refs: %v", refs)
+
+	//var nodes corev1.NodeList
+	//err = r.List(ctx, &nodes, &client.ListOptions{})
+	//if err != nil {
+	//	return err
+	//}
+
+	err = r.createImageManager(ctx, appMgr, refs)
+	if err != nil {
+		return err
+	}
+
+	// wait image to be downloaded
+	err = r.updateStatus(appMgr, appv1alpha1.Downloading, nil, "", "downloading")
+	if err != nil {
+		return err
+	}
+
+	err = r.pollDownloadProgress(ctx, appMgr)
+	klog.Infof("download failedxxxxx err=%v", err)
+
+	if err != nil {
+		//if errors.Is(err, context.Canceled) {
+		//	klog.Infof("is err canceled ....")
+		//	//err = r.updateStatus(instance, appv1alpha1.Canceled, err.Error())
+		//
+		//} else {
+		//	klog.Infof("is not concelex.....")
+		//}
+		//if errors.Is(err, context.Canceled) {
+		//	now := metav1.Now()
+		//
+		//	opRecord := appv1alpha1.OpRecord{
+		//		OpType:     appv1alpha1.CancelOp,
+		//		Message:    fmt.Sprintf(constants.OperationCanceledByUserTpl),
+		//		Source:     appMgr.Spec.Source,
+		//		Version:    appMgr.Status.Payload["version"],
+		//		Status:     appv1alpha1.Canceled,
+		//		StatusTime: &now,
+		//	}
+		//	err = r.updateStatus(appMgr, appv1alpha1.Canceled, &opRecord, "", opRecord.Message)
+		//	if err != nil {
+		//		klog.Infof("update status in conceld err=%v", err)
+		//	}
+		//
+		//	//err = r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &cur)
+		//	//klog.Infof("after context canceled conditions: %v", cur.Status.Conditions)
+		//}
+		return err
+	}
+	klog.Infof("image xxx downloaded.....")
+
+	err = r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, appMgr)
+	klog.Infof("before installing conditions: %v", appMgr.Status.Progress)
+
 	// this time app has not been created, so do not update app status
 	message := fmt.Sprintf("Start to install %s: %s", appMgr.Spec.Type.String(), appMgr.Spec.AppName)
 	err = r.updateStatus(appMgr, appv1alpha1.Installing, nil, "", message)
 	if err != nil {
 		return err
 	}
-
-	kubeConfig, err := ctrl.GetConfig()
-	if err != nil {
-		return err
-	}
-	var appconfig *appinstaller.ApplicationConfig
-
-	payload := appMgr.Status.Payload
-	version = payload["version"]
-	token := payload["token"]
-	cfgURL := payload["cfgURL"]
-	repoURL := payload["repoURL"]
-	appconfig, err = apiserver.GetAppConfig(ctx, appMgr.Spec.AppName, appMgr.Spec.AppOwner, cfgURL, repoURL, "", token)
-
-	ops, err = appinstaller.NewHelmOps(ctx, kubeConfig, appconfig, token, appinstaller.Opt{Source: appMgr.Spec.Source})
+	//err = r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &cur)
+	//klog.Infof("after installing conditions: %v", cur.Status.Progress)
+	//
+	//err = r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &cur)
+	//klog.Infof("after installing conditions: %v", cur.Status.Conditions)
 
 	_, err = apiserver.CheckAppRequirement(kubeConfig, token, appconfig)
 	if err != nil {
@@ -391,6 +482,12 @@ func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv
 	if err != nil {
 		klog.Errorf("Failed to update applicationmanagers status name=%s err=%v", appMgr.Name, err)
 	}
+
+	err = r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, appMgr)
+	//klog.Infof("after completed conditions: %v", cur.Status.Conditions)
+	var curAppMgr appv1alpha1.ApplicationManager
+	err = r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &curAppMgr)
+	klog.Infof("xxx.appp: status: %v", curAppMgr.Status.Progress)
 	return err
 }
 
@@ -595,7 +692,10 @@ func (r *ApplicationManagerController) upgrade(ctx context.Context, appMgr *appv
 
 	}()
 
-	err = r.updateStatus(appMgr, appv1alpha1.Upgrading, nil, appv1alpha1.AppUpgrading, appv1alpha1.AppUpgrading.String())
+	//appconfig, chartPath, err = apiserver.GetAppConfig(ctx, appMgr.Spec.AppName, appMgr.Spec.AppOwner, cfgURL, repoURL, "", token)
+	err = r.updateStatus(appMgr, appv1alpha1.Upgrading, nil, appv1alpha1.AppUpgrading, appv1alpha1.Upgrading.String())
+
+	//err = r.updateStatus(appMgr, appv1alpha1.Downloading, nil, appv1alpha1.AppDownloading, appv1alpha1.Downloading.String())
 	if err != nil {
 		return err
 	}
@@ -614,8 +714,10 @@ func (r *ApplicationManagerController) upgrade(ctx context.Context, appMgr *appv
 	cfgURL := appMgr.Status.Payload["cfgURL"]
 	repoURL := appMgr.Status.Payload["repoURL"]
 	token := appMgr.Status.Payload["token"]
+	var chartPath string
+
 	if !userspace.IsSysApp(appMgr.Spec.AppName) {
-		appconfig, err = apiserver.GetAppConfig(ctx, appMgr.Spec.AppName, appMgr.Spec.AppOwner, cfgURL, repoURL, version, token)
+		appconfig, chartPath, err = apiserver.GetAppConfig(ctx, appMgr.Spec.AppName, appMgr.Spec.AppOwner, cfgURL, repoURL, version, token)
 		if err != nil {
 			return err
 		}
@@ -624,7 +726,7 @@ func (r *ApplicationManagerController) upgrade(ctx context.Context, appMgr *appv
 			return err
 		}
 	} else {
-		chart, err := apiserver.GetIndexAndDownloadChart(ctx, appMgr.Spec.AppName, repoURL, version, token)
+		chartPath, err = apiserver.GetIndexAndDownloadChart(ctx, appMgr.Spec.AppName, repoURL, version, token)
 		if err != nil {
 			return err
 		}
@@ -632,16 +734,32 @@ func (r *ApplicationManagerController) upgrade(ctx context.Context, appMgr *appv
 			AppName:    appMgr.Spec.AppName,
 			Namespace:  appMgr.Spec.AppNamespace,
 			OwnerName:  appMgr.Spec.AppOwner,
-			ChartsName: chart,
+			ChartsName: chartPath,
 			RepoURL:    repoURL,
 		}
-
 	}
 
 	ops, err := appinstaller.NewHelmOps(ctx, config, appconfig, token, appinstaller.Opt{Source: appMgr.Spec.Source})
 	if err != nil {
 		return err
 	}
+
+	refs, err := utils.GetRefFromResourceList(chartPath)
+	if err != nil {
+		return err
+	}
+	err = r.createImageManager(ctx, appMgr, refs)
+	if err != nil {
+		return err
+	}
+
+	err = r.pollDownloadProgress(ctx, appMgr)
+	if err != nil {
+		return err
+	}
+	//time.Sleep(30 * time.Second)
+	//err = r.updateStatus(appMgr, appv1alpha1.Upgrading, nil, appv1alpha1.AppUpgrading, appv1alpha1.Upgrading.String())
+
 	err = ops.Upgrade()
 
 	if err != nil {
@@ -692,6 +810,18 @@ func (r *ApplicationManagerController) cancel(appMgr *appv1alpha1.ApplicationMan
 		return errors.New("can not execute cancel")
 	}
 	cancel()
+	var im appv1alpha1.ImageManager
+	err = r.Get(context.TODO(), types.NamespacedName{Name: appMgr.Name}, &im)
+	if err != nil {
+		return err
+	}
+	imCopy := im.DeepCopy()
+	imCopy.Status.State = "canceled"
+	err = r.Status().Patch(context.TODO(), imCopy, client.MergeFrom(&im))
+	if err != nil {
+		return err
+	}
+
 	return r.updateStatus(appMgr, appv1alpha1.Canceling, nil, "", appMgr.Status.Message)
 }
 
@@ -832,4 +962,115 @@ func (r *ApplicationManagerController) resumeAppAndWaitForLaunch(appMgr *appv1al
 			return err
 		}
 	}
+}
+
+func (r *ApplicationManagerController) pollDownloadProgress(ctx context.Context, appMgr *appv1alpha1.ApplicationManager) error {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			klog.Infof("poll images progress status.xxxxx")
+			var im appv1alpha1.ImageManager
+			err := r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &im)
+			if err != nil {
+				klog.Infof("Failed to get applicationmanagers name=%s err=%v", appMgr.Name, err)
+				return err
+			}
+			//klog.Infof("pollporgress before.... patch: conditions: %v", cur.Status.Conditions)
+
+			if im.Status.State == appv1alpha1.Failed.String() {
+				return errors.New(im.Status.Message)
+			}
+			//if cur.Status.State == appv1alpha1.Canceled {
+			//	return context.Canceled
+			//}
+			type progress struct {
+				sum   float64
+				count int
+			}
+			nodeMap := make(map[string]*progress)
+			for _, c := range im.Status.Conditions {
+				if _, ok := nodeMap[c.NodeName]; ok {
+					n, _ := strconv.ParseFloat(c.Progress, 64)
+					nodeMap[c.NodeName].sum += n
+					nodeMap[c.NodeName].count += 1
+				} else {
+					n, _ := strconv.ParseFloat(c.Progress, 64)
+					nodeMap[c.NodeName] = &progress{sum: n, count: 1}
+				}
+			}
+			ret := math.MaxFloat64
+			for _, p := range nodeMap {
+				if p.sum/float64(p.count) <= ret {
+					ret = p.sum / float64(p.count)
+				}
+			}
+
+			var cur appv1alpha1.ApplicationManager
+			err = r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &cur)
+			if err != nil {
+				klog.Infof("patch error %v", err)
+			}
+
+			appMgrCopy := cur.DeepCopy()
+			cur.Status.Progress = strconv.FormatFloat(ret, 'f', 2, 64)
+			err = r.Status().Patch(ctx, &cur, client.MergeFrom(appMgrCopy))
+			if err != nil {
+				klog.Infof("patch error %v", err)
+			}
+			//var cur appv1alpha1.ApplicationManager
+			err = r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &cur)
+			//klog.Infof("pollporgress after patch: conditions: %v", cur.Status.Conditions)
+
+			klog.Infof("download progress.... %v", cur.Status.Progress)
+			if cur.Status.Progress == "100.00" {
+				klog.Infof("download fkds;lfsdjl;f")
+				return nil
+			}
+		case <-ctx.Done():
+			//var cur appv1alpha1.ApplicationManager
+			//err := r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &cur)
+			//if err != nil {
+			//	return err
+			//}
+			//klog.Infof("")
+			//err = r.updateStatus(&cur, appv1alpha1.Canceled, nil, "", "cancelded")
+			//if err != nil {
+			//	klog.Infof("Failed to update applicationmanagers err=%v", err)
+			//}
+			//return err
+			return context.Canceled
+		}
+	}
+}
+
+func (r *ApplicationManagerController) createImageManager(ctx context.Context, appMgr *appv1alpha1.ApplicationManager, refs []string) error {
+	var im appv1alpha1.ImageManager
+	err := r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &im)
+	if err == nil {
+		err = r.Delete(ctx, &im)
+		if err != nil {
+			return err
+		}
+	}
+
+	m := appv1alpha1.ImageManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: appMgr.Name,
+		},
+		Spec: appv1alpha1.ImageManagerSpec{
+			AppName:      appMgr.Spec.AppName,
+			AppNamespace: appMgr.Spec.AppNamespace,
+			AppOwner:     appMgr.Spec.AppOwner,
+			Refs:         refs,
+		},
+	}
+
+	err = r.Create(ctx, &m)
+	if err != nil {
+		return err
+	}
+	return nil
 }

@@ -194,6 +194,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 					if err != nil {
 						return ctrl.Result{}, err
 					}
+					//klog.Infof("in application xxxxxx conditiosn: %v", appMgr.Status.Conditions)
 					now := metav1.Now()
 					state := appv1alpha1.Completed
 					opRecord := appv1alpha1.OpRecord{
