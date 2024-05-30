@@ -158,18 +158,18 @@ func CheckAppRequirement(kubeConfig *rest.Config, token string, appConfig *appin
 	switch {
 	case appConfig.Requirement.Disk != nil &&
 		appConfig.Requirement.Disk.CmpInt64(int64(metrics.Disk.Total-metrics.Disk.Usage)) > 0:
-		return "disk", errors.New("app's disk size requirement cannot be fulfilled")
+		return "disk", errors.New("The app's DISK requirement cannot be satisfied")
 	case appConfig.Requirement.Memory != nil &&
 		appConfig.Requirement.Memory.CmpInt64(int64(metrics.Memory.Total*0.9-metrics.Memory.Usage)) > 0:
-		return "memory", errors.New("app's memory size requirement cannot be fulfilled")
+		return "memory", errors.New("The app's MEMORY requirement cannot be satisfied")
 	case appConfig.Requirement.CPU != nil:
 		availableCPU, _ := resource.ParseQuantity(strconv.FormatFloat(metrics.CPU.Total*0.9-metrics.CPU.Usage, 'f', -1, 64))
 		if appConfig.Requirement.CPU.Cmp(availableCPU) > 0 {
-			return "cpu", errors.New("app's CPU requirement cannot be fulfilled")
+			return "cpu", errors.New("The app's CPU requirement cannot be satisfied")
 		}
 	case appConfig.Requirement.GPU != nil && !appConfig.Requirement.GPU.IsZero() &&
 		metrics.GPU.Total <= 0:
-		return "gpu", errors.New("app's GPU requirement cannot be fulfilled")
+		return "gpu", errors.New("The app's GPU requirement cannot be satisfied")
 	}
 
 	allocatedResources, err := getRequestResources()
@@ -197,10 +197,10 @@ func CheckAppRequirement(kubeConfig *rest.Config, token string, appConfig *appin
 			}
 		}
 		if !sufficientCPU {
-			return "cpu", errors.New("app's CPU requirement[request] cannot be fulfilled")
+			return "cpu", errors.New("The app's CPU requirement specified in the kubernetes requests cannot be satisfied")
 		}
 		if !sufficientMemory {
-			return "memory", errors.New("app's memory size requirement[request] cannot be fulfilled")
+			return "memory", errors.New("The app's MEMORY requirement specified in the kubernetes requests cannot be satisfied")
 		}
 	}
 
@@ -216,11 +216,11 @@ func CheckUserResRequirement(ctx context.Context, kubeConfig *rest.Config, appCo
 	switch {
 	case appConfig.Requirement.Memory != nil && metrics.Memory.Total != 0 &&
 		appConfig.Requirement.Memory.CmpInt64(int64(metrics.Memory.Total*0.9-metrics.Memory.Usage)) > 0:
-		return "memory", errors.New("user's app memory size requirement cannot be fulfilled")
+		return "memory", errors.New("The user's app MEMORY requirement cannot be satisfied")
 	case appConfig.Requirement.CPU != nil && metrics.CPU.Total != 0:
 		availableCPU, _ := resource.ParseQuantity(strconv.FormatFloat(metrics.CPU.Total*0.9-metrics.CPU.Usage, 'f', -1, 64))
 		if appConfig.Requirement.CPU.Cmp(availableCPU) > 0 {
-			return "cpu", errors.New("user's app CPU requirement cannot be fulfilled")
+			return "cpu", errors.New("The user's app CPU requirement cannot be satisfied")
 		}
 	}
 	return "", nil
