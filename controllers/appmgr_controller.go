@@ -309,19 +309,9 @@ func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv
 	var ops *appinstaller.HelmOps
 	defer func() {
 		if err != nil {
-			klog.Infof("install failed .......err=%v", err)
-
-			//todo
-			if errors.Is(err, context.Canceled) {
-				klog.Infof("isfkls;f;s ..... canceled")
-			} else {
-				klog.Infof("isfkls;f;s ..... not canceled")
-			}
 			if err.Error() == "canceled" {
 				return
 			}
-			//todo
-
 			state := appv1alpha1.Failed
 			now := metav1.Now()
 			message := err.Error()
@@ -330,10 +320,12 @@ func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv
 			if e != nil {
 				klog.Errorf("Failed to get applicationmanagers name=%s err=%v", appMgr.Name, e)
 			}
-			// TODO: check release if exits, if exist do uninstall
-			e = ops.Uninstall()
-			if e != nil {
-				klog.Errorf("Failed to uninstall app name=%s err=%v", appMgr.Spec.AppName, e)
+
+			if ops != nil {
+				e = ops.Uninstall()
+				if e != nil {
+					klog.Errorf("Failed to uninstall app name=%s err=%v", appMgr.Spec.AppName, e)
+				}
 			}
 
 			opRecord := appv1alpha1.OpRecord{
@@ -345,12 +337,10 @@ func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv
 				StatusTime: &now,
 			}
 			if errors.Is(err, context.Canceled) {
-				klog.Errorf("CCCCCCCCCCCCCCCCC")
 				opRecord.Status = appv1alpha1.Canceled
 				opRecord.OpType = appv1alpha1.CancelOp
 				opRecord.Message = constants.OperationCanceledByUserTpl
 			}
-			klog.Infof("opercordexxefwf: %#v", opRecord)
 			e = r.updateStatus(appMgr, opRecord.Status, &opRecord, "", opRecord.Message)
 			if e != nil {
 				klog.Errorf("Failed to update applicationmanagers status name=%s err=%v", appMgr.Name, e)
@@ -375,7 +365,6 @@ func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv
 	if err != nil {
 		return err
 	}
-	klog.Infof("chartPath: %v", chartPath)
 	ops, err = appinstaller.NewHelmOps(ctx, kubeConfig, appconfig, token, appinstaller.Opt{Source: appMgr.Spec.Source})
 	if err != nil {
 		return err
@@ -386,13 +375,6 @@ func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv
 		klog.Infof("get ref err=%v", err)
 		return err
 	}
-	klog.Infof("refs: %v", refs)
-
-	//var nodes corev1.NodeList
-	//err = r.List(ctx, &nodes, &client.ListOptions{})
-	//if err != nil {
-	//	return err
-	//}
 
 	err = r.createImageManager(ctx, appMgr, refs)
 	if err != nil {
@@ -406,41 +388,12 @@ func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv
 	}
 
 	err = r.pollDownloadProgress(ctx, appMgr)
-	klog.Infof("download failedxxxxx err=%v", err)
 
 	if err != nil {
-		//if errors.Is(err, context.Canceled) {
-		//	klog.Infof("is err canceled ....")
-		//	//err = r.updateStatus(instance, appv1alpha1.Canceled, err.Error())
-		//
-		//} else {
-		//	klog.Infof("is not concelex.....")
-		//}
-		//if errors.Is(err, context.Canceled) {
-		//	now := metav1.Now()
-		//
-		//	opRecord := appv1alpha1.OpRecord{
-		//		OpType:     appv1alpha1.CancelOp,
-		//		Message:    fmt.Sprintf(constants.OperationCanceledByUserTpl),
-		//		Source:     appMgr.Spec.Source,
-		//		Version:    appMgr.Status.Payload["version"],
-		//		Status:     appv1alpha1.Canceled,
-		//		StatusTime: &now,
-		//	}
-		//	err = r.updateStatus(appMgr, appv1alpha1.Canceled, &opRecord, "", opRecord.Message)
-		//	if err != nil {
-		//		klog.Infof("update status in conceld err=%v", err)
-		//	}
-		//
-		//	//err = r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &cur)
-		//	//klog.Infof("after context canceled conditions: %v", cur.Status.Conditions)
-		//}
 		return err
 	}
-	klog.Infof("image xxx downloaded.....")
 
 	err = r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, appMgr)
-	klog.Infof("before installing conditions: %v", appMgr.Status.Progress)
 
 	// this time app has not been created, so do not update app status
 	message := fmt.Sprintf("Start to install %s: %s", appMgr.Spec.Type.String(), appMgr.Spec.AppName)
@@ -448,11 +401,6 @@ func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv
 	if err != nil {
 		return err
 	}
-	//err = r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &cur)
-	//klog.Infof("after installing conditions: %v", cur.Status.Progress)
-	//
-	//err = r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &cur)
-	//klog.Infof("after installing conditions: %v", cur.Status.Conditions)
 
 	_, err = apiserver.CheckAppRequirement(kubeConfig, token, appconfig)
 	if err != nil {
@@ -484,10 +432,8 @@ func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv
 	}
 
 	err = r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, appMgr)
-	//klog.Infof("after completed conditions: %v", cur.Status.Conditions)
 	var curAppMgr appv1alpha1.ApplicationManager
 	err = r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &curAppMgr)
-	klog.Infof("xxx.appp: status: %v", curAppMgr.Status.Progress)
 	return err
 }
 
@@ -692,10 +638,8 @@ func (r *ApplicationManagerController) upgrade(ctx context.Context, appMgr *appv
 
 	}()
 
-	//appconfig, chartPath, err = apiserver.GetAppConfig(ctx, appMgr.Spec.AppName, appMgr.Spec.AppOwner, cfgURL, repoURL, "", token)
 	err = r.updateStatus(appMgr, appv1alpha1.Upgrading, nil, appv1alpha1.AppUpgrading, appv1alpha1.Upgrading.String())
 
-	//err = r.updateStatus(appMgr, appv1alpha1.Downloading, nil, appv1alpha1.AppDownloading, appv1alpha1.Downloading.String())
 	if err != nil {
 		return err
 	}
@@ -978,14 +922,11 @@ func (r *ApplicationManagerController) pollDownloadProgress(ctx context.Context,
 				klog.Infof("Failed to get applicationmanagers name=%s err=%v", appMgr.Name, err)
 				return err
 			}
-			//klog.Infof("pollporgress before.... patch: conditions: %v", cur.Status.Conditions)
 
 			if im.Status.State == appv1alpha1.Failed.String() {
 				return errors.New(im.Status.Message)
 			}
-			//if cur.Status.State == appv1alpha1.Canceled {
-			//	return context.Canceled
-			//}
+
 			type progress struct {
 				sum   float64
 				count int
@@ -1020,27 +961,13 @@ func (r *ApplicationManagerController) pollDownloadProgress(ctx context.Context,
 			if err != nil {
 				klog.Infof("patch error %v", err)
 			}
-			//var cur appv1alpha1.ApplicationManager
 			err = r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &cur)
-			//klog.Infof("pollporgress after patch: conditions: %v", cur.Status.Conditions)
 
 			klog.Infof("download progress.... %v", cur.Status.Progress)
 			if cur.Status.Progress == "100.00" {
-				klog.Infof("download fkds;lfsdjl;f")
 				return nil
 			}
 		case <-ctx.Done():
-			//var cur appv1alpha1.ApplicationManager
-			//err := r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &cur)
-			//if err != nil {
-			//	return err
-			//}
-			//klog.Infof("")
-			//err = r.updateStatus(&cur, appv1alpha1.Canceled, nil, "", "cancelded")
-			//if err != nil {
-			//	klog.Infof("Failed to update applicationmanagers err=%v", err)
-			//}
-			//return err
 			return context.Canceled
 		}
 	}
