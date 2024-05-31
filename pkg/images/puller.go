@@ -93,7 +93,14 @@ func (is *imageService) PullImage(ctx context.Context, ref string, opts PullOpti
 			remoteOpts = append(remoteOpts, containerd.WithPlatform(platform))
 		}
 	}
-	_, err = is.client.Fetch(pctx, ref, remoteOpts...)
+	var maxRetries = 5
+	for i := 0; i < maxRetries; i++ {
+		_, err = is.client.Fetch(pctx, ref, remoteOpts...)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Second)
+	}
 	stopProgress()
 	if err != nil {
 		klog.Infof("fetch image name=%s err=%v", ref, err)
