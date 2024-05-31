@@ -179,6 +179,7 @@ func GetRefFromResourceList(chartPath string) (refs []string, err error) {
 		klog.Infof("get resourcelist from chart err=%v", err)
 		return refs, err
 	}
+	seen := make(map[string]struct{})
 	for _, r := range resources {
 		kind := r.Object.GetObjectKind().GroupVersionKind().Kind
 		if kind == "Deployment" {
@@ -208,5 +209,12 @@ func GetRefFromResourceList(chartPath string) (refs []string, err error) {
 			}
 		}
 	}
-	return refs, nil
+	filteredRefs := make([]string, 0)
+	for _, ref := range refs {
+		if _, ok := seen[ref]; !ok {
+			filteredRefs = append(filteredRefs, ref)
+			seen[ref] = struct{}{}
+		}
+	}
+	return filteredRefs, nil
 }

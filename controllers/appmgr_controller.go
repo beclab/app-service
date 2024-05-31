@@ -915,7 +915,6 @@ func (r *ApplicationManagerController) pollDownloadProgress(ctx context.Context,
 	for {
 		select {
 		case <-ticker.C:
-			klog.Infof("poll images progress status.xxxxx")
 			var im appv1alpha1.ImageManager
 			err := r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &im)
 			if err != nil {
@@ -952,16 +951,17 @@ func (r *ApplicationManagerController) pollDownloadProgress(ctx context.Context,
 			var cur appv1alpha1.ApplicationManager
 			err = r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &cur)
 			if err != nil {
-				klog.Infof("patch error %v", err)
+				klog.Infof("Failed to get applicationmanagers name=%v, err=%v", appMgr.Name, err)
+				continue
 			}
 
 			appMgrCopy := cur.DeepCopy()
 			cur.Status.Progress = strconv.FormatFloat(ret, 'f', 2, 64)
 			err = r.Status().Patch(ctx, &cur, client.MergeFrom(appMgrCopy))
 			if err != nil {
-				klog.Infof("patch error %v", err)
+				klog.Infof("Failed to patch applicationmanagers name=%v, err=%v", appMgr.Name, err)
+				continue
 			}
-			err = r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &cur)
 
 			klog.Infof("download progress.... %v", cur.Status.Progress)
 			if cur.Status.Progress == "100.00" {

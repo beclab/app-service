@@ -164,14 +164,13 @@ func (r *ImageManagerController) reconcile(instance *appv1alpha1.ImageManager) {
 		if errors.Is(err, context.Canceled) {
 			state = appv1alpha1.Canceled.String()
 		}
-		err = r.updateStatus(instance, state, err.Error())
+		err = r.updateStatus(ctx, instance, state, err.Error())
 		if err != nil {
 			klog.Infof("Failed to update status err=%v", err)
 		}
 		return
 	}
-	err = r.updateStatus(instance, appv1alpha1.Completed.String(), "success")
-	//err = r.install(ctx, instance)
+	err = r.updateStatus(ctx, instance, appv1alpha1.Completed.String(), "success")
 	if err != nil {
 		klog.Error(err)
 	}
@@ -203,10 +202,15 @@ func (r *ImageManagerController) reconcile2(cur *appv1alpha1.ImageManager) {
 func (r *ImageManagerController) download(ctx context.Context, refs []string, opts images.PullOptions) (err error) {
 	var wg sync.WaitGroup
 	var errs []error
+	tokens := make(chan struct{}, 3)
 	for _, ref := range refs {
 		wg.Add(1)
 		go func(ref string) {
+			tokens <- struct{}{}
 			defer wg.Done()
+			defer func() {
+				<-tokens
+			}()
 			iClient, ctx, cancel := images.NewClientOrDie(ctx)
 			defer cancel()
 			_, err = iClient.PullImage(ctx, ref, opts)
@@ -221,9 +225,9 @@ func (r *ImageManagerController) download(ctx context.Context, refs []string, op
 	return err
 }
 
-func (r *ImageManagerController) updateStatus(im *appv1alpha1.ImageManager, state string, message string) error {
+func (r *ImageManagerController) updateStatus(ctx context.Context, im *appv1alpha1.ImageManager, state string, message string) error {
 	var err error
-	err = r.Get(context.TODO(), types.NamespacedName{Name: im.Name}, im)
+	err = r.Get(ctx, types.NamespacedName{Name: im.Name}, im)
 	if err != nil {
 		return err
 	}
@@ -235,7 +239,7 @@ func (r *ImageManagerController) updateStatus(im *appv1alpha1.ImageManager, stat
 	imCopy.Status.StatusTime = &now
 	imCopy.Status.UpdateTime = &now
 
-	err = r.Status().Patch(context.TODO(), imCopy, client.MergeFrom(im))
+	err = r.Status().Patch(ctx, imCopy, client.MergeFrom(im))
 	if err != nil {
 		return err
 	}
