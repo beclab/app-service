@@ -154,13 +154,11 @@ func (r *ImageManagerController) reconcile(instance *appv1alpha1.ImageManager) {
 	err = r.Get(ctx, types.NamespacedName{Name: instance.Name}, &cur)
 	if err != nil {
 		klog.Error(err)
-		return
 	}
 	if cur.Status.State != appv1alpha1.Downloading.String() {
 		err = r.updateStatus(ctx, &cur, appv1alpha1.Downloading.String(), "downloading")
 		if err != nil {
 			klog.Infof("Failed to update imagemanager status name=%v, err=%v", cur.Name, err)
-			return
 		}
 	}
 
