@@ -31,6 +31,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -392,8 +393,18 @@ func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv
 	if err != nil {
 		return err
 	}
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		klog.Infof("update im status")
+		return r.updateImStatus(ctx, appMgr.Name, appv1alpha1.Completed.String(), "success", []appv1alpha1.ImageProgress{})
+	})
+	if err != nil {
+		return err
+	}
 
 	err = r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, appMgr)
+	if err != nil {
+		return err
+	}
 
 	// this time app has not been created, so do not update app status
 	message := fmt.Sprintf("Start to install %s: %s", appMgr.Spec.Type.String(), appMgr.Spec.AppName)
@@ -915,7 +926,6 @@ func (r *ApplicationManagerController) pollDownloadProgress(ctx context.Context,
 	for {
 		select {
 		case <-ticker.C:
-			klog.Infof("poll images progress status.xxxxx")
 			var im appv1alpha1.ImageManager
 			err := r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &im)
 			if err != nil {
@@ -952,16 +962,17 @@ func (r *ApplicationManagerController) pollDownloadProgress(ctx context.Context,
 			var cur appv1alpha1.ApplicationManager
 			err = r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &cur)
 			if err != nil {
-				klog.Infof("patch error %v", err)
+				klog.Infof("Failed to get applicationmanagers name=%v, err=%v", appMgr.Name, err)
+				continue
 			}
 
 			appMgrCopy := cur.DeepCopy()
 			cur.Status.Progress = strconv.FormatFloat(ret, 'f', 2, 64)
 			err = r.Status().Patch(ctx, &cur, client.MergeFrom(appMgrCopy))
 			if err != nil {
-				klog.Infof("patch error %v", err)
+				klog.Infof("Failed to patch applicationmanagers name=%v, err=%v", appMgr.Name, err)
+				continue
 			}
-			err = r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &cur)
 
 			klog.Infof("download progress.... %v", cur.Status.Progress)
 			if cur.Status.Progress == "100.00" {
@@ -996,6 +1007,30 @@ func (r *ApplicationManagerController) createImageManager(ctx context.Context, a
 	}
 
 	err = r.Create(ctx, &m)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *ApplicationManagerController) updateImStatus(ctx context.Context, name, state, message string, conditions []appv1alpha1.ImageProgress) error {
+	var im appv1alpha1.ImageManager
+	err := r.Get(ctx, types.NamespacedName{Name: name}, &im)
+	if err != nil {
+		return err
+	}
+
+	now := metav1.Now()
+	imCopy := im.DeepCopy()
+	imCopy.Status.State = state
+	imCopy.Status.Message = message
+	imCopy.Status.StatusTime = &now
+	imCopy.Status.UpdateTime = &now
+	if len(conditions) > 0 {
+		imCopy.Status.Conditions = conditions
+	}
+
+	err = r.Status().Patch(ctx, imCopy, client.MergeFrom(&im))
 	if err != nil {
 		return err
 	}

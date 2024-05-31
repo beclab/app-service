@@ -63,10 +63,11 @@ func (is *imageService) PullImage(ctx context.Context, ref string, opts PullOpti
 	pctx, stopProgress := context.WithCancel(ctx)
 
 	progress := make(chan struct{})
-	go func() {
-		showProgress(pctx, ongoing, is.client.ContentStore(), opts)
+	activeSeen := make(map[string]struct{})
+	go func(map[string]struct{}) {
+		showProgress(pctx, ongoing, is.client.ContentStore(), activeSeen, opts)
 		close(progress)
-	}()
+	}(activeSeen)
 
 	h := images.HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
 		if desc.MediaType != images.MediaTypeDockerSchema1Manifest {
@@ -92,7 +93,14 @@ func (is *imageService) PullImage(ctx context.Context, ref string, opts PullOpti
 			remoteOpts = append(remoteOpts, containerd.WithPlatform(platform))
 		}
 	}
-	_, err = is.client.Fetch(pctx, ref, remoteOpts...)
+	var maxRetries = 5
+	for i := 0; i < maxRetries; i++ {
+		_, err = is.client.Fetch(pctx, ref, remoteOpts...)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Second)
+	}
 	stopProgress()
 	if err != nil {
 		klog.Infof("fetch image name=%s err=%v", ref, err)

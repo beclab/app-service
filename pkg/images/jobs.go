@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,7 +31,7 @@ type StatusInfo struct {
 	UpdatedAt time.Time
 }
 
-func showProgress(ctx context.Context, ongoing *jobs, cs content.Store, opts PullOptions) {
+func showProgress(ctx context.Context, ongoing *jobs, cs content.Store, seen map[string]struct{}, opts PullOptions) {
 	var (
 		ticker   = time.NewTicker(1 * time.Second)
 		start    = time.Now()
@@ -128,18 +129,24 @@ outer:
 
 			ordered = []StatusInfo{}
 			for _, key := range keys {
+				if _, ok := statuses[key]; ok {
+					if key == ongoing.name {
+						continue
+					}
+					seen[key] = struct{}{}
+				}
 				ordered = append(ordered, statuses[key])
 			}
 			klog.Infof("downloading image %v", ongoing.name)
-			err := updateProgress(ordered, ongoing.name, opts)
+			err := updateProgress(ordered, ongoing.name, seen, opts)
 			if err != nil {
 				klog.Infof("update progress failed err=%v", err)
 
 			}
-			//tw.Flush()
 
 			if done {
 				klog.Infof("progress is done")
+				seen = map[string]struct{}{}
 				return
 			}
 		case <-ctx.Done():
@@ -148,35 +155,50 @@ outer:
 	}
 }
 
-func updateProgress(statuses []StatusInfo, imageName string, opts PullOptions) error {
+func updateProgress(statuses []StatusInfo, imageName string, seen map[string]struct{}, opts PullOptions) error {
 	client, err := utils.GetClient()
 	if err != nil {
 		return err
 	}
 	var offset, size int64
 	var progress float64
-	klog.Infof("in updateProgress: %#v", statuses)
-	count := 0
+
+	klog.Infof("seen: %v", seen)
+	klog.Infof("imageName=%s", imageName)
 	for _, status := range statuses {
+		klog.Infof("status: %s,ref: %v, offset: %v, Total: %v", status.Status, status.Ref, status.Offset, status.Total)
 		switch status.Status {
 		case "downloading", "uploading":
-			size += status.Total
-			offset += status.Offset
+			if !strings.HasPrefix(status.Ref, "manifest") && !strings.HasPrefix(status.Ref, "index") {
+				size += status.Total
+				offset += status.Offset
+			}
+
 		case "resolving", "waiting", "resolved":
-			//if all status is resolving waiting, or resolved use last progress
-			count++
 			progress = 0
 		default:
-			progress = 100
+			if _, ok := seen[status.Ref]; ok && status.Status == "done" {
+				if !strings.HasPrefix(status.Ref, "manifest-") && !strings.HasPrefix(status.Ref, "index-") {
+					size += status.Total
+					// some time ref have status equal done, but offset not equal total, so add status.Total to offset
+					offset += status.Total
+				}
+			}
+			// omit ref with prefix manifest-, index-, because in some situation this would be cause propress back
+			if strings.HasPrefix(status.Ref, "manifest-") || strings.HasPrefix(status.Ref, "index-") {
+				progress = 0
+			} else {
+				progress = 100
+
+			}
 		}
 	}
-	if count == len(statuses) {
 
-	}
 	if size > 0 {
 		progress = float64(offset) / float64(size) * float64(100)
 	}
 	klog.Infof("download image %s progress=%v", imageName, progress)
+	klog.Infof("#######################################")
 
 	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		im, err := client.AppV1alpha1().ImageManagers().Get(context.TODO(), utils.FmtAppMgrName(opts.AppName, opts.OwnerName), metav1.GetOptions{})
@@ -193,6 +215,10 @@ func updateProgress(statuses []StatusInfo, imageName string, opts PullOptions) e
 		for i, c := range status.Conditions {
 			named, _ := refdocker.ParseDockerRef(c.ImageRef)
 			if c.NodeName == os.Getenv("NODE_NAME") && named.String() == imageName {
+				originProgress, _ := strconv.ParseFloat(status.Conditions[i].Progress, 64)
+				if originProgress >= progress {
+					continue
+				}
 				status.Conditions[i].Progress = strconv.FormatFloat(progress, 'f', 2, 64)
 			}
 		}

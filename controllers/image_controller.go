@@ -9,10 +9,12 @@ import (
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/images"
 
+	"github.com/hashicorp/go-multierror"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -147,13 +149,19 @@ func (r *ImageManagerController) reconcile(instance *appv1alpha1.ImageManager) {
 	curCopy.Status.State = appv1alpha1.Downloading.String()
 	err = r.Status().Patch(ctx, curCopy, client.MergeFrom(&cur))
 	if err != nil {
-		klog.Error(err)
-		return
+		klog.Errorf("Failed to patch imagemanagers name=%v, err=%v", cur.Name, err)
 	}
 	err = r.Get(ctx, types.NamespacedName{Name: instance.Name}, &cur)
 	if err != nil {
 		klog.Error(err)
 		return
+	}
+	if cur.Status.State != appv1alpha1.Downloading.String() {
+		err = r.updateStatus(ctx, &cur, appv1alpha1.Downloading.String(), "downloading")
+		if err != nil {
+			klog.Infof("Failed to update imagemanager status name=%v, err=%v", cur.Name, err)
+			return
+		}
 	}
 
 	err = r.download(ctx, refs, images.PullOptions{AppName: instance.Spec.AppName, OwnerName: instance.Spec.AppOwner})
@@ -164,16 +172,11 @@ func (r *ImageManagerController) reconcile(instance *appv1alpha1.ImageManager) {
 		if errors.Is(err, context.Canceled) {
 			state = appv1alpha1.Canceled.String()
 		}
-		err = r.updateStatus(instance, state, err.Error())
+		err = r.updateStatus(ctx, instance, state, err.Error())
 		if err != nil {
 			klog.Infof("Failed to update status err=%v", err)
 		}
 		return
-	}
-	err = r.updateStatus(instance, appv1alpha1.Completed.String(), "success")
-	//err = r.install(ctx, instance)
-	if err != nil {
-		klog.Error(err)
 	}
 
 	klog.Infof("download image success")
@@ -202,44 +205,53 @@ func (r *ImageManagerController) reconcile2(cur *appv1alpha1.ImageManager) {
 
 func (r *ImageManagerController) download(ctx context.Context, refs []string, opts images.PullOptions) (err error) {
 	var wg sync.WaitGroup
-	var errs []error
+	var errs error
+	tokens := make(chan struct{}, 3)
 	for _, ref := range refs {
 		wg.Add(1)
 		go func(ref string) {
+			tokens <- struct{}{}
 			defer wg.Done()
+			defer func() {
+				<-tokens
+			}()
 			iClient, ctx, cancel := images.NewClientOrDie(ctx)
 			defer cancel()
 			_, err = iClient.PullImage(ctx, ref, opts)
 			if err != nil {
-				errs = append(errs, err)
+				errs = multierror.Append(errs, err)
 				klog.Infof("pull image failed name=%v err=%v", ref, err)
 			}
 		}(ref)
 	}
 	klog.Infof("waiting image %v to download", refs)
 	wg.Wait()
-	return err
+	return errs
 }
 
-func (r *ImageManagerController) updateStatus(im *appv1alpha1.ImageManager, state string, message string) error {
+func (r *ImageManagerController) updateStatus(ctx context.Context, im *appv1alpha1.ImageManager, state string, message string) error {
 	var err error
-	err = r.Get(context.TODO(), types.NamespacedName{Name: im.Name}, im)
-	if err != nil {
-		return err
-	}
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		err = r.Get(ctx, types.NamespacedName{Name: im.Name}, im)
+		if err != nil {
+			return err
+		}
 
-	now := metav1.Now()
-	imCopy := im.DeepCopy()
-	imCopy.Status.State = state
-	imCopy.Status.Message = message
-	imCopy.Status.StatusTime = &now
-	imCopy.Status.UpdateTime = &now
+		now := metav1.Now()
+		imCopy := im.DeepCopy()
+		imCopy.Status.State = state
+		imCopy.Status.Message = message
+		imCopy.Status.StatusTime = &now
+		imCopy.Status.UpdateTime = &now
 
-	err = r.Status().Patch(context.TODO(), imCopy, client.MergeFrom(im))
-	if err != nil {
-		return err
-	}
-	return nil
+		err = r.Status().Patch(ctx, imCopy, client.MergeFrom(im))
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+
+	return err
 }
 
 func (r *ImageManagerController) cancel(im *appv1alpha1.ImageManager) error {
