@@ -28,11 +28,11 @@ type ImageManager struct {
 type ImageManagerStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	Conditions []ImageProgress `json:"conditions,omitempty"`
-	Message    string          `json:"message,omitempty"`
-	State      string          `json:"state"`
-	UpdateTime *metav1.Time    `json:"updateTime"`
-	StatusTime *metav1.Time    `json:"statusTime"`
+	Conditions map[string]map[string]map[string]string `json:"conditions,omitempty"`
+	Message    string                                  `json:"message,omitempty"`
+	State      string                                  `json:"state"`
+	UpdateTime *metav1.Time                            `json:"updateTime"`
+	StatusTime *metav1.Time                            `json:"statusTime"`
 }
 
 // ImageManagerSpec defines the desired state of ImageManager
@@ -41,6 +41,7 @@ type ImageManagerSpec struct {
 	AppNamespace string   `json:"appNamespace,omitempty"`
 	AppOwner     string   `json:"appOwner,omitempty"`
 	Refs         []string `json:"refs"`
+	Nodes        []string `json:"nodes"`
 }
 
 type ImageProgress struct {

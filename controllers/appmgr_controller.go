@@ -26,6 +26,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"helm.sh/helm/v3/pkg/action"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -395,7 +396,7 @@ func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv
 	}
 	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		klog.Infof("update im status")
-		return r.updateImStatus(ctx, appMgr.Name, appv1alpha1.Completed.String(), "success", []appv1alpha1.ImageProgress{})
+		return r.updateImStatus(ctx, appMgr.Name, appv1alpha1.Completed.String(), "success")
 	})
 	if err != nil {
 		return err
@@ -712,8 +713,6 @@ func (r *ApplicationManagerController) upgrade(ctx context.Context, appMgr *appv
 	if err != nil {
 		return err
 	}
-	//time.Sleep(30 * time.Second)
-	//err = r.updateStatus(appMgr, appv1alpha1.Upgrading, nil, appv1alpha1.AppUpgrading, appv1alpha1.Upgrading.String())
 
 	err = ops.Upgrade()
 
@@ -776,8 +775,12 @@ func (r *ApplicationManagerController) cancel(appMgr *appv1alpha1.ApplicationMan
 	if err != nil {
 		return err
 	}
+	state := appv1alpha1.Canceling
+	if appMgr.Status.State == appv1alpha1.Downloading {
+		state = appv1alpha1.Canceled
+	}
 
-	return r.updateStatus(appMgr, appv1alpha1.Canceling, nil, "", appMgr.Status.Message)
+	return r.updateStatus(appMgr, state, nil, "", appMgr.Status.Message)
 }
 
 func (r *ApplicationManagerController) suspend(appMgr *appv1alpha1.ApplicationManager, namespace string) (err error) {
@@ -942,14 +945,20 @@ func (r *ApplicationManagerController) pollDownloadProgress(ctx context.Context,
 				count int
 			}
 			nodeMap := make(map[string]*progress)
-			for _, c := range im.Status.Conditions {
-				if _, ok := nodeMap[c.NodeName]; ok {
-					n, _ := strconv.ParseFloat(c.Progress, 64)
-					nodeMap[c.NodeName].sum += n
-					nodeMap[c.NodeName].count += 1
-				} else {
-					n, _ := strconv.ParseFloat(c.Progress, 64)
-					nodeMap[c.NodeName] = &progress{sum: n, count: 1}
+			for _, nodeName := range im.Spec.Nodes {
+				for _, ref := range im.Spec.Refs {
+					p := im.Status.Conditions[nodeName][ref]["progress"]
+					if p == "" {
+						p = "0.00"
+					}
+					n, _ := strconv.ParseFloat(p, 64)
+
+					if _, ok := nodeMap[nodeName]; ok {
+						nodeMap[nodeName].sum += n
+						nodeMap[nodeName].count += 1
+					} else {
+						nodeMap[nodeName] = &progress{sum: n, count: 1}
+					}
 				}
 			}
 			ret := math.MaxFloat64
@@ -985,11 +994,22 @@ func (r *ApplicationManagerController) pollDownloadProgress(ctx context.Context,
 }
 
 func (r *ApplicationManagerController) createImageManager(ctx context.Context, appMgr *appv1alpha1.ApplicationManager, refs []string) error {
+	var nodes corev1.NodeList
+	err := r.List(ctx, &nodes, &client.ListOptions{})
+	if err != nil {
+		klog.Infof("Failed to list err=%v", err)
+		return err
+	}
+	nodeList := make([]string, 0)
+	for _, node := range nodes.Items {
+		nodeList = append(nodeList, node.Name)
+	}
+
 	var im appv1alpha1.ImageManager
-	err := r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &im)
+	err = r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &im)
 	if err == nil {
 		err = r.Delete(ctx, &im)
-		if err != nil {
+		if err != nil && !apierrors.IsNotFound(err) {
 			return err
 		}
 	}
@@ -1003,6 +1023,7 @@ func (r *ApplicationManagerController) createImageManager(ctx context.Context, a
 			AppNamespace: appMgr.Spec.AppNamespace,
 			AppOwner:     appMgr.Spec.AppOwner,
 			Refs:         refs,
+			Nodes:        nodeList,
 		},
 	}
 
@@ -1013,10 +1034,11 @@ func (r *ApplicationManagerController) createImageManager(ctx context.Context, a
 	return nil
 }
 
-func (r *ApplicationManagerController) updateImStatus(ctx context.Context, name, state, message string, conditions []appv1alpha1.ImageProgress) error {
+func (r *ApplicationManagerController) updateImStatus(ctx context.Context, name, state, message string) error {
 	var im appv1alpha1.ImageManager
 	err := r.Get(ctx, types.NamespacedName{Name: name}, &im)
 	if err != nil {
+		klog.Infof("get im err=%v", err)
 		return err
 	}
 
@@ -1026,9 +1048,6 @@ func (r *ApplicationManagerController) updateImStatus(ctx context.Context, name,
 	imCopy.Status.Message = message
 	imCopy.Status.StatusTime = &now
 	imCopy.Status.UpdateTime = &now
-	if len(conditions) > 0 {
-		imCopy.Status.Conditions = conditions
-	}
 
 	err = r.Status().Patch(ctx, imCopy, client.MergeFrom(&im))
 	if err != nil {

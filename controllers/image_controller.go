@@ -10,7 +10,6 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/images"
 
 	"github.com/hashicorp/go-multierror"
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -111,7 +110,6 @@ func (r *ImageManagerController) reconcile(instance *appv1alpha1.ImageManager) {
 	err = r.Get(ctx, types.NamespacedName{Name: instance.Name}, &cur)
 	if err != nil {
 		klog.Errorf("Failed to get imagemanagers name=%s err=%v", instance.Name, err)
-		return
 	}
 
 	if imageManager == nil {
@@ -121,48 +119,13 @@ func (r *ImageManagerController) reconcile(instance *appv1alpha1.ImageManager) {
 		return
 	}
 	imageManager[instance.Name] = cancel
-
-	refs := cur.Spec.Refs
-
-	conditions := make([]appv1alpha1.ImageProgress, 0)
-
-	var nodes corev1.NodeList
-	err = r.List(ctx, &nodes, &client.ListOptions{})
-	if err != nil {
-		klog.Infof("Failed to list err=%v", err)
-		return
-	}
-	for _, ref := range refs {
-		for _, node := range nodes.Items {
-			conditions = append(conditions, appv1alpha1.ImageProgress{
-				NodeName: node.Name,
-				ImageRef: ref,
-				Progress: "0.00",
-			})
-		}
-	}
-	now := metav1.Now()
-	curCopy := cur.DeepCopy()
-	curCopy.Status.Conditions = conditions
-	curCopy.Status.StatusTime = &now
-	curCopy.Status.UpdateTime = &now
-	curCopy.Status.State = appv1alpha1.Downloading.String()
-	err = r.Status().Patch(ctx, curCopy, client.MergeFrom(&cur))
-	if err != nil {
-		klog.Errorf("Failed to patch imagemanagers name=%v, err=%v", cur.Name, err)
-	}
-	err = r.Get(ctx, types.NamespacedName{Name: instance.Name}, &cur)
-	if err != nil {
-		klog.Error(err)
-	}
 	if cur.Status.State != appv1alpha1.Downloading.String() {
 		err = r.updateStatus(ctx, &cur, appv1alpha1.Downloading.String(), "downloading")
 		if err != nil {
 			klog.Infof("Failed to update imagemanager status name=%v, err=%v", cur.Name, err)
 		}
 	}
-
-	err = r.download(ctx, refs, images.PullOptions{AppName: instance.Spec.AppName, OwnerName: instance.Spec.AppOwner})
+	err = r.download(ctx, cur.Spec.Refs, images.PullOptions{AppName: instance.Spec.AppName, OwnerName: instance.Spec.AppOwner})
 	if err != nil {
 		klog.Infof("download failed err=%v", err)
 
@@ -202,6 +165,9 @@ func (r *ImageManagerController) reconcile2(cur *appv1alpha1.ImageManager) {
 }
 
 func (r *ImageManagerController) download(ctx context.Context, refs []string, opts images.PullOptions) (err error) {
+	if len(refs) == 0 {
+		return errors.New("no image to download")
+	}
 	var wg sync.WaitGroup
 	var errs error
 	tokens := make(chan struct{}, 3)
