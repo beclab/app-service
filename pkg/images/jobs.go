@@ -2,6 +2,7 @@ package images
 
 import (
 	"context"
+	"math/rand"
 	"os"
 	"strconv"
 	"strings"
@@ -12,7 +13,6 @@ import (
 
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
-	refdocker "github.com/containerd/containerd/reference/docker"
 	"github.com/containerd/containerd/remotes"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -33,7 +33,8 @@ type StatusInfo struct {
 
 func showProgress(ctx context.Context, ongoing *jobs, cs content.Store, seen map[string]struct{}, opts PullOptions) {
 	var (
-		ticker   = time.NewTicker(1 * time.Second)
+		interval = rand.Float64() + float64(1)
+		ticker   = time.NewTicker(time.Duration(interval * float64(time.Second)))
 		start    = time.Now()
 		statuses = map[string]StatusInfo{}
 		done     bool
@@ -184,7 +185,7 @@ func updateProgress(statuses []StatusInfo, imageName string, seen map[string]str
 					offset += status.Total
 				}
 			}
-			// omit ref with prefix manifest-, index-, because in some situation this would be cause propress back
+			// omit ref with prefix manifest-, index-, because in some situation this would be cause progress back
 			if strings.HasPrefix(status.Ref, "manifest-") || strings.HasPrefix(status.Ref, "index-") {
 				progress = 0
 			} else {
@@ -212,17 +213,22 @@ func updateProgress(statuses []StatusInfo, imageName string, seen map[string]str
 		status := imCopy.Status
 		status.StatusTime = &now
 		status.UpdateTime = &now
-		for i, c := range status.Conditions {
-			named, _ := refdocker.ParseDockerRef(c.ImageRef)
-			if c.NodeName == os.Getenv("NODE_NAME") && named.String() == imageName {
-				originProgress, _ := strconv.ParseFloat(status.Conditions[i].Progress, 64)
-				if originProgress >= progress {
-					continue
-				}
-				status.Conditions[i].Progress = strconv.FormatFloat(progress, 'f', 2, 64)
-			}
+
+		thisNode := os.Getenv("NODE_NAME")
+		p := im.Status.Conditions[thisNode][imageName]["progress"]
+		originProgress, _ := strconv.ParseFloat(p, 64)
+		if originProgress >= progress {
+			return nil
 		}
-		imCopy.Status = status
+
+		if imCopy.Status.Conditions == nil {
+			imCopy.Status.Conditions = make(map[string]map[string]map[string]string)
+		}
+		if imCopy.Status.Conditions[thisNode] == nil {
+			imCopy.Status.Conditions[thisNode] = make(map[string]map[string]string)
+
+		}
+		imCopy.Status.Conditions[thisNode][imageName] = map[string]string{"progress": strconv.FormatFloat(progress, 'f', 2, 64)}
 
 		_, err = client.AppV1alpha1().ImageManagers().UpdateStatus(context.TODO(), imCopy, metav1.UpdateOptions{})
 		if err != nil {

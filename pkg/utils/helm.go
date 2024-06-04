@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 
+	refdocker "github.com/containerd/containerd/reference/docker"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
 	helmLoader "helm.sh/helm/v3/pkg/chart/loader"
@@ -103,7 +104,6 @@ func GetResourceListFromChart(chartPath string) (resources kube.ResourceList, er
 		klog.Infof("getchart err=%v", err)
 		return nil, err
 	}
-	klog.Infof("chartRequested :=%##v", chartRequested)
 
 	// fake values for helm dry run
 	values := make(map[string]interface{})
@@ -212,8 +212,9 @@ func GetRefFromResourceList(chartPath string) (refs []string, err error) {
 	filteredRefs := make([]string, 0)
 	for _, ref := range refs {
 		if _, ok := seen[ref]; !ok {
-			filteredRefs = append(filteredRefs, ref)
-			seen[ref] = struct{}{}
+			named, _ := refdocker.ParseDockerRef(ref)
+			filteredRefs = append(filteredRefs, named.String())
+			seen[named.String()] = struct{}{}
 		}
 	}
 	return filteredRefs, nil
