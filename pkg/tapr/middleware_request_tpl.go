@@ -19,7 +19,20 @@ spec:
     {{- range $k, $v := .Middleware.Databases }}
     - distributed: {{ $v.Distributed }}
       name: {{ $v.Name }}
-    {{-  end }}
+      {{- if gt (len $v.Extensions) 0 }}
+      extensions:
+      {{- range $i, $ext := $v.Extensions }}
+      - {{ $ext }}
+      {{- end }}
+      {{- end }}
+      {{- if gt (len $v.Scripts) 0 }}
+      scripts:
+      {{- range $i, $s := $v.Scripts }}
+      - '{{ $s }}'
+      {{- end }}
+      {{- end }}
+      
+    {{- end }}
     password:
      {{- if not (eq .Middleware.Password "") }}
       value: {{ .Middleware.Password }}
@@ -66,8 +79,14 @@ spec:
   mongodb:
     databases:
     {{- range $k, $v := .Middleware.Databases }}
-    - {{ $v.Name }}
-    {{-  end }}
+    - name: {{ $v.Name }}
+	{{- if gt (len $v.Scripts) 0 }}
+      scripts:
+      {{- range $i, $s := $v.Scripts }}
+      - '{{ $s }}'
+      {{- end }}
+    {{- end }}
+    {{- end }}
     password:
      {{- if not (eq .Middleware.Password "") }}
       value: {{ .Middleware.Password }}

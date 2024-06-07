@@ -10,14 +10,16 @@ type Middleware struct {
 
 // Database specify database name and if distributed.
 type Database struct {
-	Name        string `json:"name"`
-	Distributed bool   `json:"distributed,omitempty"`
+	Name        string   `yaml:"name" json:"name"`
+	Extensions  []string `yaml:"extensions,omitempty" json:"extensions,omitempty"`
+	Scripts     []string `yaml:"scripts,omitempty" json:"scripts,omitempty"`
+	Distributed bool     `yaml:"distributed,omitempty" json:"distributed,omitempty"`
 }
 
 // PostgresConfig contains fields for postgresql config.
 type PostgresConfig struct {
 	Username  string     `yaml:"username" json:"username"`
-	Password  string     `yaml:"password,omitempty" json:"password"`
+	Password  string     `yaml:"password,omitempty" json:"password,omitempty"`
 	Databases []Database `yaml:"databases" json:"databases"`
 }
 
