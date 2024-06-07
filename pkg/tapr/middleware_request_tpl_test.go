@@ -15,7 +15,8 @@ func TestGenMiddleRequest(t *testing.T) {
 		password                    = "mypassword"
 	)
 	// test genPostgresRequest function
-	databases := []Database{{Name: "mydb", Distributed: true}}
+	databases := []Database{{Name: "mydb", Distributed: true,
+		Extensions: []string{"vectors", "postgis"}, Scripts: []string{"BEGIN", "COMMIT"}}}
 
 	result, err := GenMiddleRequest(middleware, appName, appNamespace, namespace, username, password, databases, []Index{})
 	if err != nil {
@@ -34,6 +35,12 @@ spec:
     databases:
     - distributed: true
       name: mydb
+      extensions:
+      - vectors
+      - postgis
+      scripts:
+      - BEGIN
+      - COMMIT
     password:
       value: mypassword
     user: myuser
@@ -58,11 +65,9 @@ spec:
   appNamespace: mynamespace
   middleware: redis
   redis:
-    databases:
-    - mydb
+    namespace: mydb
     password:
       value: mypassword
-    user: myuser
 `)
 	if !bytes.Equal(result, expected) {
 		t.Errorf("GenMiddleRequest<redis> returned incorrect result.\nExpected:\n%s\nActual:\n%s", expected, result)
@@ -85,7 +90,10 @@ spec:
   middleware: mongodb
   mongodb:
     databases:
-    - mydb
+    - name: mydb
+      scripts:
+      - BEGIN
+      - COMMIT
     password:
       value: mypassword
     user: myuser
