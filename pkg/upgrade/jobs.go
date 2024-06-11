@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+
+	"k8s.io/klog/v2"
 )
 
 type DownloadRelease struct {
@@ -28,7 +30,8 @@ func (d *DownloadRelease) Run(ctx *PipelineContext) error {
 			installed.Spec.ReleaseServer.Github.Repo,
 		)
 
-		_, installTgz, _, err := github.getLatestReleaseBundle(d.jobCtx, d.devMode)
+		klog.Info("start to download release package, ", ctx.ReleaseVersion)
+		_, installTgz, _, err := github.getReleaseBundle(d.jobCtx, ctx.ReleaseVersion)
 		if err != nil {
 			return err
 		}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/go-github/v50/github"
 	"github.com/hashicorp/go-getter"
+	"github.com/hashicorp/go-version"
 	gover "github.com/hashicorp/go-version"
 	"gopkg.in/yaml.v2"
 	"k8s.io/klog/v2"
@@ -28,6 +29,22 @@ func NewGithubRelease(httpClient *http.Client, owner, repo string) *GithubReleas
 		owner:  owner,
 		repo:   repo,
 	}
+}
+
+func (g *GithubRelease) getRelease(ctx context.Context, tag string) (*github.RepositoryRelease, error) {
+	release, resp, err := g.client.Repositories.GetReleaseByTag(ctx, g.owner, g.repo, tag)
+
+	if err != nil {
+		klog.Errorf("Failed to get version from github err=%v", err)
+
+		return nil, err
+	}
+
+	if resp.Response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("github repo release api return not 200, got %d", resp.Response.StatusCode)
+	}
+
+	return release, nil
 }
 
 func (g *GithubRelease) getLatestRelease(ctx context.Context, devmode bool) (*github.RepositoryRelease, error) {
@@ -83,14 +100,7 @@ func (g *GithubRelease) getLatestReleaseVersion(ctx context.Context, devmode boo
 	return gover.NewVersion(*release.TagName)
 }
 
-func (g *GithubRelease) getLatestReleaseBundle(ctx context.Context, devmode bool) (upgradeTar *url.URL, fullTar *url.URL, versionHint *url.URL, err error) {
-	release, err := g.getLatestRelease(ctx, devmode)
-	if err != nil {
-		klog.Errorf("Failed to get release bundle from github err=%v", err)
-
-		return nil, nil, nil, err
-	}
-
+func (g *GithubRelease) getBundle(release *github.RepositoryRelease) (upgradeTar *url.URL, fullTar *url.URL, versionHint *url.URL, err error) {
 	for _, a := range release.Assets {
 		switch {
 		case g.isFullInstallPackage(a.GetName()):
@@ -118,6 +128,28 @@ func (g *GithubRelease) getLatestReleaseBundle(ctx context.Context, devmode bool
 	}
 
 	return upgradeTar, fullTar, versionHint, nil
+}
+
+func (g *GithubRelease) getReleaseBundle(ctx context.Context, releaseVersion *version.Version) (upgradeTar *url.URL, fullTar *url.URL, versionHint *url.URL, err error) {
+	release, err := g.getRelease(ctx, releaseVersion.Original())
+	if err != nil {
+		klog.Errorf("Failed to get release bundle from github err=%v", err)
+
+		return nil, nil, nil, err
+	}
+
+	return g.getBundle(release)
+}
+
+func (g *GithubRelease) getLatestReleaseBundle(ctx context.Context, devmode bool) (upgradeTar *url.URL, fullTar *url.URL, versionHint *url.URL, err error) {
+	release, err := g.getLatestRelease(ctx, devmode)
+	if err != nil {
+		klog.Errorf("Failed to get release bundle from github err=%v", err)
+
+		return nil, nil, nil, err
+	}
+
+	return g.getBundle(release)
 }
 
 func (g *GithubRelease) downloadAndUnpack(ctx context.Context, tgz *url.URL) (string, error) {
