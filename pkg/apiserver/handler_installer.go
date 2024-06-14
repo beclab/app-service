@@ -491,6 +491,7 @@ func toApplicationConfig(app, chart string, cfg *appinstaller.AppConfiguration) 
 		AppScope:           cfg.Options.AppScope,
 		WsConfig:           cfg.Options.WsConfig,
 		Upload:             cfg.Options.Upload,
+		MobileSupported:    cfg.Options.MobileSupported,
 	}, chart, nil
 }
 

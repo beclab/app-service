@@ -150,6 +150,7 @@ func getAppConfigFromConfigurationFile(app, chart string) (*ApplicationConfig, e
 		ResetCookieEnabled: cfg.Options.ResetCookie.Enabled,
 		Dependencies:       cfg.Options.Dependencies,
 		AppScope:           cfg.Options.AppScope,
+		MobileSupported:    cfg.Options.MobileSupported,
 	}, nil
 }
 
