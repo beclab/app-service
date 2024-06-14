@@ -510,6 +510,11 @@ func (r *ApplicationReconciler) getAppSettings(appName, owner string, deployment
 					settings["clusterAppRef"] = strings.Join(appCfg.AppScope.AppRef, ",")
 				}
 			}
+			if appCfg.MobileSupported {
+				settings["mobileSupported"] = "true"
+			} else {
+				settings["mobileSupported"] = "false"
+			}
 		}
 	} else {
 		// sys applications.
@@ -549,6 +554,11 @@ func (r *ApplicationReconciler) getAppSettings(appName, owner string, deployment
 			settings[applicationSettingsPolicyKey] = policyStr
 		}
 		settings["source"] = api.System.String()
+		mobileSupported, ok := deployment.GetAnnotations()[constants.ApplicationMobileSupported]
+		settings["mobileSupported"] = "false"
+		if ok {
+			settings["mobileSupported"] = mobileSupported
+		}
 	}
 
 	return settings

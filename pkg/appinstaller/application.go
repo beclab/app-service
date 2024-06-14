@@ -66,4 +66,5 @@ type ApplicationConfig struct {
 	AppScope           AppScope
 	WsConfig           WsConfig
 	Upload             Upload
+	MobileSupported    bool
 }

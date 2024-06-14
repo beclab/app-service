@@ -88,14 +88,15 @@ type Dependency struct {
 }
 
 type Options struct {
-	Policies     []Policy                 `yaml:"policies" json:"policies"`
-	Analytics    Analytics                `yaml:"analytics" json:"analytics"`
-	ResetCookie  ResetCookie              `yaml:"resetCookie" json:"resetCookie"`
-	Dependencies []Dependency             `yaml:"dependencies" json:"dependencies"`
-	AppScope     AppScope                 `yaml:"appScope" json:"appScope"`
-	WsConfig     WsConfig                 `yaml:"websocket" json:"websocket"`
-	Upload       Upload                   `yaml:"upload" json:"upload"`
-	SyncProvider []map[string]interface{} `yaml:"syncProvider" json:"syncProvider"`
+	MobileSupported bool                     `yaml:"mobileSupported" json:"mobileSupported"`
+	Policies        []Policy                 `yaml:"policies" json:"policies"`
+	Analytics       Analytics                `yaml:"analytics" json:"analytics"`
+	ResetCookie     ResetCookie              `yaml:"resetCookie" json:"resetCookie"`
+	Dependencies    []Dependency             `yaml:"dependencies" json:"dependencies"`
+	AppScope        AppScope                 `yaml:"appScope" json:"appScope"`
+	WsConfig        WsConfig                 `yaml:"websocket" json:"websocket"`
+	Upload          Upload                   `yaml:"upload" json:"upload"`
+	SyncProvider    []map[string]interface{} `yaml:"syncProvider" json:"syncProvider"`
 }
 
 type ResetCookie struct {
