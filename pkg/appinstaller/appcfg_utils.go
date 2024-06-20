@@ -3,15 +3,16 @@ package appinstaller
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
-	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
+	"bytetrade.io/web3os/app-service/pkg/utils"
 
 	"github.com/emicklei/go-restful/v3"
 	"gopkg.in/yaml.v2"
@@ -37,7 +38,12 @@ func GetAppInstallationConfig(app, owner string) (*ApplicationConfig, error) {
 	}
 
 	// TODO: app installation namespace
-	namespace := appv1alpha1.AppNamespace(app, owner)
+	var namespace string
+	if appcfg.Namespace != "" {
+		namespace, _ = utils.AppNamespace(app, owner, appcfg.Namespace)
+	} else {
+		namespace = fmt.Sprintf("%s-%s", app, owner)
+	}
 
 	appcfg.Namespace = namespace
 	appcfg.OwnerName = owner
@@ -150,6 +156,8 @@ func getAppConfigFromConfigurationFile(app, chart string) (*ApplicationConfig, e
 		ResetCookieEnabled: cfg.Options.ResetCookie.Enabled,
 		Dependencies:       cfg.Options.Dependencies,
 		AppScope:           cfg.Options.AppScope,
+		OnlyAdmin:          cfg.Spec.OnlyAdmin,
+		Namespace:          cfg.Spec.Namespace,
 		MobileSupported:    cfg.Options.MobileSupported,
 	}, nil
 }

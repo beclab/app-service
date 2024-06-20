@@ -244,7 +244,7 @@ func (c *Creator) installSysApps(ctx context.Context, bflPod *corev1.Pod) error 
 		"redis_password": string(redisSecret.Data["auth"]),
 	}
 
-	gpuType, err := findGpuTypeFromNodes(ctx, clientSet)
+	gpuType, err := utils.FindGpuTypeFromNodes(ctx, clientSet)
 	if err != nil {
 		return err
 	}
@@ -359,25 +359,4 @@ func md5(str string) string {
 	h := crypto.MD5.New()
 	h.Write([]byte(str))
 	return hex.EncodeToString(h.Sum(nil))
-}
-
-func findGpuTypeFromNodes(ctx context.Context, clientSet *kubernetes.Clientset) (string, error) {
-	gpuType := "none"
-	nodes, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return gpuType, err
-	}
-	for _, n := range nodes.Items {
-		if _, ok := n.Status.Capacity[constants.NvidiaGPU]; ok {
-			if _, ok = n.Status.Capacity[constants.NvshareGPU]; ok {
-				return "nvshare", nil
-
-			}
-			gpuType = "nvidia"
-		}
-		if _, ok := n.Status.Capacity[constants.VirtAiTechVGPU]; ok {
-			return "virtaitech", nil
-		}
-	}
-	return gpuType, nil
 }

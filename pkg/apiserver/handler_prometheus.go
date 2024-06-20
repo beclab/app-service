@@ -3,6 +3,7 @@ package apiserver
 import (
 	"time"
 
+	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/prometheus"
@@ -32,8 +33,56 @@ func (h *Handler) clusterResource(req *restful.Request, resp *restful.Response) 
 		api.HandleError(resp, req, err)
 		return
 	}
+	type App struct {
+		Name    string `json:"name"`
+		Type    string `json:"type"`
+		Version string `json:"version"`
+	}
+	apps := make([]App, 0)
+	var ams v1alpha1.ApplicationManagerList
+	err = h.ctrlClient.List(req.Request.Context(), &ams)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+
+	for _, am := range ams.Items {
+		if am.Spec.Type != v1alpha1.Middleware {
+			continue
+		}
+		if am.Status.State == v1alpha1.Completed && am.Status.OpType == v1alpha1.InstallOp {
+			apps = append(apps, App{
+				Name:    am.Spec.AppName,
+				Type:    am.Spec.Type.String(),
+				Version: am.Status.Payload["version"],
+			})
+		}
+
+	}
+
+	var appList v1alpha1.ApplicationList
+	err = h.ctrlClient.List(req.Request.Context(), &appList)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	for _, a := range appList.Items {
+		if a.Status.State != v1alpha1.AppRunning.String() {
+			continue
+		}
+		if a.Spec.Settings["clusterScoped"] != "true" {
+			continue
+		}
+		apps = append(apps, App{
+			Name:    a.Spec.Name,
+			Type:    "app",
+			Version: a.Spec.Settings["version"],
+		})
+	}
+
 	resp.WriteAsJson(map[string]interface{}{
 		"metrics": metrics,
 		"nodes":   supportArch,
+		"apps":    apps,
 	})
 }

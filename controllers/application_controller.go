@@ -180,7 +180,11 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		// delete application
 		if err == nil && app != nil {
 			client, _ := kubernetes.NewForConfig(r.Kubeconfig)
-			_, err = client.CoreV1().Namespaces().Get(context.TODO(), app.Spec.Namespace, metav1.GetOptions{})
+			if utils.IsProtectedNamespace(app.Spec.Namespace) {
+				_, err = client.CoreV1().Namespaces().Get(context.TODO(), "not exists namespace", metav1.GetOptions{})
+			} else {
+				_, err = client.CoreV1().Namespaces().Get(context.TODO(), app.Spec.Namespace, metav1.GetOptions{})
+			}
 
 			if err != nil {
 				if apierrors.IsNotFound(err) {
@@ -194,7 +198,6 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 					if err != nil {
 						return ctrl.Result{}, err
 					}
-					//klog.Infof("in application xxxxxx conditiosn: %v", appMgr.Status.Conditions)
 					now := metav1.Now()
 					state := appv1alpha1.Completed
 					opRecord := appv1alpha1.OpRecord{
@@ -360,8 +363,8 @@ func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.
 		}
 		app.Status.State = appv1alpha1.AppRunning.String()
 	}
-
-	status, err := utils.GetAppMgrStatus(utils.FmtAppMgrName(app.Spec.Name, app.Spec.Owner))
+	appMgrName, _ := utils.FmtAppMgrName(app.Spec.Name, app.Spec.Owner, app.Spec.Namespace)
+	status, err := utils.GetAppMgrStatus(appMgrName)
 	if err != nil {
 		klog.Errorf("Failed to get applicationmanagers status err=%v", err)
 	} else {
@@ -569,12 +572,16 @@ func (r *ApplicationReconciler) clearHelmHistory(appname, namespace string) erro
 	if err != nil {
 		return err
 	}
+	klog.Infof("clearHelmHistory: appname:%s, namespace:%s", appname, namespace)
 
 	histClient := action.NewHistory(actionConfig)
 	histClient.Max = 1
 	_, err = histClient.Run(appname)
+	klog.Infof("appname in clearHelmHistory: %v", appname)
+	klog.Infof("err in clearHelmHistory: err=%v", err)
+
 	if err != nil {
-		if err == driver.ErrReleaseNotFound {
+		if errors.Is(err, driver.ErrReleaseNotFound) {
 			return nil
 		}
 		return err

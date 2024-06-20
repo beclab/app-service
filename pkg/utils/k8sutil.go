@@ -4,8 +4,10 @@ import (
 	"context"
 
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
+	"bytetrade.io/web3os/app-service/pkg/constants"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
@@ -72,4 +74,25 @@ func GetAllNodesTunnelIPCIDRs() (cidrs []string) {
 	}
 
 	return cidrs
+}
+
+func FindGpuTypeFromNodes(ctx context.Context, clientSet *kubernetes.Clientset) (string, error) {
+	gpuType := "none"
+	nodes, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return gpuType, err
+	}
+	for _, n := range nodes.Items {
+		if _, ok := n.Status.Capacity[constants.NvidiaGPU]; ok {
+			if _, ok = n.Status.Capacity[constants.NvshareGPU]; ok {
+				return "nvshare", nil
+
+			}
+			gpuType = "nvidia"
+		}
+		if _, ok := n.Status.Capacity[constants.VirtAiTechVGPU]; ok {
+			return "virtaitech", nil
+		}
+	}
+	return gpuType, nil
 }

@@ -154,6 +154,8 @@ func (h *HelmOps) Install() error {
 
 // NewHelmOps constructs a new helmOps.
 func NewHelmOps(ctx context.Context, kubeConfig *rest.Config, app *ApplicationConfig, token string, options Opt) (*HelmOps, error) {
+	klog.Infof("uninstall: namespace:%s, app:%s", app.Namespace, app.AppName)
+
 	actionConfig, settings, err := helm.InitConfig(kubeConfig, app.Namespace)
 	if err != nil {
 		return nil, err
@@ -390,13 +392,13 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 	}
 	values["dep"] = dep
 
-	client, err := kubernetes.NewForConfig(h.kubeConfig)
+	kClient, err := kubernetes.NewForConfig(h.kubeConfig)
 	if err != nil {
 		return values, err
 	}
 	svcs := make(map[string]interface{})
 	for ns := range clusterScopedAppNamespaces {
-		servicesList, _ := client.CoreV1().Services(ns).List(context.TODO(), metav1.ListOptions{})
+		servicesList, _ := kClient.CoreV1().Services(ns).List(context.TODO(), metav1.ListOptions{})
 		for _, svc := range servicesList.Items {
 			ports := make([]int32, 0)
 			for _, p := range svc.Spec.Ports {
@@ -409,6 +411,11 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 	values["svcs"] = svcs
 	klog.Info("svcs: ", svcs)
 
+	gpuType, err := utils.FindGpuTypeFromNodes(context.TODO(), kClient)
+	if err != nil {
+		return values, err
+	}
+	values["gpu"] = gpuType
 	return values, nil
 }
 
@@ -580,7 +587,10 @@ func (h *HelmOps) Uninstall() error {
 	if err != nil {
 		return err
 	}
-	return client.CoreV1().Namespaces().Delete(context.TODO(), h.app.Namespace, metav1.DeleteOptions{})
+	if !utils.IsProtectedNamespace(h.app.Namespace) {
+		return client.CoreV1().Namespaces().Delete(context.TODO(), h.app.Namespace, metav1.DeleteOptions{})
+	}
+	return nil
 }
 
 // Upgrade do a upgrade operation for release.
@@ -746,9 +756,8 @@ func (h *HelmOps) upgrade() error {
 	if err != nil {
 		return err
 	}
-
-	_, err = appClient.AppV1alpha1().Applications().Patch(h.ctx, utils.FmtAppMgrName(h.app.AppName, h.app.OwnerName),
-		types.MergePatchType, patchByte, metav1.PatchOptions{})
+	name, _ := utils.FmtAppMgrName(h.app.AppName, h.app.OwnerName, h.app.Namespace)
+	_, err = appClient.AppV1alpha1().Applications().Patch(h.ctx, name, types.MergePatchType, patchByte, metav1.PatchOptions{})
 	if err != nil {
 		return err
 	}

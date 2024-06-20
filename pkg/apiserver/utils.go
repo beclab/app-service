@@ -24,7 +24,9 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned/scheme"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
+	"bytetrade.io/web3os/app-service/pkg/middlewareinstaller"
 	"bytetrade.io/web3os/app-service/pkg/prometheus"
+	"bytetrade.io/web3os/app-service/pkg/tapr"
 	"bytetrade.io/web3os/app-service/pkg/upgrade"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 	"bytetrade.io/web3os/app-service/pkg/utils/files"
@@ -40,8 +42,10 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
@@ -441,7 +445,7 @@ func getWorkflowConfigFromRepo(ctx context.Context, owner, app, repoURL, version
 		return nil, err
 	}
 
-	namespace := fmt.Sprintf("%s-%s", app, owner)
+	namespace, _ := utils.AppNamespace(app, owner, cfg.Spec.Namespace)
 
 	return &workflowinstaller.WorkflowConfig{
 		WorkflowName: app,
@@ -568,4 +572,68 @@ func loadIndex(data []byte) (*repo.IndexFile, error) {
 		return i, repo.ErrNoAPIVersion
 	}
 	return i, nil
+}
+
+func getMiddlewareConfigFromRepo(ctx context.Context, owner, app, repoURL, version, token string) (*middlewareinstaller.MiddlewareConfig, error) {
+	chartPath, err := GetIndexAndDownloadChart(ctx, app, repoURL, version, token)
+	if err != nil {
+		return nil, err
+	}
+
+	f, err := os.Open(chartPath + "/TerminusManifest.yaml")
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+
+	var cfg appinstaller.AppConfiguration
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, err
+	}
+
+	namespace, _ := utils.AppNamespace(app, owner, cfg.Spec.Namespace)
+
+	return &middlewareinstaller.MiddlewareConfig{
+		MiddlewareName: app,
+		Title:          cfg.Metadata.Title,
+		Version:        cfg.Metadata.Version,
+		ChartsName:     chartPath,
+		RepoURL:        repoURL,
+		Namespace:      namespace,
+		OwnerName:      owner,
+		Cfg:            &cfg}, nil
+}
+
+func CheckMiddlewareRequirement(ctx context.Context, kubeConfig *rest.Config, middleware *tapr.Middleware) (bool, error) {
+	if middleware != nil && middleware.MongoDB != nil {
+		dConfig, err := dynamic.NewForConfig(kubeConfig)
+		if err != nil {
+			return false, err
+		}
+		dClient, err := middlewareinstaller.NewMiddlewareMongodb(dConfig)
+		if err != nil {
+			return false, err
+		}
+		u, err := dClient.Get(ctx, "os-system", "mongo-cluster", metav1.GetOptions{})
+		if err != nil && !apierrors.IsNotFound(err) {
+			return false, err
+		}
+		if u == nil {
+			return false, nil
+		}
+		state, _, err := unstructured.NestedString(u.Object, "status", "state")
+		if err != nil {
+			return false, err
+		}
+		if state == "ready" {
+			return true, nil
+		}
+		return false, nil
+	}
+	return true, nil
 }
