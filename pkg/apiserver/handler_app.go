@@ -29,8 +29,13 @@ func (h *Handler) status(req *restful.Request, resp *restful.Response) {
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 
 	var a v1alpha1.Application
-	key := types.NamespacedName{Name: utils.FmtAppMgrName(app, owner)}
-	err := h.ctrlClient.Get(req.Request.Context(), key, &a)
+	name, err := utils.FmtAppMgrName(app, owner, "")
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	key := types.NamespacedName{Name: name}
+	err = h.ctrlClient.Get(req.Request.Context(), key, &a)
 	if err != nil && !apierrors.IsNotFound(err) {
 		api.HandleError(resp, req, err)
 		return
@@ -49,7 +54,7 @@ func (h *Handler) status(req *restful.Request, resp *restful.Response) {
 	}
 	if apierrors.IsNotFound(err) {
 		var am v1alpha1.ApplicationManager
-		e := h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: utils.FmtAppMgrName(app, owner)}, &am)
+		e := h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: name}, &am)
 		if e != nil {
 			api.HandleError(resp, req, e)
 			return
@@ -165,8 +170,12 @@ func (h *Handler) operate(req *restful.Request, resp *restful.Response) {
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 
 	var am v1alpha1.ApplicationManager
-	key := types.NamespacedName{Name: utils.FmtAppMgrName(app, owner)}
-	err := h.ctrlClient.Get(req.Request.Context(), key, &am)
+	name, err := utils.FmtAppMgrName(app, owner, "")
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	err = h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: name}, &am)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			api.HandleNotFound(resp, req, err)
@@ -239,8 +248,13 @@ func (h *Handler) operateHistory(req *restful.Request, resp *restful.Response) {
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 
 	var am v1alpha1.ApplicationManager
-	key := types.NamespacedName{Name: utils.FmtAppMgrName(app, owner)}
-	err := h.ctrlClient.Get(req.Request.Context(), key, &am)
+	name, err := utils.FmtAppMgrName(app, owner, "")
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	key := types.NamespacedName{Name: name}
+	err = h.ctrlClient.Get(req.Request.Context(), key, &am)
 
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -340,7 +354,11 @@ func (h *Handler) getApp(req *restful.Request, resp *restful.Response) {
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 
 	appName := req.PathParameter(ParamAppName)
-	name := utils.FmtAppMgrName(appName, owner)
+	name, err := utils.FmtAppMgrName(appName, owner, "")
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
 	var app *v1alpha1.Application
 
 	am, err := client.AppClient.AppV1alpha1().ApplicationManagers().Get(req.Request.Context(), name, metav1.GetOptions{})
@@ -362,7 +380,7 @@ func (h *Handler) getApp(req *restful.Request, resp *restful.Response) {
 	app = &v1alpha1.Application{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:              utils.FmtAppMgrName(am.Spec.AppName, owner),
+			Name:              name,
 			CreationTimestamp: am.CreationTimestamp,
 		},
 		Spec: v1alpha1.ApplicationSpec{
@@ -443,10 +461,11 @@ func (h *Handler) apps(req *restful.Request, resp *restful.Response) {
 				return
 			}
 			now := metav1.Now()
+			name, _ := utils.FmtAppMgrName(am.Spec.AppName, owner, appconfig.Namespace)
 			app := v1alpha1.Application{
 				TypeMeta: metav1.TypeMeta{},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:              utils.FmtAppMgrName(am.Spec.AppName, owner),
+					Name:              name,
 					CreationTimestamp: am.CreationTimestamp,
 				},
 				Spec: v1alpha1.ApplicationSpec{
@@ -542,8 +561,12 @@ func (h *Handler) operateRecommend(req *restful.Request, resp *restful.Response)
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 
 	var am v1alpha1.ApplicationManager
-	key := types.NamespacedName{Name: utils.FmtAppMgrName(app, owner)}
-	err := h.ctrlClient.Get(req.Request.Context(), key, &am)
+	name, err := utils.FmtAppMgrName(app, owner, "")
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	err = h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: name}, &am)
 
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -604,8 +627,13 @@ func (h *Handler) operateRecommendHistory(req *restful.Request, resp *restful.Re
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 
 	var am v1alpha1.ApplicationManager
-	key := types.NamespacedName{Name: utils.FmtAppMgrName(app, owner)}
-	err := h.ctrlClient.Get(req.Request.Context(), key, &am)
+	name, err := utils.FmtAppMgrName(app, owner, "")
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	key := types.NamespacedName{Name: name}
+	err = h.ctrlClient.Get(req.Request.Context(), key, &am)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			api.HandleNotFound(resp, req, err)

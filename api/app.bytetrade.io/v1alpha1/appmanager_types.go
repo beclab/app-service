@@ -1,10 +1,6 @@
 package v1alpha1
 
 import (
-	"fmt"
-
-	"bytetrade.io/web3os/app-service/pkg/users/userspace"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -86,10 +82,10 @@ func init() {
 	SchemeBuilder.Register(&ApplicationManager{}, &ApplicationManagerList{})
 }
 
-// AppNamespace returns application namespace.
-func AppNamespace(app, owner string) string {
-	if userspace.IsSysApp(app) {
-		app = "user-space"
-	}
-	return fmt.Sprintf("%s-%s", app, owner)
-}
+//// AppNamespace returns application namespace.
+//func AppNamespace(app, owner string) string {
+//	if userspace.IsSysApp(app) {
+//		app = "user-space"
+//	}
+//	return fmt.Sprintf("%s-%s", app, owner)
+//}

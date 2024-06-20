@@ -637,6 +637,60 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "get specified all recommend operate history", nil))
 
+	// middleware route
+	ws.Route(ws.POST("/middlewares/{"+ParamAppName+"}/install").
+		To(handler.installMiddleware).
+		Doc("Install the middleware").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Param(ws.PathParameter(ParamWorkflowName, "the name of a middleware")).
+		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
+		Returns(http.StatusOK, "Success to install the middleware", &api.InstallationResponse{}))
+
+	ws.Route(ws.POST("/middlewares/{"+ParamAppName+"}/uninstall").
+		To(handler.uninstallMiddleware).
+		Doc("Uninstall the middleware").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Param(ws.PathParameter(ParamWorkflowName, "the name of a recommend")).
+		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
+		Returns(http.StatusOK, "Success to uninstall the middleware", &api.InstallationResponse{}))
+
+	ws.Route(ws.GET("/middlewares/{"+ParamAppName+"}/status").
+		To(handler.statusMiddleware).
+		Doc("get the middleware status").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Param(ws.PathParameter(ParamWorkflowName, "the name of a middleware")).
+		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
+		Returns(http.StatusOK, "Success to get the middleware status", &api.InstallationResponse{}))
+
+	ws.Route(ws.GET("/middlewares/status").
+		To(handler.statusMiddlewareList).
+		Doc("get the middleware status list").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
+		Returns(http.StatusOK, "Success to get the recommend status list", &api.InstallationResponse{}))
+
+	ws.Route(ws.GET("/middlewares/{"+ParamAppName+"}/operate").
+		To(handler.operateMiddleware).
+		Doc("get specified middleware operate").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Param(ws.PathParameter(ParamWorkflowName, "the name of middleware")).
+		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
+		Returns(http.StatusOK, "Success to get a middleware operate", nil))
+
+	ws.Route(ws.GET("/middlewares/operate").
+		To(handler.operateMiddlewareList).
+		Doc("get recommends operate list").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
+		Returns(http.StatusOK, "get middleware operate list", nil))
+
+	ws.Route(ws.POST("/middlewares/{"+ParamAppName+"}/cancel").
+		To(handler.cancelMiddleware).
+		Doc("cancel installing middleware").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Param(ws.PathParameter(ParamInstallationID, "the id of a installation or uninstallation")).
+		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
+		Returns(http.StatusOK, "Success to cancel app install", &api.InstallationResponse{}))
 	c.Add(ws)
 
 	return nil

@@ -202,7 +202,8 @@ func updateProgress(statuses []StatusInfo, imageName string, seen map[string]str
 	klog.Infof("#######################################")
 
 	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		im, err := client.AppV1alpha1().ImageManagers().Get(context.TODO(), utils.FmtAppMgrName(opts.AppName, opts.OwnerName), metav1.GetOptions{})
+		name, _ := utils.FmtAppMgrName(opts.AppName, opts.OwnerName, opts.AppNamespace)
+		im, err := client.AppV1alpha1().ImageManagers().Get(context.TODO(), name, metav1.GetOptions{})
 		if err != nil {
 			klog.Infof("cannot found image manager err=%v", err)
 			return err

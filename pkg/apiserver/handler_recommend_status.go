@@ -10,7 +10,6 @@ import (
 	installerv1 "bytetrade.io/web3os/app-service/pkg/workflowinstaller/v1"
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/emicklei/go-restful/v3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -130,7 +129,10 @@ func (h *Handler) statusRecommendList(req *restful.Request, resp *restful.Respon
 }
 
 func getWorkflowStatus(ctx context.Context, kubeConfig *rest.Config, app, owner string) (*statusData, error) {
-	namespace := fmt.Sprintf("%s-%s", app, owner)
+	namespace, err := utils.AppNamespace(app, owner, "")
+	if err != nil {
+		return nil, err
+	}
 
 	helmClient, err := installerv1.NewHelmClient(ctx, kubeConfig, namespace)
 	if err != nil {
@@ -152,7 +154,9 @@ func getWorkflowStatus(ctx context.Context, kubeConfig *rest.Config, app, owner 
 		Metadata:       metadata{Name: app},
 	}
 	client, _ := utils.GetClient()
-	recommendMgr, err := client.AppV1alpha1().ApplicationManagers().Get(context.TODO(), utils.FmtAppMgrName(app, owner), metav1.GetOptions{})
+
+	name, _ := utils.FmtAppMgrName(app, owner, namespace)
+	recommendMgr, err := client.AppV1alpha1().ApplicationManagers().Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}

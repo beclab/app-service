@@ -17,7 +17,12 @@ import (
 func (h *Handler) releaseVersion(req *restful.Request, resp *restful.Response) {
 	appName := req.PathParameter(ParamAppName)
 	owner := req.Attribute(constants.UserContextAttribute)
-	appNamespace := utils.AppNamespace(appName, owner.(string))
+	appNamespace, err := utils.AppNamespace(appName, owner.(string), "")
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+
 	actionConfig, _, err := helm.InitConfig(h.kubeConfig, appNamespace)
 	if err != nil {
 		api.HandleError(resp, req, err)
@@ -50,7 +55,11 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		return
 	}
 	var appMgr appv1alpha1.ApplicationManager
-	appMgrName := utils.FmtAppMgrName(app, owner)
+	appMgrName, err := utils.FmtAppMgrName(app, owner, "")
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
 	err = h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: appMgrName}, &appMgr)
 	if err != nil {
 		api.HandleError(resp, req, err)

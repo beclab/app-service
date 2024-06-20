@@ -17,6 +17,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
+	"bytetrade.io/web3os/app-service/pkg/tapr"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 	"bytetrade.io/web3os/app-service/pkg/workflowinstaller"
@@ -40,6 +41,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 	app := req.PathParameter(ParamAppName)
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 	token := req.HeaderParameter(constants.AuthorizationTokenKey)
+
 	insReq := &api.InstallRequest{}
 	err := req.ReadEntity(insReq)
 	if err != nil {
@@ -51,24 +53,31 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	appconfig, _, err := GetAppConfig(req.Request.Context(), app, owner,
+	appConfig, _, err := GetAppConfig(req.Request.Context(), app, owner,
 		insReq.CfgURL, insReq.RepoURL, "", token)
 	if err != nil {
 		klog.Errorf("Failed to get appconfig err=%v", err)
 		api.HandleBadRequest(resp, req, err)
 		return
 	}
+
+	if utils.IsProtectedNamespace(appConfig.Namespace) {
+		api.HandleBadRequest(resp, req, fmt.Errorf("unsupported namespace: %s", appConfig.Namespace))
+		return
+	}
+
 	client, _ := utils.GetClient()
+	role, err := kubesphere.GetUserRole(req.Request.Context(), h.kubeConfig, owner)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	if role != "platform-admin" && appConfig.OnlyAdmin {
+		api.HandleBadRequest(resp, req, errors.New("only admin user can install this app"))
+		return
+	}
 
-	if appconfig.AppScope.ClusterScoped {
-		user := req.Attribute(constants.UserContextAttribute)
-
-		role, err := kubesphere.GetUserRole(req.Request.Context(), h.kubeConfig, user.(string))
-		if err != nil {
-			api.HandleError(resp, req, err)
-			return
-		}
-
+	if appConfig.AppScope.ClusterScoped {
 		if role != "platform-admin" {
 			api.HandleBadRequest(resp, req, errors.New("only admin user can create cluster level app"))
 			return
@@ -79,13 +88,13 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 			return
 		}
 		for _, a := range apps.Items {
-			if a.Spec.Name == appconfig.AppName && a.Spec.Settings["clusterScoped"] == "true" {
+			if a.Spec.Name == appConfig.AppName && a.Spec.Settings["clusterScoped"] == "true" {
 				api.HandleBadRequest(resp, req, errors.New("only one cluster scoped app can install in on cluster"))
 				return
 			}
 		}
 	}
-	resourceType, err := CheckAppRequirement(h.kubeConfig, token, appconfig)
+	resourceType, err := CheckAppRequirement(h.kubeConfig, token, appConfig)
 	if err != nil {
 		klog.Errorf("Failed to check app requirement err=%v", err)
 		resp.WriteHeaderAndEntity(http.StatusBadRequest, api.RequirementResp{
@@ -96,7 +105,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	resourceType, err = CheckUserResRequirement(req.Request.Context(), h.kubeConfig, appconfig, owner)
+	resourceType, err = CheckUserResRequirement(req.Request.Context(), h.kubeConfig, appConfig, owner)
 	if err != nil {
 		resp.WriteHeaderAndEntity(http.StatusBadRequest, api.RequirementResp{
 			Response: api.Response{Code: 400},
@@ -106,27 +115,42 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
+	satisfied, err := CheckMiddlewareRequirement(req.Request.Context(), h.kubeConfig, appConfig.Middleware.(*tapr.Middleware))
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	if !satisfied {
+		resp.WriteHeaderAndEntity(http.StatusBadRequest, api.RequirementResp{
+			Response: api.Response{Code: 400},
+			Resource: "middleware",
+			Message:  fmt.Sprintf("middleware requirement can not be satisfied"),
+		})
+		return
+	}
+
 	// create ApplicationManager
-	config, err := json.Marshal(appconfig)
+	config, err := json.Marshal(appConfig)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
 	var a *v1alpha1.ApplicationManager
+	name, _ := utils.FmtAppMgrName(app, owner, appConfig.Namespace)
 	appMgr := &v1alpha1.ApplicationManager{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: utils.FmtAppMgrName(app, owner),
+			Name: name,
 		},
 		Spec: v1alpha1.ApplicationManagerSpec{
 			AppName:      app,
-			AppNamespace: utils.AppNamespace(app, owner),
+			AppNamespace: appConfig.Namespace,
 			AppOwner:     owner,
 			Config:       string(config),
 			Source:       insReq.Source.String(),
 			Type:         v1alpha1.App,
 		},
 	}
-	a, err = client.AppV1alpha1().ApplicationManagers().Get(req.Request.Context(), utils.FmtAppMgrName(app, owner), metav1.GetOptions{})
+	a, err = client.AppV1alpha1().ApplicationManagers().Get(req.Request.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
 			api.HandleError(resp, req, err)
@@ -166,13 +190,13 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 			"token":   token,
 			"cfgURL":  insReq.CfgURL,
 			"repoURL": insReq.RepoURL,
-			"version": appconfig.Version,
+			"version": appConfig.Version,
 		},
 		Progress:   "0.00",
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
-	a, err = utils.UpdateAppMgrStatus(utils.FmtAppMgrName(app, owner), status)
+	a, err = utils.UpdateAppMgrStatus(name, status)
 
 	if err != nil {
 		api.HandleError(resp, req, err)
@@ -189,6 +213,47 @@ func (h *Handler) uninstall(req *restful.Request, resp *restful.Response) {
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 	token := req.HeaderParameter(constants.AuthorizationTokenKey)
 
+	// check is have app depends on this app
+	name, err := utils.FmtAppMgrName(app, owner, "")
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	var mgr v1alpha1.ApplicationManager
+	key := types.NamespacedName{Name: name}
+	err = h.ctrlClient.Get(req.Request.Context(), key, &mgr)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	var appConfig appinstaller.ApplicationConfig
+	err = json.Unmarshal([]byte(mgr.Spec.Config), &appConfig)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	existDependsApp := false
+	if len(appConfig.AppScope.AppRef) > 0 {
+		var appList v1alpha1.ApplicationList
+		err = h.ctrlClient.List(req.Request.Context(), &appList)
+		if err != nil {
+			api.HandleError(resp, req, err)
+			return
+		}
+		for _, ref := range appConfig.AppScope.AppRef {
+			for _, a := range appList.Items {
+				if ref == a.Spec.Name {
+					existDependsApp = true
+					break
+				}
+			}
+		}
+	}
+	if existDependsApp {
+		api.HandleBadRequest(resp, req, errors.New("can not uninstall, because already have app depends on its"))
+		return
+	}
+
 	now := metav1.Now()
 	status := v1alpha1.ApplicationManagerStatus{
 		OpType: v1alpha1.UninstallOp,
@@ -199,7 +264,8 @@ func (h *Handler) uninstall(req *restful.Request, resp *restful.Response) {
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
-	_, err := utils.UpdateAppMgrStatus(utils.FmtAppMgrName(app, owner), status)
+
+	_, err = utils.UpdateAppMgrStatus(name, status)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -227,7 +293,12 @@ func (h *Handler) cancel(req *restful.Request, resp *restful.Response) {
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
-	_, err := utils.UpdateAppMgrStatus(utils.FmtAppMgrName(app, owner), status)
+	name, err := utils.FmtAppMgrName(app, owner, "")
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	_, err = utils.UpdateAppMgrStatus(name, status)
 
 	if err != nil {
 		api.HandleError(resp, req, err)
@@ -308,7 +379,13 @@ func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, tok
 		}
 	}
 
-	namespace := fmt.Sprintf("%s-%s", app, owner)
+	// set appcfg.Namespace to specified namespace by TerminusManifests.Spec
+	var namespace string
+	if appcfg.Namespace != "" {
+		namespace, _ = utils.AppNamespace(app, owner, appcfg.Namespace)
+	} else {
+		namespace = fmt.Sprintf("%s-%s", app, owner)
+	}
 
 	appcfg.Namespace = namespace
 	appcfg.OwnerName = owner
@@ -491,6 +568,8 @@ func toApplicationConfig(app, chart string, cfg *appinstaller.AppConfiguration) 
 		AppScope:           cfg.Options.AppScope,
 		WsConfig:           cfg.Options.WsConfig,
 		Upload:             cfg.Options.Upload,
+		OnlyAdmin:          cfg.Spec.OnlyAdmin,
+		Namespace:          cfg.Spec.Namespace,
 		MobileSupported:    cfg.Options.MobileSupported,
 	}, chart, nil
 }
@@ -514,22 +593,39 @@ func (h *Handler) installRecommend(req *restful.Request, resp *restful.Response)
 		api.HandleError(resp, req, err)
 		return
 	}
+
+	satisfied, err := CheckMiddlewareRequirement(req.Request.Context(), h.kubeConfig, workflowCfg.Cfg.Middleware)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	if !satisfied {
+		resp.WriteHeaderAndEntity(http.StatusBadRequest, api.RequirementResp{
+			Response: api.Response{Code: 400},
+			Resource: "middleware",
+			Message:  fmt.Sprintf("middleware requirement can not be satisfied"),
+		})
+		return
+	}
+
 	client, _ := utils.GetClient()
 
 	var a *v1alpha1.ApplicationManager
+	//appNamespace, _ := utils.AppNamespace(app, owner, workflowCfg.Namespace)
+	name, _ := utils.FmtAppMgrName(app, owner, workflowCfg.Namespace)
 	recommendMgr := &v1alpha1.ApplicationManager{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: utils.FmtAppMgrName(app, owner),
+			Name: fmt.Sprintf("%s-%s", workflowCfg.Namespace, app),
 		},
 		Spec: v1alpha1.ApplicationManagerSpec{
 			AppName:      app,
-			AppNamespace: utils.AppNamespace(app, owner),
+			AppNamespace: workflowCfg.Namespace,
 			AppOwner:     owner,
 			Source:       insReq.Source.String(),
 			Type:         v1alpha1.Recommend,
 		},
 	}
-	a, err = client.AppV1alpha1().ApplicationManagers().Get(req.Request.Context(), utils.FmtAppMgrName(app, owner), metav1.GetOptions{})
+	a, err = client.AppV1alpha1().ApplicationManagers().Get(req.Request.Context(), name, metav1.GetOptions{})
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
 			api.HandleError(resp, req, err)
@@ -707,7 +803,12 @@ func (h *Handler) uninstallRecommend(req *restful.Request, resp *restful.Respons
 	client := req.Attribute(constants.KubeSphereClientAttribute).(*clientset.ClientSet)
 	var err error
 
-	namespace := fmt.Sprintf("%s-%s", app, owner)
+	//namespace := fmt.Sprintf("%s-%s", app, owner)
+	namespace, err := utils.AppNamespace(app, owner, "")
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
 	workflowCfg := &workflowinstaller.WorkflowConfig{
 		WorkflowName: app,
 		Namespace:    namespace,
@@ -726,7 +827,8 @@ func (h *Handler) uninstallRecommend(req *restful.Request, resp *restful.Respons
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
-	recommendMgr, err = utils.UpdateAppMgrStatus(utils.FmtAppMgrName(app, owner), recommendStatus)
+	name, _ := utils.FmtAppMgrName(app, owner, namespace)
+	recommendMgr, err = utils.UpdateAppMgrStatus(name, recommendStatus)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -750,10 +852,6 @@ func (h *Handler) uninstallRecommend(req *restful.Request, resp *restful.Respons
 			}
 		}
 	}()
-	if err != nil {
-		api.HandleError(resp, req, err)
-		return
-	}
 
 	err = workflowinstaller.Uninstall(req.Request.Context(), h.kubeConfig, workflowCfg)
 	if err != nil {
@@ -849,16 +947,17 @@ func (h *Handler) upgradeRecommend(req *restful.Request, resp *restful.Response)
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
-	recommendMgr, err = utils.UpdateAppMgrStatus(utils.FmtAppMgrName(app, owner), recommendStatus)
-	if err != nil {
-		api.HandleError(resp, req, err)
-		return
-	}
 
 	klog.Infof("Download latest version chart and get workflow config name=%s repoURL=%s", app, upReq.RepoURL)
 	workflowCfg, err = getWorkflowConfigFromRepo(req.Request.Context(), owner, app, upReq.RepoURL, "", token)
 	if err != nil {
 		klog.Errorf("Failed to get workflow config name=%s repoURL=%s err=%v, ", app, upReq.RepoURL, err)
+		api.HandleError(resp, req, err)
+		return
+	}
+	name, _ := utils.FmtAppMgrName(app, owner, workflowCfg.Namespace)
+	recommendMgr, err = utils.UpdateAppMgrStatus(name, recommendStatus)
+	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}

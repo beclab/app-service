@@ -66,6 +66,10 @@ const (
 	Recommend Type = "recommend"
 	// Model means llm model.
 	Model Type = "model"
+
+	// Middleware means middleware like mongodb
+	Middleware Type = "middleware"
+
 	// Agent means llm agent. Not support yet.
 	Agent Type = "agent"
 )

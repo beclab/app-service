@@ -125,7 +125,7 @@ func (r *ImageManagerController) reconcile(instance *appv1alpha1.ImageManager) {
 			klog.Infof("Failed to update imagemanager status name=%v, err=%v", cur.Name, err)
 		}
 	}
-	err = r.download(ctx, cur.Spec.Refs, images.PullOptions{AppName: instance.Spec.AppName, OwnerName: instance.Spec.AppOwner})
+	err = r.download(ctx, cur.Spec.Refs, images.PullOptions{AppName: instance.Spec.AppName, OwnerName: instance.Spec.AppOwner, AppNamespace: instance.Spec.AppNamespace})
 	if err != nil {
 		klog.Infof("download failed err=%v", err)
 

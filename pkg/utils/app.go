@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
@@ -12,12 +13,27 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"helm.sh/helm/v3/pkg/action"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
+
+var protectedNamespace = []string{
+	"default",
+	"kube-node-lease",
+	"kube-public",
+	"kube-system",
+	"kubekey-system",
+	"kubesphere-controls-system",
+	"kubesphere-monitoring-federated",
+	"kubesphere-monitoring-system",
+	"kubesphere-system",
+	"user-space-",
+	"user-system-",
+	"os-system",
+}
 
 // GetClient returns versioned ClientSet.
 func GetClient() (*versioned.Clientset, error) {
@@ -41,7 +57,7 @@ func UpdateAppState(appmgr *v1alpha1.ApplicationManager, state v1alpha1.Applicat
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		app, err := client.AppV1alpha1().Applications().Get(context.TODO(), appmgr.Name, metav1.GetOptions{})
 		if err != nil {
-			if errors.IsNotFound(err) {
+			if apierrors.IsNotFound(err) {
 				// dev mode, try to find app in user-space
 				apps, err := client.AppV1alpha1().Applications().List(context.TODO(), metav1.ListOptions{})
 				if err != nil {
@@ -73,7 +89,7 @@ func UpdateAppState(appmgr *v1alpha1.ApplicationManager, state v1alpha1.Applicat
 		}
 
 		_, err = client.AppV1alpha1().Applications().Get(context.TODO(), appCopy.Name, metav1.GetOptions{})
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return nil
 		}
 
@@ -163,20 +179,21 @@ func CreateSysAppMgr(app, owner string) error {
 	if err != nil {
 		return err
 	}
+	appNamespace, _ := AppNamespace(app, owner, "user-space")
 	now := metav1.Now()
 	appMgr := &v1alpha1.ApplicationManager{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: FmtAppMgrName(app, owner),
+			Name: fmt.Sprintf("%s-%s", appNamespace, app),
 		},
 		Spec: v1alpha1.ApplicationManagerSpec{
 			AppName:      app,
-			AppNamespace: AppNamespace(app, owner),
+			AppNamespace: appNamespace,
 			AppOwner:     owner,
 			Source:       "system",
 		},
 	}
 	a, err := client.AppV1alpha1().ApplicationManagers().Create(context.TODO(), appMgr, metav1.CreateOptions{})
-	if err != nil && !errors.IsAlreadyExists(err) {
+	if err != nil && !apierrors.IsAlreadyExists(err) {
 		return err
 	}
 	appMgrCopy := a.DeepCopy()
@@ -209,17 +226,46 @@ func GetAppMgrStatus(name string) (*v1alpha1.ApplicationManagerStatus, error) {
 }
 
 // AppNamespace returns the namespace of an application.
-func AppNamespace(app, owner string) string {
+func AppNamespace(app, owner, ns string) (string, error) {
 	if userspace.IsSysApp(app) {
 		app = "user-space"
 	}
-	return fmt.Sprintf("%s-%s", app, owner)
+	// can not get app namespace info, so have to list
+	if len(ns) == 0 {
+		client, err := GetClient()
+		if err != nil {
+			return "", err
+		}
+		appMgr, err := client.AppV1alpha1().ApplicationManagers().List(context.TODO(), metav1.ListOptions{})
+		if err != nil {
+			return "", err
+		}
+		for _, a := range appMgr.Items {
+			if a.Spec.AppName == app && a.Spec.AppOwner == owner {
+				return a.Spec.AppNamespace, nil
+			}
+		}
+	}
+
+	if strings.HasPrefix(ns, "user-space") {
+		app = "user-space"
+	} else if strings.HasPrefix(ns, "user-system") {
+		app = "user-system"
+	} else {
+		if ns != "" {
+			return ns, nil
+		}
+	}
+	return fmt.Sprintf("%s-%s", app, owner), nil
 }
 
 // FmtAppMgrName returns applicationmanager name for application.
-func FmtAppMgrName(app, owner string) string {
-	namespace := AppNamespace(app, owner)
-	return fmt.Sprintf("%s-%s", namespace, app)
+func FmtAppMgrName(app, owner, ns string) (string, error) {
+	namespace, err := AppNamespace(app, owner, ns)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s-%s", namespace, app), nil
 }
 
 // FmtModelMgrName returns applicationmanager name for model.
@@ -309,4 +355,13 @@ func UpdateStatus(appMgr *v1alpha1.ApplicationManager, state v1alpha1.Applicatio
 		}
 		return err
 	})
+}
+
+func IsProtectedNamespace(namespace string) bool {
+	for _, n := range protectedNamespace {
+		if strings.HasPrefix(namespace, n) {
+			return true
+		}
+	}
+	return false
 }

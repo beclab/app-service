@@ -49,7 +49,7 @@ func (h *Handler) get(req *restful.Request, resp *restful.Response) {
 		app = &appv1alpha1.Application{
 			TypeMeta: metav1.TypeMeta{},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:              utils.FmtAppMgrName(am.Spec.AppName, owner),
+				Name:              name,
 				CreationTimestamp: metav1.Now(),
 			},
 			Spec: appv1alpha1.ApplicationSpec{
@@ -100,7 +100,7 @@ func (h *Handler) list(req *restful.Request, resp *restful.Response) {
 			app := appv1alpha1.Application{
 				TypeMeta: metav1.TypeMeta{},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:              utils.FmtAppMgrName(am.Spec.AppName, owner),
+					Name:              am.Name,
 					CreationTimestamp: metav1.Now(),
 				},
 				Spec: appv1alpha1.ApplicationSpec{

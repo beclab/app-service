@@ -19,8 +19,9 @@ import (
 var sock = "/var/run/containerd/containerd.sock"
 
 type PullOptions struct {
-	AppName   string
-	OwnerName string
+	AppName      string
+	OwnerName    string
+	AppNamespace string
 }
 
 type ImageService interface {

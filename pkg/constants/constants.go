@@ -97,7 +97,7 @@ var (
 	// Sources represents the source of the application.
 	Sources = sets.String{"market": empty, "custom": empty, "devbox": empty, "system": empty, "unknown": empty}
 	// ResourceTypes represents the type of application system supported.
-	ResourceTypes = sets.String{"app": empty, "recommend": empty, "model": empty, "agent": empty}
+	ResourceTypes = sets.String{"app": empty, "recommend": empty, "model": empty, "agent": empty, "middleware": empty}
 )
 
 var (

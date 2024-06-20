@@ -22,8 +22,12 @@ func (h *Handler) suspend(req *restful.Request, resp *restful.Response) {
 		return
 	}
 	var application v1alpha1.Application
-	key := types.NamespacedName{Name: utils.FmtAppMgrName(app, owner)}
-	err := h.ctrlClient.Get(req.Request.Context(), key, &application)
+	name, err := utils.FmtAppMgrName(app, owner, "")
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	err = h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: name}, &application)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -35,7 +39,7 @@ func (h *Handler) suspend(req *restful.Request, resp *restful.Response) {
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
-	_, err = utils.UpdateAppMgrStatus(utils.FmtAppMgrName(app, owner), status)
+	_, err = utils.UpdateAppMgrStatus(name, status)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -50,8 +54,13 @@ func (h *Handler) resume(req *restful.Request, resp *restful.Response) {
 	app := req.PathParameter(ParamAppName)
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 	var application v1alpha1.Application
-	key := types.NamespacedName{Name: utils.FmtAppMgrName(app, owner)}
-	err := h.ctrlClient.Get(req.Request.Context(), key, &application)
+
+	name, err := utils.FmtAppMgrName(app, owner, "")
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	err = h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: name}, &application)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -62,7 +71,7 @@ func (h *Handler) resume(req *restful.Request, resp *restful.Response) {
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
-	_, err = utils.UpdateAppMgrStatus(utils.FmtAppMgrName(app, owner), status)
+	_, err = utils.UpdateAppMgrStatus(name, status)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
