@@ -34,16 +34,6 @@ func (h *Handler) statusMiddleware(req *restful.Request, resp *restful.Response)
 		return
 	}
 
-	//ns, err := client.KubeClient.Kubernetes().CoreV1().Namespaces().Get(req.Request.Context(), data.Namespace, metav1.GetOptions{})
-	//if err != nil && !apierrors.IsNotFound(err) {
-	//	api.HandleError(resp, req, err)
-	//	return
-	//}
-	//
-	//if title, ok := ns.Annotations[constants.WorkflowTitleAnnotation]; ok {
-	//	data.Title = title
-	//}
-
 	resp.WriteEntity(statusResp{
 		Response: api.Response{Code: 200},
 		Data:     data,
@@ -55,20 +45,13 @@ func (h *Handler) statusMiddlewareList(req *restful.Request, resp *restful.Respo
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 	client := req.Attribute(constants.KubeSphereClientAttribute).(*clientset.ClientSet)
 
-	//namespaces, err := client.KubeClient.Kubernetes().CoreV1().Namespaces().List(req.Request.Context(), metav1.ListOptions{})
-	//if err != nil {
-	//	klog.Errorf("Failed to list namespace err=%v", err)
-	//	api.HandleError(resp, req, err)
-	//	return
-	//}
-
 	mgrs, err := client.AppClient.AppV1alpha1().ApplicationManagers().List(req.Request.Context(), metav1.ListOptions{})
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
 
-	var statusList []*statusData
+	statusList := make([]*statusData, 0)
 	for _, mgr := range mgrs.Items {
 		if mgr.Spec.Type != v1alpha1.Middleware {
 			continue
@@ -83,10 +66,6 @@ func (h *Handler) statusMiddlewareList(req *restful.Request, resp *restful.Respo
 			return
 		}
 
-		//if title, ok := ns.Annotations[constants.WorkflowTitleAnnotation]; ok {
-		//	data.Title = title
-		//}
-
 		statusList = append(statusList, data)
 	}
 
@@ -97,7 +76,6 @@ func (h *Handler) statusMiddlewareList(req *restful.Request, resp *restful.Respo
 }
 
 func getMiddlewareStatus(ctx context.Context, kubeConfig *rest.Config, app, owner string) (*statusData, error) {
-	//namespace := fmt.Sprintf("%s-%s", app, owner)
 	namespace, err := utils.AppNamespace(app, owner, "")
 	if err != nil {
 		return nil, err
