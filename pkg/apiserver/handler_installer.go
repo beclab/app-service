@@ -61,7 +61,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	if utils.IsProtectedNamespace(appConfig.Namespace) {
+	if utils.IsForbidNamespace(appConfig.Namespace) {
 		api.HandleBadRequest(resp, req, fmt.Errorf("unsupported namespace: %s", appConfig.Namespace))
 		return
 	}

@@ -35,6 +35,18 @@ var protectedNamespace = []string{
 	"os-system",
 }
 
+var forbidNamespace = []string{
+	"default",
+	"kube-node-lease",
+	"kube-public",
+	"kube-system",
+	"kubekey-system",
+	"kubesphere-controls-system",
+	"kubesphere-monitoring-federated",
+	"kubesphere-monitoring-system",
+	"kubesphere-system",
+}
+
 // GetClient returns versioned ClientSet.
 func GetClient() (*versioned.Clientset, error) {
 	config, err := ctrl.GetConfig()
@@ -360,6 +372,15 @@ func UpdateStatus(appMgr *v1alpha1.ApplicationManager, state v1alpha1.Applicatio
 func IsProtectedNamespace(namespace string) bool {
 	for _, n := range protectedNamespace {
 		if strings.HasPrefix(namespace, n) {
+			return true
+		}
+	}
+	return false
+}
+
+func IsForbidNamespace(namespace string) bool {
+	for _, n := range forbidNamespace {
+		if namespace == n {
 			return true
 		}
 	}
