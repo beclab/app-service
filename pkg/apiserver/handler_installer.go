@@ -932,7 +932,7 @@ func (h *Handler) upgradeRecommend(req *restful.Request, resp *restful.Response)
 			opRecord.Status = v1alpha1.Failed
 			opRecord.Message = fmt.Sprintf(constants.OperationFailedTpl, recommendMgr.Status.OpType, err.Error())
 		}
-		e := utils.UpdateStatus(recommendMgr, v1alpha1.Failed, &opRecord, "", opRecord.Message)
+		e := utils.UpdateStatus(recommendMgr, opRecord.Status, &opRecord, "", opRecord.Message)
 		if e != nil {
 			klog.Errorf("Failed to update applicationmanager status in upgrade recommend name=%s err=%v", recommendMgr.Name, e)
 		}
