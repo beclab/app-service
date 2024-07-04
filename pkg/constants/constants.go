@@ -43,22 +43,22 @@ const (
 
 	UserChartsPath = "./userapps"
 
-	EnvoyUID                      int64 = 1000
-	DefaultEnvoyLogLevel                = "info"
-	EnvoyImageVersion                   = "envoyproxy/envoy-distroless:v1.25.2"
-	EnvoyContainerName                  = "terminus-envoy-sidecar"
-	EnvoyAdminPort                      = 15000
-	EnvoyAdminPortName                  = "proxy-admin"
-	EnvoyInboundListenerPort            = 15003
-	EnvoyInboundListenerPortName        = "proxy-inbound"
-	EnvoyOutboundListenerPort           = 15001
-	EnvoyOutboundListenerPortName       = "proxy-outbound"
-	EnvoyLivenessProbePort              = 15008
-	EnvoyConfigFileName                 = "envoy.yaml"
-	EnvoyConfigFilePath                 = "/etc/envoy"
-
-	WsContainerName  = "terminus-ws-sidecar"
-	WsContainerImage = "WS_CONTAINER_IMAGE"
+	EnvoyUID                        int64 = 1555
+	DefaultEnvoyLogLevel                  = "info"
+	EnvoyImageVersion                     = "bytetrade/envoy:v1.25.11.1"
+	EnvoyContainerName                    = "terminus-envoy-sidecar"
+	EnvoyAdminPort                        = 15000
+	EnvoyAdminPortName                    = "proxy-admin"
+	EnvoyInboundListenerPort              = 15003
+	EnvoyInboundListenerPortName          = "proxy-inbound"
+	EnvoyOutboundListenerPort             = 15001
+	EnvoyOutboundListenerPortName         = "proxy-outbound"
+	EnvoyLivenessProbePort                = 15008
+	EnvoyConfigFileName                   = "envoy.yaml"
+	EnvoyConfigFilePath                   = "/etc/envoy"
+	EnvoyConfigOnlyOutBoundFileName       = "envoy2.yaml"
+	WsContainerName                       = "terminus-ws-sidecar"
+	WsContainerImage                      = "WS_CONTAINER_IMAGE"
 
 	UploadContainerName  = "terminus-upload-sidecar"
 	UploadContainerImage = "UPLOAD_CONTAINER_IMAGE"

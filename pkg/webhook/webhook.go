@@ -8,13 +8,16 @@ import (
 	"io/ioutil"
 	"math"
 	"net/http"
+	"sort"
 	"strconv"
 
+	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
+	"bytetrade.io/web3os/app-service/pkg/provider"
 	"bytetrade.io/web3os/app-service/pkg/sandbox/sidecar"
 	"bytetrade.io/web3os/app-service/pkg/security"
 
@@ -26,9 +29,11 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
@@ -78,9 +83,14 @@ func (wh *Webhook) GetAppConfig(namespace string) (*appinstaller.ApplicationConf
 	if err != nil {
 		return nil, err
 	}
+	sorted := list.Items
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[j].CreationTimestamp.Before(&sorted[i].CreationTimestamp)
+	})
+
 	var appconfig appinstaller.ApplicationConfig
-	for _, a := range list.Items {
-		if a.Spec.AppNamespace == namespace {
+	for _, a := range sorted {
+		if a.Spec.AppNamespace == namespace && a.Spec.Type == v1alpha1.App {
 			err = json.Unmarshal([]byte(a.Spec.Config), &appconfig)
 			if err != nil {
 				return nil, err
@@ -122,7 +132,7 @@ func (wh *Webhook) CreatePatch(
 	ctx context.Context,
 	pod *corev1.Pod,
 	req *admissionv1.AdmissionRequest,
-	proxyUUID uuid.UUID, injectPolicy, injectWs, injectUpload bool) ([]byte, error) {
+	proxyUUID uuid.UUID, injectPolicy, injectWs, injectUpload bool, perms []appinstaller.SysDataPermission) ([]byte, error) {
 	isInjected, prevUUID := isInjectedPod(pod)
 
 	if isInjected {
@@ -131,7 +141,7 @@ func (wh *Webhook) CreatePatch(
 		return makePatches(req, pod)
 	}
 
-	configMapName, err := wh.createSidecarConfigMap(ctx, pod, proxyUUID.String(), req.Namespace, injectPolicy, injectWs, injectUpload)
+	configMapName, err := wh.createSidecarConfigMap(ctx, pod, proxyUUID.String(), req.Namespace, injectPolicy, injectWs, injectUpload, perms)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +157,15 @@ func (wh *Webhook) CreatePatch(
 	initContainer := sidecar.GetInitContainerSpec()
 	pod.Spec.InitContainers = append(pod.Spec.InitContainers, initContainer)
 
-	policySidecar := sidecar.GetEnvoySidecarContainerSpec(pod, req.Namespace)
+	clusterID := fmt.Sprintf("%s.%s", pod.Spec.ServiceAccountName, req.Name)
+	envoyFilename := constants.EnvoyConfigFilePath + "/" + constants.EnvoyConfigFileName
+	// pod is not an entrance pod, just inject outbound proxy
+	if !injectPolicy {
+		envoyFilename = constants.EnvoyConfigFilePath + "/" + constants.EnvoyConfigOnlyOutBoundFileName
+	}
+	appKey, appSecret, _ := wh.getAppKeySecret(req.Namespace)
+
+	policySidecar := sidecar.GetEnvoySidecarContainerSpec(clusterID, envoyFilename, appKey, appSecret)
 	pod.Spec.Containers = append(pod.Spec.Containers, policySidecar)
 
 	if injectWs {
@@ -193,9 +211,10 @@ func (wh *Webhook) AdmissionError(err error) *admissionv1.AdmissionResponse {
 }
 
 // MustInject checks which inject operation should do for a pod.
-func (wh *Webhook) MustInject(ctx context.Context, pod *corev1.Pod, namespace string) (bool, bool, bool, error) {
+func (wh *Webhook) MustInject(ctx context.Context, pod *corev1.Pod, namespace string) (bool, bool, bool, []appinstaller.SysDataPermission, error) {
+	perms := make([]appinstaller.SysDataPermission, 0)
 	if !isNamespaceInjectable(namespace) {
-		return false, false, false, nil
+		return false, false, false, perms, nil
 	}
 
 	// TODO: uninject annotation
@@ -204,13 +223,13 @@ func (wh *Webhook) MustInject(ctx context.Context, pod *corev1.Pod, namespace st
 	_, err := wh.kubeClient.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
 	if err != nil {
 		klog.Error("Failed to get namespace=%s err=%v", namespace, err)
-		return false, false, false, err
+		return false, false, false, perms, err
 	}
 
 	appcfg, _ := wh.GetAppConfig(namespace)
 	if appcfg == nil {
 		klog.Infof("Unknown namespace=%s, do not inject", namespace)
-		return false, false, false, nil
+		return false, false, false, perms, nil
 	}
 	var injectWs, injectUpload bool
 	if appcfg.WsConfig.URL != "" && appcfg.WsConfig.Port > 0 {
@@ -219,19 +238,42 @@ func (wh *Webhook) MustInject(ctx context.Context, pod *corev1.Pod, namespace st
 	if appcfg.Upload.Dest != "" {
 		injectUpload = true
 	}
+	for _, p := range appcfg.Permission {
+		if sysDataP, ok := p.([]interface{}); ok {
+			for _, v := range sysDataP {
+				sysData := v.(map[string]interface{})
+				ops := make([]string, 0)
+				for _, o := range sysData["ops"].([]interface{}) {
+					ops = append(ops, o.(string))
+				}
+				dataType := sysData["dataType"].(string)
+				version := sysData["version"].(string)
+				if version == "v2" {
+					perms = append(perms, appinstaller.SysDataPermission{
+						Group:    sysData["group"].(string),
+						DataType: dataType,
+						Version:  sysData["version"].(string),
+						Ops:      ops,
+					})
+				}
 
+			}
+		}
+
+	}
 	for _, e := range appcfg.Entrances {
 		isEntrancePod, err := wh.isAppEntrancePod(ctx, appcfg.AppName, e.Host, pod, namespace)
 		klog.Infof("entranceName=%s isEntrancePod=%v", e.Name, isEntrancePod)
 		if err != nil {
-			return false, false, false, err
+			return false, false, false, perms, err
 		}
+
 		if isEntrancePod {
-			return true, injectWs, injectUpload, nil
+			return true, injectWs, injectUpload, perms, nil
 		}
 	}
 
-	return false, injectWs, injectUpload, nil
+	return false, injectWs, injectUpload, perms, nil
 }
 
 func (wh *Webhook) isAppEntrancePod(ctx context.Context, appname, host string, pod *corev1.Pod, namespace string) (bool, error) {
@@ -256,6 +298,7 @@ func (wh *Webhook) isAppEntrancePod(ctx context.Context, appname, host string, p
 func (wh *Webhook) createSidecarConfigMap(
 	ctx context.Context, pod *corev1.Pod,
 	proxyUUID, namespace string, injectPolicy, injectWs, injectUpload bool,
+	perms []appinstaller.SysDataPermission,
 ) (string, error) {
 	configMapName := fmt.Sprintf("%s-%s", constants.SidecarConfigMapVolumeName, proxyUUID)
 	cm, e := wh.kubeClient.CoreV1().ConfigMaps(namespace).Get(ctx, configMapName, metav1.GetOptions{})
@@ -290,7 +333,7 @@ func (wh *Webhook) createSidecarConfigMap(
 		}
 	}
 
-	newConfigMap := sidecar.GetSidecarConfigMap(configMapName, namespace, appcfg.OwnerName, injectPolicy, injectWs, injectUpload, appDomains, pod)
+	newConfigMap := sidecar.GetSidecarConfigMap(configMapName, namespace, appcfg, injectPolicy, injectWs, injectUpload, appDomains, pod, perms)
 	if e == nil {
 		// configmap found
 		cm.Data = newConfigMap.Data
@@ -471,4 +514,33 @@ func genPatchesForEnv(op string, containerIdx, envIdx int, name, value string) (
 		},
 	})
 	return patch
+}
+
+func (wh *Webhook) getAppKeySecret(namespace string) (string, string, error) {
+	config, err := ctrl.GetConfig()
+	if err != nil {
+		return "", "", err
+	}
+	client, err := dynamic.NewForConfig(config)
+	if err != nil {
+		return "", "", err
+	}
+	appcfg, err := wh.GetAppConfig(namespace)
+	if err != nil {
+		klog.Errorf("Failed to get app config err=%v", err)
+		return "", "", err
+	}
+
+	apClient := provider.NewApplicationPermissionRequest(client)
+	ap, err := apClient.Get(context.TODO(), "user-system-"+appcfg.OwnerName, appcfg.AppName, metav1.GetOptions{})
+	if err != nil {
+		return "", "", err
+	}
+	var appKey, appSecret string
+	if ap != nil {
+		appKey, _, _ = unstructured.NestedString(ap.Object, "spec", "key")
+		appSecret, _, _ = unstructured.NestedString(ap.Object, "spec", "secret")
+		return appKey, appSecret, nil
+	}
+	return "", "", errors.New("nil applicationpermission object")
 }

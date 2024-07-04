@@ -1,6 +1,7 @@
 package sidecar
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,6 +11,7 @@ import (
 
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/constants"
+	"bytetrade.io/web3os/app-service/pkg/provider"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 
 	envoy_bootstrap "github.com/envoyproxy/go-control-plane/envoy/config/bootstrap/v3"
@@ -28,15 +30,17 @@ import (
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/golang/protobuf/ptypes/duration"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/pointer"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/yaml"
 )
 
 // GetEnvoySidecarContainerSpec returns the container specification for the envoy sidecar.
-func GetEnvoySidecarContainerSpec(pod *corev1.Pod, namespace string) corev1.Container {
-	clusterID := fmt.Sprintf("%s.%s", pod.Spec.ServiceAccountName, namespace)
-
+func GetEnvoySidecarContainerSpec(clusterID string, envoyFilename string, appKey string, appSecret string) corev1.Container {
 	return corev1.Container{
 		Name:            constants.EnvoyContainerName,
 		Image:           constants.EnvoyImageVersion,
@@ -47,18 +51,31 @@ func GetEnvoySidecarContainerSpec(pod *corev1.Pod, namespace string) corev1.Cont
 				uid := constants.EnvoyUID
 				return &uid
 			}(),
+			Capabilities: &corev1.Capabilities{
+				Add: []corev1.Capability{
+					"NET_ADMIN",
+				},
+			},
 		},
 		Ports: getEnvoyContainerPorts(),
-		VolumeMounts: []corev1.VolumeMount{{
-			Name:      constants.SidecarConfigMapVolumeName,
-			ReadOnly:  true,
-			MountPath: constants.EnvoyConfigFilePath + "/" + constants.EnvoyConfigFileName,
-			SubPath:   constants.EnvoyConfigFileName,
-		}},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      constants.SidecarConfigMapVolumeName,
+				ReadOnly:  true,
+				MountPath: constants.EnvoyConfigFilePath + "/" + constants.EnvoyConfigFileName,
+				SubPath:   constants.EnvoyConfigFileName,
+			},
+			{
+				Name:      constants.SidecarConfigMapVolumeName,
+				ReadOnly:  true,
+				MountPath: constants.EnvoyConfigFilePath + "/" + constants.EnvoyConfigOnlyOutBoundFileName,
+				SubPath:   constants.EnvoyConfigOnlyOutBoundFileName,
+			},
+		},
 		Command: []string{"envoy"},
 		Args: []string{
 			"--log-level", constants.DefaultEnvoyLogLevel,
-			"-c", constants.EnvoyConfigFilePath + "/" + constants.EnvoyConfigFileName,
+			"-c", envoyFilename,
 			"--service-cluster", clusterID,
 		},
 		Env: []corev1.EnvVar{
@@ -102,6 +119,14 @@ func GetEnvoySidecarContainerSpec(pod *corev1.Pod, namespace string) corev1.Cont
 					},
 				},
 			},
+			{
+				Name:  "APP_KEY",
+				Value: appKey,
+			},
+			{
+				Name:  "APP_SECRET",
+				Value: appSecret,
+			},
 		},
 	}
 }
@@ -116,6 +141,10 @@ func getEnvoyContainerPorts() []corev1.ContainerPort {
 			Name:          constants.EnvoyInboundListenerPortName,
 			ContainerPort: constants.EnvoyInboundListenerPort,
 		},
+		{
+			Name:          constants.EnvoyOutboundListenerPortName,
+			ContainerPort: constants.EnvoyOutboundListenerPort,
+		},
 	}
 
 	livenessPort := corev1.ContainerPort{
@@ -128,12 +157,12 @@ func getEnvoyContainerPorts() []corev1.ContainerPort {
 	return containerPorts
 }
 
-func getEnvoyConfig(username string, injectPolicy, injectWs, injectUpload bool, appDomains []string, pod *corev1.Pod) string {
+func getEnvoyConfig(appcfg *appinstaller.ApplicationConfig, injectPolicy, injectWs, injectUpload bool, appDomains []string, pod *corev1.Pod, perms []appinstaller.SysDataPermission) string {
 	setCookieInlineCode, err := genEnvoySetCookieScript(appDomains)
 	if err != nil {
 		klog.Errorf("Failed to get setCookieInlineCode err=%v", err)
 	}
-	ec := New(username, setCookieInlineCode, getHTTProbePath(pod))
+	ec := New(appcfg.OwnerName, setCookieInlineCode, getHTTProbePath(pod))
 	if injectPolicy {
 		ec.WithPolicy()
 	}
@@ -142,6 +171,123 @@ func getEnvoyConfig(username string, injectPolicy, injectWs, injectUpload bool, 
 	}
 	if injectUpload {
 		ec.WithUpload()
+	}
+	if len(perms) > 0 {
+		klog.Infof("getEnvoyConfig: len(perms)>0")
+		_, err = ec.WithProxyOutBound(appcfg, perms)
+		if err != nil {
+			klog.Errorf("Failed to make proxyoutbound err=%v", err)
+		}
+	}
+	m, err := utils.ToJSONMap(ec.bs)
+	if err != nil {
+		klog.Errorf("Failed to convert proto.Message to map err=%v", err)
+	}
+	mBytes, err := json.Marshal(utils.SnakeCaseMarshaller{Value: m})
+	if err != nil {
+		klog.Errorf("Failed to make SnakeCaseMarshaller err=%v", err)
+	}
+	bootstrap, err := yaml.JSONToYAML(mBytes)
+	if err != nil {
+		klog.Errorf("Failed to convert yaml to json err=%v", err)
+	}
+	return string(bootstrap)
+}
+
+func getEnvoyConfigOnlyForOutBound(appcfg *appinstaller.ApplicationConfig, perms []appinstaller.SysDataPermission) string {
+	ec := &envoyConfig{
+		bs: &envoy_bootstrap.Bootstrap{
+			Admin: &envoy_bootstrap.Admin{
+				AccessLogPath: "/dev/stdout",
+				Address:       createSocketAddress("0.0.0.0", 15008),
+			},
+			StaticResources: &envoy_bootstrap.Bootstrap_StaticResources{
+				Listeners: []*envoy_listener.Listener{
+					{
+						Name:    "listener_0",
+						Address: createSocketAddress("0.0.0.0", 15003),
+						ListenerFilters: []*envoy_listener.ListenerFilter{
+							{
+								Name: "envoy.filters.listener.original_dst",
+								ConfigType: &envoy_listener.ListenerFilter_TypedConfig{
+									TypedConfig: utils.MessageToAny(&originaldst.OriginalDst{}),
+								},
+							},
+						},
+						FilterChains: []*envoy_listener.FilterChain{
+							{
+								Filters: []*envoy_listener.Filter{
+									{
+										Name: "envoy.filters.network.http_connection_manager",
+										ConfigType: &envoy_listener.Filter_TypedConfig{
+											TypedConfig: utils.MessageToAny(&http_connection_manager.HttpConnectionManager{
+												HttpFilters: []*http_connection_manager.HttpFilter{
+													{
+														Name: "envoy.filters.http.router",
+														ConfigType: &http_connection_manager.HttpFilter_TypedConfig{
+															TypedConfig: utils.MessageToAny(&envoy_router.Router{}),
+														},
+													},
+												},
+												StatPrefix:    "orig_http",
+												SkipXffAppend: false,
+												CodecType:     http_connection_manager.HttpConnectionManager_AUTO,
+												RouteSpecifier: &http_connection_manager.HttpConnectionManager_RouteConfig{
+													RouteConfig: &routev3.RouteConfiguration{
+														Name: "local_route",
+														VirtualHosts: []*routev3.VirtualHost{
+															{
+																Name:    "service",
+																Domains: []string{"*"},
+																Routes: []*routev3.Route{
+																	{
+																		Match: &routev3.RouteMatch{
+																			PathSpecifier: &routev3.RouteMatch_Prefix{
+																				Prefix: "/",
+																			},
+																		},
+																		Action: &routev3.Route_Route{
+																			Route: &routev3.RouteAction{
+																				ClusterSpecifier: &routev3.RouteAction_Cluster{
+																					Cluster: "original_dst",
+																				},
+																			},
+																		},
+																	},
+																},
+															},
+														},
+													},
+												},
+											}),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				Clusters: []*clusterv3.Cluster{
+					{
+						Name: "original_dst",
+						ConnectTimeout: &duration.Duration{
+							Seconds: 5000,
+						},
+						ClusterDiscoveryType: &clusterv3.Cluster_Type{
+							Type: clusterv3.Cluster_ORIGINAL_DST,
+						},
+						LbPolicy: clusterv3.Cluster_CLUSTER_PROVIDED,
+					},
+				},
+			},
+		},
+		username: appcfg.OwnerName,
+	}
+	if len(perms) > 0 {
+		_, err := ec.WithProxyOutBound(appcfg, perms)
+		if err != nil {
+			klog.Errorf("Failed to make proxyoutbound for none entrance pod err=%v", err)
+		}
 	}
 	m, err := utils.ToJSONMap(ec.bs)
 	if err != nil {
@@ -203,15 +349,34 @@ func generateIptablesCommands() string {
 *nat
 :PROXY_IN_REDIRECT - [0:0]
 :PROXY_INBOUND - [0:0]
--A PROXY_IN_REDIRECT -p tcp -j REDIRECT --to-port %d
+:PROXY_OUTBOUND - [0:0]
+:PROXY_OUT_REDIRECT - [0:0]
+
 -A PREROUTING -p tcp -j PROXY_INBOUND
+-A OUTPUT -p tcp -j PROXY_OUTBOUND
 -A PROXY_INBOUND -p tcp --dport %d -j RETURN
 -A PROXY_INBOUND -p tcp -j PROXY_IN_REDIRECT
+-A PROXY_IN_REDIRECT -p tcp -j REDIRECT --to-port %d
+
+-A PROXY_OUTBOUND -p tcp --dport 5432 -j RETURN
+-A PROXY_OUTBOUND -p tcp --dport 6379 -j RETURN
+-A PROXY_OUTBOUND -p tcp --dport 27017 -j RETURN
+-A PROXY_OUTBOUND -p tcp --dport 443 -j RETURN
+-A PROXY_OUTBOUND -d ${POD_IP}/32 -j RETURN
+-A PROXY_OUTBOUND -o lo ! -d 127.0.0.1/32 -m owner --uid-owner 1555 -j PROXY_IN_REDIRECT
+-A PROXY_OUTBOUND -o lo -m owner ! --uid-owner 1555 -j RETURN
+-A PROXY_OUTBOUND -m owner --uid-owner 1555 -j RETURN
+-A PROXY_OUTBOUND -d 127.0.0.1/32 -j RETURN
+
+-A PROXY_OUTBOUND -j PROXY_OUT_REDIRECT
+-A PROXY_OUT_REDIRECT -p tcp -j REDIRECT --to-port %d
+
 COMMIT
 EOF
 `,
-		constants.EnvoyInboundListenerPort,
 		constants.EnvoyAdminPort,
+		constants.EnvoyInboundListenerPort,
+		constants.EnvoyOutboundListenerPort,
 	)
 
 	return cmd
@@ -852,6 +1017,220 @@ func (ec *envoyConfig) WithUpload() *envoyConfig {
 	return ec
 }
 
+func (ec *envoyConfig) WithProxyOutBound(appcfg *appinstaller.ApplicationConfig, perms []appinstaller.SysDataPermission) (*envoyConfig, error) {
+	config, err := ctrl.GetConfig()
+	if err != nil {
+		return ec, err
+	}
+	client, err := dynamic.NewForConfig(config)
+	if err != nil {
+		return ec, err
+	}
+	prClient := provider.NewRegistryRequest(client)
+	registries, err := prClient.List(context.TODO(), "", metav1.ListOptions{})
+	if err != nil {
+		klog.Infof("get registries err=%v", err)
+		return ec, err
+	}
+	type route struct {
+		uri      string
+		endpoint string
+		dataType string
+		group    string
+		version  string
+	}
+	type OpApisItem struct {
+		Name string `json:"name,omitempty"`
+		URI  string `json:"uri,omitempty"`
+	}
+	routesMap := make(map[string][]route)
+	if len(registries.Items) > 0 {
+		for _, pr := range registries.Items {
+			state, _, err := unstructured.NestedString(pr.Object, "status", "state")
+			if err != nil {
+				return ec, err
+			}
+			if state == "active" {
+				dataType, _, _ := unstructured.NestedString(pr.Object, "spec", "dataType")
+				group, _, _ := unstructured.NestedString(pr.Object, "spec", "group")
+				version, _, _ := unstructured.NestedString(pr.Object, "spec", "version")
+				kind, _, _ := unstructured.NestedString(pr.Object, "spec", "kind")
+				ep, _, _ := unstructured.NestedString(pr.Object, "spec", "endpoint")
+
+				for _, perm := range perms {
+					if perm.DataType == dataType && perm.Group == group && perm.Version == version && kind == "provider" {
+						opApis, _, _ := unstructured.NestedSlice(pr.Object, "spec", "opApis")
+						for _, opName := range perm.Ops {
+							for _, p := range opApis {
+								op := p.(map[string]interface{})
+								if opName == op["name"].(string) {
+									routesMap[ep] = append(routesMap[ep], route{
+										op["uri"].(string),
+										ep,
+										dataType,
+										group,
+										version,
+									})
+								}
+							}
+						}
+
+					}
+				}
+			}
+		}
+	}
+
+	apClient := provider.NewApplicationPermissionRequest(client)
+	ap, err := apClient.Get(context.TODO(), "user-system-"+appcfg.OwnerName, appcfg.AppName, metav1.GetOptions{})
+	if err != nil {
+		return ec, err
+	}
+	var appKey string
+	if ap != nil {
+		appKey, _, _ = unstructured.NestedString(ap.Object, "spec", "key")
+	}
+
+	virtualHosts := make([]*routev3.VirtualHost, 0, len(routesMap))
+	for vh, routes := range routesMap {
+		rs := make([]*routev3.Route, 0, len(routes)+1)
+		for _, r := range routes {
+			rs = append(rs, &routev3.Route{
+				Match: &routev3.RouteMatch{
+					PathSpecifier: &routev3.RouteMatch_Prefix{
+						Prefix: r.uri,
+					},
+				},
+				Action: &routev3.Route_Route{
+					Route: &routev3.RouteAction{
+						ClusterSpecifier: &routev3.RouteAction_Cluster{
+							Cluster: "system-server",
+						},
+						PrefixRewrite: filepath.Join("/system-server/v2", r.dataType, r.group, r.version, r.uri),
+					},
+				},
+				RequestHeadersToAdd: []*corev3.HeaderValueOption{
+					{
+						Header: &corev3.HeaderValue{
+							Key:   "X-App-Key",
+							Value: appKey,
+						},
+					},
+				},
+			})
+		}
+		rs = append(rs, &routev3.Route{
+			Match: &routev3.RouteMatch{
+				PathSpecifier: &routev3.RouteMatch_Prefix{
+					Prefix: "/",
+				},
+			},
+			Action: &routev3.Route_Route{
+				Route: &routev3.RouteAction{
+					ClusterSpecifier: &routev3.RouteAction_Cluster{
+						Cluster: "original_dst",
+					},
+				},
+			},
+			TypedPerFilterConfig: map[string]*any.Any{
+				"envoy.filters.http.lua": utils.MessageToAny(&envoy_lua.LuaPerRoute{
+					Override: &envoy_lua.LuaPerRoute_Disabled{
+						Disabled: true,
+					},
+				}),
+			},
+		})
+
+		virtualHosts = append(virtualHosts, &routev3.VirtualHost{
+			Name:    vh,
+			Domains: []string{vh},
+			Routes:  rs,
+		})
+	}
+	ec.bs.StaticResources.Listeners = append(ec.bs.StaticResources.Listeners, &envoy_listener.Listener{
+		Name:    "listener_outbound",
+		Address: createSocketAddress("0.0.0.0", 15001),
+		ListenerFilters: []*envoy_listener.ListenerFilter{
+			{
+				Name: "envoy.filters.listener.original_dst",
+				ConfigType: &envoy_listener.ListenerFilter_TypedConfig{
+					TypedConfig: utils.MessageToAny(&originaldst.OriginalDst{}),
+				},
+			},
+		},
+	})
+	ec.bs.StaticResources.Clusters = append(ec.bs.StaticResources.Clusters, &clusterv3.Cluster{
+		Name: "system-server",
+		ConnectTimeout: &duration.Duration{
+			Seconds: 5,
+		},
+		ClusterDiscoveryType: &clusterv3.Cluster_Type{
+			Type: clusterv3.Cluster_LOGICAL_DNS,
+		},
+		DnsLookupFamily: clusterv3.Cluster_V4_ONLY,
+		DnsRefreshRate: &duration.Duration{
+			Seconds: 600,
+		},
+		LbPolicy: clusterv3.Cluster_ROUND_ROBIN,
+		LoadAssignment: &endpointv3.ClusterLoadAssignment{
+			ClusterName: "system-server",
+			Endpoints: []*endpointv3.LocalityLbEndpoints{
+				{
+					LbEndpoints: []*endpointv3.LbEndpoint{
+						{
+							HostIdentifier: &endpointv3.LbEndpoint_Endpoint{
+								Endpoint: &endpointv3.Endpoint{
+									Address: createSocketAddress("system-server.user-system-"+appcfg.OwnerName, 80),
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	n := len(ec.bs.StaticResources.Listeners)
+	ec.bs.StaticResources.Listeners[n-1].FilterChains = []*envoy_listener.FilterChain{
+		{
+			Filters: []*envoy_listener.Filter{
+				{
+					Name: "envoy.filters.network.http_connection_manager",
+					ConfigType: &envoy_listener.Filter_TypedConfig{
+						TypedConfig: utils.MessageToAny(&http_connection_manager.HttpConnectionManager{
+							HttpFilters: []*http_connection_manager.HttpFilter{
+								{
+									Name: "envoy.filters.http.lua",
+									ConfigType: &http_connection_manager.HttpFilter_TypedConfig{
+										TypedConfig: utils.MessageToAny(&envoy_lua.Lua{
+											InlineCode: string(getSignatureInlineCode()),
+										}),
+									},
+								},
+								{
+									Name: "envoy.filters.http.router",
+									ConfigType: &http_connection_manager.HttpFilter_TypedConfig{
+										TypedConfig: utils.MessageToAny(&envoy_router.Router{}),
+									},
+								},
+							},
+							StatPrefix:    "system-server_http",
+							SkipXffAppend: false,
+							CodecType:     http_connection_manager.HttpConnectionManager_AUTO,
+							RouteSpecifier: &http_connection_manager.HttpConnectionManager_RouteConfig{
+								RouteConfig: &routev3.RouteConfiguration{
+									Name:         "local_route",
+									VirtualHosts: virtualHosts,
+								},
+							},
+						}),
+					},
+				},
+			},
+		},
+	}
+	return ec, nil
+}
+
 func createSocketAddress(addr string, port uint32) *envoy_core.Address {
 	return &envoy_core.Address{
 		Address: &envoy_core.Address_SocketAddress{
@@ -863,4 +1242,24 @@ func createSocketAddress(addr string, port uint32) *envoy_core.Address {
 			},
 		},
 	}
+}
+
+func getSignatureInlineCode() string {
+	code := `
+local sha = require("lib.sha2")
+function envoy_on_request(request_handle)
+	local app_key = os.getenv("APP_KEY")
+	local app_secret = os.getenv("APP_SECRET")
+	local current_time = os.time()
+	local minute_level_time = current_time - (current_time % 60)
+	local time_string = tostring(minute_level_time)
+	local s = app_key .. app_secret .. time_string
+	request_handle:logInfo("originstring:" .. s)
+	local hash = sha.sha256(s)
+	request_handle:logInfo("Hello World.")
+	request_handle:logInfo(hash)
+	request_handle:headers():add("X-Auth-Signature",hash)
+end
+`
+	return code
 }
