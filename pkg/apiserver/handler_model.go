@@ -37,7 +37,6 @@ type modelRequest struct {
 
 func (h *Handler) submit(req *restful.Request, resp *restful.Response) {
 	modelID := req.PathParameter(ParamModelID)
-	owner := req.Attribute(constants.UserContextAttribute).(string)
 
 	type modelReq struct {
 		RepoURL string `json:"repoUrl"`
@@ -64,7 +63,7 @@ func (h *Handler) submit(req *restful.Request, resp *restful.Response) {
 	response, err := client.R().SetFormData(map[string]string{
 		"modelID":     modelID,
 		"modelConfig": string(modelCfgStr)}).
-		Post(fmt.Sprintf("http://dify.user-space-%s/nitro/model_config/submit", owner))
+		Post("http://nitro/nitro/model_config/submit")
 	if err != nil {
 		klog.Errorf("Failed to make request to submit modelConfig err=%v", err)
 		api.HandleError(resp, req, err)
@@ -178,7 +177,7 @@ func (h *Handler) installModel(req *restful.Request, resp *restful.Response) {
 	response, err := client.R().SetFormData(map[string]string{
 		"modelID":     modelID,
 		"modelConfig": string(modelCfgStr)}).
-		Post(fmt.Sprintf("http://dify.user-space-%s/nitro/model_config/submit", owner))
+		Post("http://nitro/nitro/model_config/submit")
 	if err != nil {
 		klog.Errorf("Failed to make request to submit modelConfig err=%v", err)
 		api.HandleError(resp, req, err)
@@ -211,7 +210,7 @@ func (h *Handler) installModel(req *restful.Request, resp *restful.Response) {
 		Version:    appCfg.Metadata.Version,
 		StatusTime: &now,
 	}
-	response, err = client.R().Post(fmt.Sprintf("http://dify.user-space-%s/nitro/model/%s", owner, modelID))
+	response, err = client.R().Post(fmt.Sprintf("http://nitro/nitro/model/%s", modelID))
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -339,7 +338,6 @@ func (h *Handler) progressHandler(req *restful.Request, resp *restful.Response) 
 
 func (h *Handler) resumeHandler(req *restful.Request, resp *restful.Response) {
 	modelID := req.PathParameter(ParamModelID)
-	owner := req.Attribute(constants.UserContextAttribute).(string)
 
 	var err error
 
@@ -377,7 +375,7 @@ func (h *Handler) resumeHandler(req *restful.Request, resp *restful.Response) {
 	}()
 
 	client := resty.New()
-	response, err := client.SetTimeout(60 * time.Second).R().Post(fmt.Sprintf("http://dify.user-space-%s/nitro/model/%s/load", owner, modelID))
+	response, err := client.SetTimeout(60 * time.Second).R().Post(fmt.Sprintf("http://nitro/nitro/model/%s/load", modelID))
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -412,7 +410,6 @@ func (h *Handler) resumeHandler(req *restful.Request, resp *restful.Response) {
 
 func (h *Handler) suspendHandler(req *restful.Request, resp *restful.Response) {
 	modelID := req.PathParameter(ParamModelID)
-	owner := req.Attribute(constants.UserContextAttribute).(string)
 	var err error
 	now := metav1.Now()
 	status := v1alpha1.ApplicationManagerStatus{
@@ -448,7 +445,7 @@ func (h *Handler) suspendHandler(req *restful.Request, resp *restful.Response) {
 	}()
 
 	client := resty.New()
-	response, err := client.R().Post(fmt.Sprintf("http://dify.user-space-%s/nitro/model/%s/stop", owner, modelID))
+	response, err := client.R().Post(fmt.Sprintf("http://nitro/nitro/model/%s/stop", modelID))
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -522,7 +519,7 @@ func (h *Handler) uninstallHandler(req *restful.Request, resp *restful.Response)
 
 	modelStatus, _, _ := getProgress(modelID, owner)
 	if modelStatus == v1alpha1.AppRunning.String() {
-		r, e := client.R().Post(fmt.Sprintf("http://dify.user-space-%s/nitro/model/%s/stop", owner, modelID))
+		r, e := client.R().Post(fmt.Sprintf("http://nitro/nitro/model/%s/stop", modelID))
 		if e != nil {
 			api.HandleError(resp, req, e)
 			return
@@ -534,7 +531,7 @@ func (h *Handler) uninstallHandler(req *restful.Request, resp *restful.Response)
 		}
 	}
 
-	response, err := client.R().Delete(fmt.Sprintf("http://dify.user-space-%s/nitro/model/%s", owner, modelID))
+	response, err := client.R().Delete(fmt.Sprintf("http://nitro/nitro/model/%s", modelID))
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -583,7 +580,7 @@ func (h *Handler) cancelHandler(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	response, err := client.R().Delete(fmt.Sprintf("http://dify.user-space-%s/nitro/model/%s", owner, modelID))
+	response, err := client.R().Delete(fmt.Sprintf("http://nitro/nitro/model/%s", modelID))
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -616,10 +613,9 @@ func (h *Handler) cancelHandler(req *restful.Request, resp *restful.Response) {
 
 func (h *Handler) statusHandler(req *restful.Request, resp *restful.Response) {
 	modelID := req.PathParameter(ParamModelID)
-	owner := req.Attribute(constants.UserContextAttribute).(string)
 
 	client := resty.New()
-	response, err := client.R().Get(fmt.Sprintf("http://dify.user-space-%s/nitro/model/%s", owner, modelID))
+	response, err := client.R().Get(fmt.Sprintf("http://nitro/nitro/model/%s", modelID))
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -642,10 +638,8 @@ func (h *Handler) statusHandler(req *restful.Request, resp *restful.Response) {
 }
 
 func (h *Handler) models(req *restful.Request, resp *restful.Response) {
-	owner := req.Attribute(constants.UserContextAttribute).(string)
-
 	client := resty.New()
-	response, err := client.R().Get(fmt.Sprintf("http://dify.user-space-%s/nitro/model", owner))
+	response, err := client.R().Get("http://nitro/nitro/model")
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -670,10 +664,9 @@ func (h *Handler) models(req *restful.Request, resp *restful.Response) {
 
 func (h *Handler) modelHandler(req *restful.Request, resp *restful.Response) {
 	modelID := req.PathParameter(ParamModelID)
-	owner := req.Attribute(constants.UserContextAttribute).(string)
 
 	client := resty.New()
-	response, err := client.R().Get(fmt.Sprintf("http://dify.user-space-%s/nitro/model/%s", owner, modelID))
+	response, err := client.R().Get(fmt.Sprintf("http://nitro/nitro/model/%s", modelID))
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -852,7 +845,7 @@ func (h *Handler) allModelHistory(req *restful.Request, resp *restful.Response) 
 
 func getProgress(modelID, owner string) (status string, progress float64, err error) {
 	client := resty.New()
-	response, err := client.R().Get(fmt.Sprintf("http://dify.user-space-%s/nitro/progress?id=%s", owner, modelID))
+	response, err := client.R().Get(fmt.Sprintf("http://nitro/nitro/progress?id=%s", modelID))
 	if err != nil {
 		return status, progress, err
 	}
