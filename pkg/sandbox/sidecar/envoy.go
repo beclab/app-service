@@ -172,13 +172,12 @@ func getEnvoyConfig(appcfg *appinstaller.ApplicationConfig, injectPolicy, inject
 	if injectUpload {
 		ec.WithUpload()
 	}
-	if len(perms) > 0 {
-		klog.Infof("getEnvoyConfig: len(perms)>0")
-		_, err = ec.WithProxyOutBound(appcfg, perms)
-		if err != nil {
-			klog.Errorf("Failed to make proxyoutbound err=%v", err)
-		}
+
+	_, err = ec.WithProxyOutBound(appcfg, perms)
+	if err != nil {
+		klog.Errorf("Failed to make proxyoutbound err=%v", err)
 	}
+
 	m, err := utils.ToJSONMap(ec.bs)
 	if err != nil {
 		klog.Errorf("Failed to convert proto.Message to map err=%v", err)
@@ -202,6 +201,7 @@ func getEnvoyConfigOnlyForOutBound(appcfg *appinstaller.ApplicationConfig, perms
 				Address:       createSocketAddress("0.0.0.0", 15008),
 			},
 			StaticResources: &envoy_bootstrap.Bootstrap_StaticResources{
+				// add this listener is for compatibility with init iptables
 				Listeners: []*envoy_listener.Listener{
 					{
 						Name:    "listener_0",
@@ -283,12 +283,12 @@ func getEnvoyConfigOnlyForOutBound(appcfg *appinstaller.ApplicationConfig, perms
 		},
 		username: appcfg.OwnerName,
 	}
-	if len(perms) > 0 {
-		_, err := ec.WithProxyOutBound(appcfg, perms)
-		if err != nil {
-			klog.Errorf("Failed to make proxyoutbound for none entrance pod err=%v", err)
-		}
+
+	_, err := ec.WithProxyOutBound(appcfg, perms)
+	if err != nil {
+		klog.Errorf("Failed to make proxyoutbound for none entrance pod err=%v", err)
 	}
+
 	m, err := utils.ToJSONMap(ec.bs)
 	if err != nil {
 		klog.Errorf("Failed to convert proto.Message to map err=%v", err)
@@ -1018,6 +1018,73 @@ func (ec *envoyConfig) WithUpload() *envoyConfig {
 }
 
 func (ec *envoyConfig) WithProxyOutBound(appcfg *appinstaller.ApplicationConfig, perms []appinstaller.SysDataPermission) (*envoyConfig, error) {
+	if len(perms) == 0 {
+		ec.bs.StaticResources.Listeners = append(ec.bs.StaticResources.Listeners, &envoy_listener.Listener{
+			Name:    "listener_outbound",
+			Address: createSocketAddress("0.0.0.0", 15001),
+			ListenerFilters: []*envoy_listener.ListenerFilter{
+				{
+					Name: "envoy.filters.listener.original_dst",
+					ConfigType: &envoy_listener.ListenerFilter_TypedConfig{
+						TypedConfig: utils.MessageToAny(&originaldst.OriginalDst{}),
+					},
+				},
+			},
+			FilterChains: []*envoy_listener.FilterChain{
+				{
+					Filters: []*envoy_listener.Filter{
+						{
+							Name: "envoy.filters.network.http_connection_manager",
+							ConfigType: &envoy_listener.Filter_TypedConfig{
+								TypedConfig: utils.MessageToAny(&http_connection_manager.HttpConnectionManager{
+									HttpFilters: []*http_connection_manager.HttpFilter{
+										{
+											Name: "envoy.filters.http.router",
+											ConfigType: &http_connection_manager.HttpFilter_TypedConfig{
+												TypedConfig: utils.MessageToAny(&envoy_router.Router{}),
+											},
+										},
+									},
+									StatPrefix:    "outbound_orig_http",
+									SkipXffAppend: false,
+									CodecType:     http_connection_manager.HttpConnectionManager_AUTO,
+									RouteSpecifier: &http_connection_manager.HttpConnectionManager_RouteConfig{
+										RouteConfig: &routev3.RouteConfiguration{
+											Name: "local_route",
+											VirtualHosts: []*routev3.VirtualHost{
+												{
+													Name:    "service",
+													Domains: []string{"*"},
+													Routes: []*routev3.Route{
+														{
+															Match: &routev3.RouteMatch{
+																PathSpecifier: &routev3.RouteMatch_Prefix{
+																	Prefix: "/",
+																},
+															},
+															Action: &routev3.Route_Route{
+																Route: &routev3.RouteAction{
+																	ClusterSpecifier: &routev3.RouteAction_Cluster{
+																		Cluster: "original_dst",
+																	},
+																},
+															},
+														},
+													},
+												},
+											},
+										},
+									},
+								}),
+							},
+						},
+					},
+				},
+			},
+		})
+		return ec, nil
+	}
+
 	config, err := ctrl.GetConfig()
 	if err != nil {
 		return ec, err
