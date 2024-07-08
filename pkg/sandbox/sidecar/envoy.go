@@ -1094,7 +1094,8 @@ func (ec *envoyConfig) WithProxyOutBound(appcfg *appinstaller.ApplicationConfig,
 		return ec, err
 	}
 	prClient := provider.NewRegistryRequest(client)
-	registries, err := prClient.List(context.TODO(), "", metav1.ListOptions{})
+	namespace := fmt.Sprintf("user-system-%s", appcfg.OwnerName)
+	registries, err := prClient.List(context.TODO(), namespace, metav1.ListOptions{})
 	if err != nil {
 		klog.Infof("get registries err=%v", err)
 		return ec, err
