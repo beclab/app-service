@@ -21,6 +21,10 @@ const (
 
 	ParamWorkflowName = "name"
 	UserName          = "name"
+
+	ParamDataType = "datatype"
+	ParamGroup    = "group"
+	ParamVersion  = "version"
 )
 
 var (
@@ -432,6 +436,31 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "success to get an app", nil))
 
+	ws.Route(ws.GET("/perms").
+		To(handler.applicationPermissionList).
+		Doc("get app permissions list").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
+		Returns(http.StatusOK, "success to get an apps permissions list", nil))
+
+	ws.Route(ws.GET("/perms/{"+ParamAppName+"}").
+		To(handler.getApplicationPermission).
+		Doc("get an app permission").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Param(ws.PathParameter(ParamAppName, "the name of application")).
+		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
+		Returns(http.StatusOK, "success to get an app permission", nil))
+
+	ws.Route(ws.GET("/perms/provider-registry/{"+ParamDataType+"}/{"+ParamGroup+"}/{"+ParamVersion+"}").
+		To(handler.getProviderRegistry).
+		Doc("get an app permission").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
+		Param(ws.PathParameter(ParamDataType, "the dataType of providerregistry")).
+		Param(ws.PathParameter(ParamGroup, "the group of providerregistry")).
+		Param(ws.PathParameter(ParamVersion, "the version of providerregistry")).
+		Returns(http.StatusOK, "success to get an providerregistry", nil))
+
 	ws.Route(ws.GET("/apps/pending-installing/task").
 		To(handler.pendingOrInstallingApps).
 		Doc("get list of pending or installing app").
@@ -679,7 +708,7 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 
 	ws.Route(ws.GET("/middlewares/operate").
 		To(handler.operateMiddlewareList).
-		Doc("get recommends operate list").
+		Doc("get middlewares operate list").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "get middleware operate list", nil))

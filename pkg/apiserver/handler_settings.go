@@ -1,11 +1,14 @@
 package apiserver
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/provider"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
 
 	"strings"
 
@@ -468,4 +471,193 @@ func (h *Handler) tryToPatchStatefulSetAnnotations(patchData map[string]interfac
 			metav1.PatchOptions{})
 
 	return err
+}
+
+type permission struct {
+	DataType string   `json:"dataType"`
+	Group    string   `json:"group"`
+	Version  string   `json:"version"`
+	Ops      []string `json:"ops"`
+}
+
+type applicationPermission struct {
+	App         string       `json:"app"`
+	Owner       string       `json:"owner"`
+	Permissions []permission `json:"permissions"`
+}
+
+func (h *Handler) applicationPermissionList(req *restful.Request, resp *restful.Response) {
+	owner := req.Attribute(constants.UserContextAttribute).(string)
+	//token := req.HeaderParameter(constants.AuthorizationTokenKey)
+	client, err := dynamic.NewForConfig(h.kubeConfig)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	ret := make([]applicationPermission, 0)
+	apClient := provider.NewApplicationPermissionRequest(client)
+	aps, err := apClient.List(req.Request.Context(), metav1.NamespaceAll, metav1.ListOptions{})
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	for _, ap := range aps.Items {
+		if ap.Object == nil {
+			continue
+		}
+		app, _, _ := unstructured.NestedString(ap.Object, "spec", "app")
+		perms, _, _ := unstructured.NestedSlice(ap.Object, "spec", "permissions")
+		klog.Infof("perms Type: %T, perms: %v", perms, perms)
+		permissions := make([]permission, 0)
+		for _, p := range perms {
+			if perm, ok := p.(map[string]interface{}); ok {
+				ops := make([]string, 0)
+				for _, op := range perm["ops"].([]interface{}) {
+					if opStr, ok := op.(string); ok {
+						ops = append(ops, opStr)
+					}
+				}
+				permissions = append(permissions, permission{
+					DataType: perm["dataType"].(string),
+					Group:    perm["group"].(string),
+					Version:  perm["version"].(string),
+					Ops:      ops,
+				})
+			}
+
+		}
+		ret = append(ret, applicationPermission{
+			App:         app,
+			Owner:       owner,
+			Permissions: permissions,
+		})
+	}
+	resp.WriteAsJson(ret)
+}
+
+func (h *Handler) getApplicationPermission(req *restful.Request, resp *restful.Response) {
+	app := req.PathParameter(ParamAppName)
+	owner := req.Attribute(constants.UserContextAttribute).(string)
+	client, err := dynamic.NewForConfig(h.kubeConfig)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	ret := applicationPermission{}
+	apClient := provider.NewApplicationPermissionRequest(client)
+	namespace := fmt.Sprintf("user-system-%s", owner)
+	aps, err := apClient.List(req.Request.Context(), namespace, metav1.ListOptions{})
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	for _, ap := range aps.Items {
+		if ap.Object == nil {
+			continue
+		}
+		appName, _, _ := unstructured.NestedString(ap.Object, "spec", "app")
+		if appName == app {
+			perms, _, _ := unstructured.NestedSlice(ap.Object, "spec", "permissions")
+			permissions := make([]permission, 0)
+			for _, p := range perms {
+				if perm, ok := p.(map[string]interface{}); ok {
+					ops := make([]string, 0)
+					for _, op := range perm["ops"].([]interface{}) {
+						if opStr, ok := op.(string); ok {
+							ops = append(ops, opStr)
+						}
+					}
+					permissions = append(permissions, permission{
+						DataType: perm["dataType"].(string),
+						Group:    perm["group"].(string),
+						Version:  perm["version"].(string),
+						Ops:      ops,
+					})
+				}
+
+			}
+			ret = applicationPermission{
+				App:         appName,
+				Owner:       owner,
+				Permissions: permissions,
+			}
+			break
+		}
+	}
+	resp.WriteAsJson(ret)
+}
+
+type providerRegistry struct {
+	DataType    string  `json:"dataType"`
+	Deployment  string  `json:"deployment"`
+	Description string  `json:"description"`
+	Endpoint    string  `json:"endpoint"`
+	Group       string  `json:"group"`
+	Kind        string  `json:"kind"`
+	Namespace   string  `json:"namespace"`
+	OpApis      []opApi `json:"opApis"`
+}
+
+type opApi struct {
+	Name string `json:"name"`
+	URI  string `json:"uri"`
+}
+
+func (h *Handler) getProviderRegistry(req *restful.Request, resp *restful.Response) {
+	dataTypeReq := req.PathParameter(ParamDataType)
+	groupReq := req.PathParameter(ParamGroup)
+	versionReq := req.PathParameter(ParamVersion)
+	owner := req.Attribute(constants.UserContextAttribute).(string)
+	client, err := dynamic.NewForConfig(h.kubeConfig)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	ret := providerRegistry{}
+	rClient := provider.NewRegistryRequest(client)
+	namespace := fmt.Sprintf("user-system-%s", owner)
+	prs, err := rClient.List(req.Request.Context(), namespace, metav1.ListOptions{})
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	for _, ap := range prs.Items {
+		if ap.Object == nil {
+			continue
+		}
+		dataType, _, _ := unstructured.NestedString(ap.Object, "spec", "dataType")
+		group, _, _ := unstructured.NestedString(ap.Object, "spec", "group")
+		version, _, _ := unstructured.NestedString(ap.Object, "spec", "version")
+		kind, _, _ := unstructured.NestedString(ap.Object, "spec", "kind")
+
+		if dataType == dataTypeReq && group == groupReq && version == versionReq && kind == "provider" {
+			deployment, _, _ := unstructured.NestedString(ap.Object, "spec", "deployment")
+			description, _, _ := unstructured.NestedString(ap.Object, "spec", "description")
+			endpoint, _, _ := unstructured.NestedString(ap.Object, "spec", "endpoint")
+			ns, _, _ := unstructured.NestedString(ap.Object, "spec", "namespace")
+			opApis := make([]opApi, 0)
+			opApiList, _, _ := unstructured.NestedSlice(ap.Object, "spec", "opApis")
+			for _, op := range opApiList {
+				if aop, ok := op.(map[string]interface{}); ok {
+					opApis = append(opApis, opApi{
+						Name: aop["name"].(string),
+						URI:  aop["uri"].(string),
+					})
+				}
+			}
+			ret = providerRegistry{
+				DataType:    dataType,
+				Deployment:  deployment,
+				Description: description,
+				Endpoint:    endpoint,
+				Kind:        kind,
+				Group:       group,
+				Namespace:   ns,
+				OpApis:      opApis,
+			}
+			break
+		}
+
+	}
+	resp.WriteAsJson(ret)
 }
