@@ -1,15 +1,11 @@
 package apiserver
 
 import (
-	"bytetrade.io/web3os/app-service/pkg/provider"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/client-go/dynamic"
-
 	"strings"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
@@ -18,12 +14,15 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/helm"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
+	"bytetrade.io/web3os/app-service/pkg/provider"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 
 	"github.com/emicklei/go-restful/v3"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 )
@@ -543,7 +542,7 @@ func (h *Handler) getApplicationPermission(req *restful.Request, resp *restful.R
 		api.HandleError(resp, req, err)
 		return
 	}
-	ret := applicationPermission{}
+	var ret *applicationPermission
 	apClient := provider.NewApplicationPermissionRequest(client)
 	namespace := fmt.Sprintf("user-system-%s", owner)
 	aps, err := apClient.List(req.Request.Context(), namespace, metav1.ListOptions{})
@@ -576,13 +575,17 @@ func (h *Handler) getApplicationPermission(req *restful.Request, resp *restful.R
 				}
 
 			}
-			ret = applicationPermission{
+			ret = &applicationPermission{
 				App:         appName,
 				Owner:       owner,
 				Permissions: permissions,
 			}
 			break
 		}
+	}
+	if ret == nil {
+		api.HandleNotFound(resp, req, errors.New("application permission not found"))
+		return
 	}
 	resp.WriteAsJson(ret)
 }
@@ -613,7 +616,7 @@ func (h *Handler) getProviderRegistry(req *restful.Request, resp *restful.Respon
 		api.HandleError(resp, req, err)
 		return
 	}
-	ret := providerRegistry{}
+	var ret *providerRegistry
 	rClient := provider.NewRegistryRequest(client)
 	namespace := fmt.Sprintf("user-system-%s", owner)
 	prs, err := rClient.List(req.Request.Context(), namespace, metav1.ListOptions{})
@@ -645,7 +648,7 @@ func (h *Handler) getProviderRegistry(req *restful.Request, resp *restful.Respon
 					})
 				}
 			}
-			ret = providerRegistry{
+			ret = &providerRegistry{
 				DataType:    dataType,
 				Deployment:  deployment,
 				Description: description,
@@ -657,7 +660,10 @@ func (h *Handler) getProviderRegistry(req *restful.Request, resp *restful.Respon
 			}
 			break
 		}
-
+	}
+	if ret == nil {
+		api.HandleNotFound(resp, req, errors.New("provider registry not found"))
+		return
 	}
 	resp.WriteAsJson(ret)
 }
