@@ -571,6 +571,7 @@ func toApplicationConfig(app, chart string, cfg *appinstaller.AppConfiguration) 
 		OnlyAdmin:          cfg.Spec.OnlyAdmin,
 		Namespace:          cfg.Spec.Namespace,
 		MobileSupported:    cfg.Options.MobileSupported,
+		OIDC:               cfg.Options.OIDC,
 	}, chart, nil
 }
 

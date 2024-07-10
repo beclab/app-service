@@ -68,4 +68,5 @@ type ApplicationConfig struct {
 	Upload             Upload
 	OnlyAdmin          bool
 	MobileSupported    bool
+	OIDC               OIDC
 }

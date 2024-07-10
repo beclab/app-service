@@ -14,6 +14,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
 	"bytetrade.io/web3os/app-service/pkg/helm"
+	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 
@@ -309,11 +310,12 @@ func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.
 	owner := deployment.GetLabels()[constants.ApplicationOwnerLabel]
 	name := deployment.GetLabels()[constants.ApplicationNameLabel]
 	icon := deployment.GetAnnotations()[constants.ApplicationIconLabel]
-	settings := r.getAppSettings(name, owner, deployment, nil)
 	entrances, err := r.getEntranceServiceAddress(ctx, deployment)
 	if err != nil {
 		ctrl.Log.Error(err, "get entrance error")
 	}
+	//
+	settings := r.getAppSettings(ctx, name, owner, deployment, nil, entrances)
 
 	var appid string
 	var isSysApp bool
@@ -454,7 +456,8 @@ func (r *ApplicationReconciler) getEntranceServiceAddress(ctx context.Context, d
 	return entrances, nil
 }
 
-func (r *ApplicationReconciler) getAppSettings(appName, owner string, deployment client.Object, app *appv1alpha1.Application) map[string]string {
+func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, owner string, deployment client.Object,
+	app *appv1alpha1.Application, entrances []appv1alpha1.Entrance) map[string]string {
 	settings := make(map[string]string)
 	settings["source"] = api.Unknown.String()
 
@@ -517,6 +520,40 @@ func (r *ApplicationReconciler) getAppSettings(appName, owner string, deployment
 				settings["mobileSupported"] = "true"
 			} else {
 				settings["mobileSupported"] = "false"
+			}
+
+			if appCfg.OIDC.Enabled {
+				// get oidc client id and secret created at installing
+				var secret corev1.Secret
+				err = r.Get(ctx,
+					types.NamespacedName{Namespace: deployment.GetNamespace(), Name: constants.OIDCSecret},
+					&secret)
+				if err != nil {
+					klog.Errorf("Failed to get app's oidc secret err=%v, app=%s, namespace=%s", err, appName, deployment.GetNamespace())
+				} else {
+					settings["oidc.client.id"] = string(secret.Data["id"])
+					settings["oidc.client.secret"] = string(secret.Data["secret"])
+
+					zone, err := kubesphere.GetUserZone(ctx, r.Kubeconfig, owner)
+					if err != nil {
+						klog.Error("get user zone error, ", err)
+					} else {
+
+						multiEntrace := (len(appCfg.Entrances) > 1)
+						for i, e := range appCfg.Entrances {
+							if e.Name == appCfg.OIDC.EntranceName {
+								var appUrl string
+								if multiEntrace {
+									appUrl = fmt.Sprintf("https://%s%d.%s%s", appCfg.AppID, i, zone, appCfg.OIDC.RedirectUri)
+								} else {
+									appUrl = fmt.Sprintf("https://%s.%s%s", appCfg.AppID, zone, appCfg.OIDC.RedirectUri)
+								}
+								settings["oidc.client.redirect_uri"] = appUrl
+							}
+						}
+
+					} // end of if get zone
+				} // end of if get secret
 			}
 		}
 	} else {

@@ -99,6 +99,7 @@ type Options struct {
 	WsConfig        WsConfig                 `yaml:"websocket" json:"websocket"`
 	Upload          Upload                   `yaml:"upload" json:"upload"`
 	SyncProvider    []map[string]interface{} `yaml:"syncProvider" json:"syncProvider"`
+	OIDC            OIDC                     `yaml:"oidc" json:"oidc"`
 }
 
 type ResetCookie struct {
@@ -119,4 +120,10 @@ type Upload struct {
 	FileType    []string `yaml:"fileType" json:"fileType"`
 	Dest        string   `yaml:"dest" json:"dest"`
 	LimitedSize int      `yaml:"limitedSize" json:"limitedSize"`
+}
+
+type OIDC struct {
+	Enabled      bool   `yaml:"enabled" json:"enabled"`
+	RedirectUri  string `yaml:"redirectUri" json:"redirectUri"`
+	EntranceName string `yaml:"entranceName" json:"entranceName"`
 }

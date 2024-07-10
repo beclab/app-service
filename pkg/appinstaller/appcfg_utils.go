@@ -159,6 +159,7 @@ func getAppConfigFromConfigurationFile(app, chart string) (*ApplicationConfig, e
 		OnlyAdmin:          cfg.Spec.OnlyAdmin,
 		Namespace:          cfg.Spec.Namespace,
 		MobileSupported:    cfg.Options.MobileSupported,
+		OIDC:               cfg.Options.OIDC,
 	}, nil
 }
 
