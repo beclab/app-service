@@ -87,6 +87,8 @@ const (
 
 	UserSpaceDirKey   = "userspace_hostpath"
 	UserAppDataDirKey = "appcache_hostpath"
+
+	OIDCSecret = "oidc-secret"
 )
 
 var (

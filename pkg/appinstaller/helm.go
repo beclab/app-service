@@ -26,6 +26,7 @@ import (
 	"helm.sh/helm/v3/pkg/cli"
 	helmrelease "helm.sh/helm/v3/pkg/release"
 	"helm.sh/helm/v3/pkg/storage/driver"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -411,12 +412,16 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 	values["svcs"] = svcs
 	klog.Info("svcs: ", svcs)
 
-	gpuType, err := utils.FindGpuTypeFromNodes(context.TODO(), kClient)
+	gpuType, err := utils.FindGpuTypeFromNodes(h.ctx, kClient)
 	if err != nil {
 		return values, err
 	}
 	values["gpu"] = gpuType
-	return values, nil
+
+	if h.app.OIDC.Enabled {
+		err = h.createOIDCClient(values, zone, h.app.Namespace)
+	}
+	return values, err
 }
 
 func (h *HelmOps) userZone() (string, error) {
@@ -802,6 +807,55 @@ func (h *HelmOps) rollBack() error {
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+func (h *HelmOps) createOIDCClient(values map[string]interface{}, userZone, namespace string) error {
+	client, err := kubernetes.NewForConfig(h.kubeConfig)
+	if err != nil {
+		return err
+	}
+
+	id := h.app.AppID + "." + h.app.OwnerName
+	secret := utils.GetRandomCharacters()
+
+	values["oidc"] = map[string]interface{}{
+		"client": map[string]interface{}{
+			"id":     id,
+			"secret": secret,
+		},
+		"issuer": "https://auth." + userZone,
+	}
+
+	oidcSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      constants.OIDCSecret,
+			Namespace: namespace,
+		},
+		StringData: map[string]string{
+			"id":     id,
+			"secret": secret,
+		},
+	}
+
+	_, err = client.CoreV1().Secrets(namespace).Get(h.ctx, oidcSecret.Name, metav1.GetOptions{})
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			return err
+		}
+	} else {
+		err = client.CoreV1().Secrets(namespace).Delete(h.ctx, oidcSecret.Name, metav1.DeleteOptions{})
+		if err != nil {
+			return err
+		}
+	}
+
+	_, err = client.CoreV1().Secrets(namespace).Create(h.ctx, oidcSecret, metav1.CreateOptions{})
+	if err != nil {
+		klog.Error("create oidc secret error, ", err)
+		return err
+	}
+
 	return nil
 }
 
