@@ -418,7 +418,9 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 	}
 	values["gpu"] = gpuType
 
-	err = h.createOIDCClient(values, zone, h.app.Namespace)
+	if h.app.OIDC.Enabled {
+		err = h.createOIDCClient(values, zone, h.app.Namespace)
+	}
 	return values, err
 }
 
