@@ -815,7 +815,7 @@ func (h *HelmOps) createOIDCClient(values map[string]interface{}, userZone, name
 	}
 
 	id := h.app.AppID + "." + h.app.OwnerName
-	secret := utils.RandString()
+	secret := utils.GetRandomCharacters()
 
 	values["oidc"] = map[string]interface{}{
 		"client": map[string]interface{}{

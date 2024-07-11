@@ -532,7 +532,12 @@ func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, own
 					klog.Errorf("Failed to get app's oidc secret err=%v, app=%s, namespace=%s", err, appName, deployment.GetNamespace())
 				} else {
 					settings["oidc.client.id"] = string(secret.Data["id"])
-					settings["oidc.client.secret"] = string(secret.Data["secret"])
+
+					encryptSecret, err := utils.Pbkdf2Crypto(string(secret.Data["secret"]))
+					if err != nil {
+						klog.Error("encrypt secret error, ", err)
+					}
+					settings["oidc.client.secret"] = encryptSecret
 
 					zone, err := kubesphere.GetUserZone(ctx, r.Kubeconfig, owner)
 					if err != nil {
