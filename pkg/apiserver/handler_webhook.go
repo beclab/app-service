@@ -368,6 +368,7 @@ func (h *Handler) validateProviderRegistry(ctx context.Context, req *admissionv1
 	dataTypeReq, _, _ := unstructured.NestedString(obj.Object, "spec", "dataType")
 	groupReq, _, _ := unstructured.NestedString(obj.Object, "spec", "group")
 	versionReq, _, _ := unstructured.NestedString(obj.Object, "spec", "version")
+	kindReq, _, _ := unstructured.NestedString(obj.Object, "spec", "kind")
 
 	dClient, err := dynamic.NewForConfig(h.kubeConfig)
 	if err != nil {
@@ -379,13 +380,21 @@ func (h *Handler) validateProviderRegistry(ctx context.Context, req *admissionv1
 		return h.sidecarWebhook.AdmissionError(err)
 	}
 	for _, pr := range prs.Items {
+		if pr.GetName() == obj.GetName() {
+			continue
+		}
+		if pr.GetDeletionTimestamp() != nil {
+			continue
+		}
 		dataType, _, _ := unstructured.NestedString(pr.Object, "spec", "dataType")
 		group, _, _ := unstructured.NestedString(pr.Object, "spec", "group")
 		version, _, _ := unstructured.NestedString(pr.Object, "spec", "version")
-		if dataType == dataTypeReq && group == groupReq && version == versionReq {
-			resp.Allowed = false
-			resp.Result = &metav1.Status{Message: "duplicated provider registry with same dataType,group,version"}
+		kind, _, _ := unstructured.NestedString(pr.Object, "spec", "version")
 
+		if dataType == dataTypeReq && group == groupReq && version == versionReq && kindReq == "provider" && kindReq == kind {
+			resp.Allowed = false
+			resp.Result = &metav1.Status{Message: fmt.Sprintf("duplicated provider registry with same dataType,group,version, name=%s", pr.GetName())}
+			return resp
 		}
 	}
 
