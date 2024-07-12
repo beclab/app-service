@@ -1165,6 +1165,33 @@ func (ec *envoyConfig) WithProxyOutBound(appcfg *appinstaller.ApplicationConfig,
 			Domains: []string{vh},
 			Routes:  rs,
 		})
+		virtualHosts = append(virtualHosts, &routev3.VirtualHost{
+			Name:    "origin_http" + vh,
+			Domains: []string{"*"},
+			Routes: []*routev3.Route{
+				{
+					Match: &routev3.RouteMatch{
+						PathSpecifier: &routev3.RouteMatch_Prefix{
+							Prefix: "/",
+						},
+					},
+					Action: &routev3.Route_Route{
+						Route: &routev3.RouteAction{
+							ClusterSpecifier: &routev3.RouteAction_Cluster{
+								Cluster: "original_dst",
+							},
+						},
+					},
+					TypedPerFilterConfig: map[string]*any.Any{
+						"envoy.filters.http.lua": utils.MessageToAny(&envoy_lua.LuaPerRoute{
+							Override: &envoy_lua.LuaPerRoute_Disabled{
+								Disabled: true,
+							},
+						}),
+					},
+				},
+			},
+		})
 	}
 	ec.bs.StaticResources.Listeners = append(ec.bs.StaticResources.Listeners, &envoy_listener.Listener{
 		Name:    "listener_outbound",
