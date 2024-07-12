@@ -17,10 +17,14 @@ type UserDataPermission string
 type Middleware interface{}
 
 type SysDataPermission struct {
-	Group    string   `yaml:"group" json:"group"`
-	DataType string   `yaml:"dataType" json:"dataType"`
-	Version  string   `yaml:"version" json:"version"`
-	Ops      []string `yaml:"ops" json:"ops"`
+	AppName   string   `yaml:"appName" json:"appName"`
+	Port      string   `yaml:"port" json:"port"`
+	Svc       string   `yaml:"svc,omitempty" json:"svc,omitempty"`
+	Namespace string   `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+	Group     string   `yaml:"group" json:"group"`
+	DataType  string   `yaml:"dataType" json:"dataType"`
+	Version   string   `yaml:"version" json:"version"`
+	Ops       []string `yaml:"ops" json:"ops"`
 }
 
 type AppRequirement struct {

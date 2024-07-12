@@ -249,11 +249,22 @@ func (wh *Webhook) MustInject(ctx context.Context, pod *corev1.Pod, namespace st
 				dataType := sysData["dataType"].(string)
 				version := sysData["version"].(string)
 				if version == "v2" {
+					var svc, ns string
+					if val, ok := sysData["svc"].(string); ok {
+						svc = val
+					}
+					if val, ok := sysData["namespace"].(string); ok {
+						ns = val
+					}
 					perms = append(perms, appinstaller.SysDataPermission{
-						Group:    sysData["group"].(string),
-						DataType: dataType,
-						Version:  sysData["version"].(string),
-						Ops:      ops,
+						AppName:   sysData["appName"].(string),
+						Svc:       svc,
+						Namespace: ns,
+						Port:      sysData["port"].(string),
+						Group:     sysData["group"].(string),
+						DataType:  dataType,
+						Version:   sysData["version"].(string),
+						Ops:       ops,
 					})
 				}
 

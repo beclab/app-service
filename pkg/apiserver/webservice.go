@@ -300,6 +300,13 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Returns(http.StatusOK, "add limit success", nil)).
 		Consumes(restful.MIME_JSON)
 
+	ws.Route(ws.POST("/provider-registry/validate").
+		To(handler.providerRegistryValidate).
+		Doc("validating webhook for validate app install namespace").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Returns(http.StatusOK, "provider registry validated success", nil)).
+		Consumes(restful.MIME_JSON)
+
 	// sys event callback
 	ws.Route(ws.POST("/backup/new").
 		To(handler.backupNew).

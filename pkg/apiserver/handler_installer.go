@@ -456,10 +456,14 @@ func toApplicationConfig(app, chart string, cfg *appinstaller.AppConfiguration) 
 		var perm []appinstaller.SysDataPermission
 		for _, s := range cfg.Permission.SysData {
 			perm = append(perm, appinstaller.SysDataPermission{
-				Group:    s.Group,
-				DataType: s.DataType,
-				Version:  s.Version,
-				Ops:      s.Ops,
+				AppName:   s.AppName,
+				Svc:       s.Svc,
+				Namespace: s.Namespace,
+				Port:      s.Port,
+				Group:     s.Group,
+				DataType:  s.DataType,
+				Version:   s.Version,
+				Ops:       s.Ops,
 			})
 		}
 		permission = append(permission, perm)
