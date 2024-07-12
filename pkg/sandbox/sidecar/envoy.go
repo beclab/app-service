@@ -1093,62 +1093,34 @@ func (ec *envoyConfig) WithProxyOutBound(appcfg *appinstaller.ApplicationConfig,
 	if err != nil {
 		return ec, err
 	}
-	prClient := provider.NewRegistryRequest(client)
-	namespace := fmt.Sprintf("user-system-%s", appcfg.OwnerName)
-	registries, err := prClient.List(context.TODO(), namespace, metav1.ListOptions{})
-	if err != nil {
-		klog.Infof("get registries err=%v", err)
-		return ec, err
-	}
 	type route struct {
-		uri      string
-		endpoint string
+		domain   string
 		dataType string
 		group    string
 		version  string
 	}
-	type OpApisItem struct {
-		Name string `json:"name,omitempty"`
-		URI  string `json:"uri,omitempty"`
-	}
 	routesMap := make(map[string][]route)
-	if len(registries.Items) > 0 {
-		for _, pr := range registries.Items {
-			state, _, err := unstructured.NestedString(pr.Object, "status", "state")
-			if err != nil {
-				return ec, err
-			}
-			if state == "active" {
-				dataType, _, _ := unstructured.NestedString(pr.Object, "spec", "dataType")
-				group, _, _ := unstructured.NestedString(pr.Object, "spec", "group")
-				version, _, _ := unstructured.NestedString(pr.Object, "spec", "version")
-				kind, _, _ := unstructured.NestedString(pr.Object, "spec", "kind")
-				ep, _, _ := unstructured.NestedString(pr.Object, "spec", "endpoint")
-
-				for _, perm := range perms {
-					if perm.DataType == dataType && perm.Group == group && perm.Version == version && kind == "provider" {
-						opApis, _, _ := unstructured.NestedSlice(pr.Object, "spec", "opApis")
-						for _, opName := range perm.Ops {
-							for _, p := range opApis {
-								op := p.(map[string]interface{})
-								if opName == op["name"].(string) {
-									routesMap[ep] = append(routesMap[ep], route{
-										op["uri"].(string),
-										ep,
-										dataType,
-										group,
-										version,
-									})
-								}
-							}
-						}
-
-					}
-				}
+	for _, p := range perms {
+		svc := fmt.Sprintf("%s-svc", p.AppName)
+		if p.Svc != "" {
+			svc = p.Svc
+		}
+		namespace := fmt.Sprintf("%s-%s", p.AppName, appcfg.OwnerName)
+		if p.Namespace != "" {
+			if p.Namespace == "user-space" || p.Namespace == "user-system" {
+				namespace = fmt.Sprintf("%s-%s", p.Namespace, appcfg.OwnerName)
+			} else {
+				namespace = p.Namespace
 			}
 		}
+		domain := fmt.Sprintf("%s.%s:%s", svc, namespace, p.Port)
+		routesMap[domain] = append(routesMap[domain], route{
+			domain:   domain,
+			dataType: p.DataType,
+			group:    p.Group,
+			version:  p.Version,
+		})
 	}
-
 	apClient := provider.NewApplicationPermissionRequest(client)
 	ap, err := apClient.Get(context.TODO(), "user-system-"+appcfg.OwnerName, appcfg.AppName, metav1.GetOptions{})
 	if err != nil {
@@ -1166,7 +1138,7 @@ func (ec *envoyConfig) WithProxyOutBound(appcfg *appinstaller.ApplicationConfig,
 			rs = append(rs, &routev3.Route{
 				Match: &routev3.RouteMatch{
 					PathSpecifier: &routev3.RouteMatch_Prefix{
-						Prefix: r.uri,
+						Prefix: "/",
 					},
 				},
 				Action: &routev3.Route_Route{
@@ -1174,7 +1146,7 @@ func (ec *envoyConfig) WithProxyOutBound(appcfg *appinstaller.ApplicationConfig,
 						ClusterSpecifier: &routev3.RouteAction_Cluster{
 							Cluster: "system-server",
 						},
-						PrefixRewrite: filepath.Join("/system-server/v2", r.dataType, r.group, r.version, r.uri),
+						PrefixRewrite: "/system-server/v2/" + r.dataType + "/" + r.group + "/" + r.version + "/",
 					},
 				},
 				RequestHeadersToAdd: []*corev3.HeaderValueOption{
@@ -1187,27 +1159,6 @@ func (ec *envoyConfig) WithProxyOutBound(appcfg *appinstaller.ApplicationConfig,
 				},
 			})
 		}
-		rs = append(rs, &routev3.Route{
-			Match: &routev3.RouteMatch{
-				PathSpecifier: &routev3.RouteMatch_Prefix{
-					Prefix: "/",
-				},
-			},
-			Action: &routev3.Route_Route{
-				Route: &routev3.RouteAction{
-					ClusterSpecifier: &routev3.RouteAction_Cluster{
-						Cluster: "original_dst",
-					},
-				},
-			},
-			TypedPerFilterConfig: map[string]*any.Any{
-				"envoy.filters.http.lua": utils.MessageToAny(&envoy_lua.LuaPerRoute{
-					Override: &envoy_lua.LuaPerRoute_Disabled{
-						Disabled: true,
-					},
-				}),
-			},
-		})
 
 		virtualHosts = append(virtualHosts, &routev3.VirtualHost{
 			Name:    vh,
@@ -1322,10 +1273,7 @@ function envoy_on_request(request_handle)
 	local minute_level_time = current_time - (current_time % 60)
 	local time_string = tostring(minute_level_time)
 	local s = app_key .. app_secret .. time_string
-	request_handle:logInfo("originstring:" .. s)
 	local hash = sha.sha256(s)
-	request_handle:logInfo("Hello World.")
-	request_handle:logInfo(hash)
 	request_handle:headers():add("X-Auth-Signature",hash)
 end
 `

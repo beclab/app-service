@@ -9,6 +9,7 @@ import (
 
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/constants"
+	"bytetrade.io/web3os/app-service/pkg/provider"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/webhook"
 
@@ -18,6 +19,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -307,4 +310,84 @@ func (h *Handler) findNvidiaGpuFromNodes(ctx context.Context) (string, error) {
 	}
 
 	return "", errors.New("gpu node not found")
+}
+
+func (h *Handler) providerRegistryValidate(req *restful.Request, resp *restful.Response) {
+	klog.Infof("Received provider registry validate webhook request: Method=%v, URL=%v", req.Request.Method, req.Request.URL)
+	admissionReqBody, ok := h.sidecarWebhook.GetAdmissionRequestBody(req, resp)
+	if !ok {
+		return
+	}
+	var admissionReq, admissionResp admissionv1.AdmissionReview
+	proxyUUID := uuid.New()
+	if _, _, err := webhook.Deserializer.Decode(admissionReqBody, nil, &admissionReq); err != nil {
+		klog.Errorf("Failed to decode admission request body err=%v", err)
+		admissionResp.Response = h.sidecarWebhook.AdmissionError(err)
+	} else {
+		admissionResp.Response = h.validateProviderRegistry(req.Request.Context(), admissionReq.Request, proxyUUID)
+	}
+	admissionResp.TypeMeta = admissionReq.TypeMeta
+	admissionResp.Kind = admissionReq.Kind
+
+	requestForNamespace := "unknown"
+	if admissionReq.Request != nil {
+		requestForNamespace = admissionReq.Request.Namespace
+	}
+	err := resp.WriteAsJson(&admissionResp)
+	if err != nil {
+		klog.Errorf("Failed to write response validate review[provider registry] in namespace=%s err=%v", requestForNamespace, err)
+		return
+	}
+	klog.Errorf("Done responding to admission[validate provider registry] request with uuid=%s namespace=%s", proxyUUID, requestForNamespace)
+}
+
+func (h *Handler) validateProviderRegistry(ctx context.Context, req *admissionv1.AdmissionRequest, proxyUUID uuid.UUID) *admissionv1.AdmissionResponse {
+	if req == nil {
+		klog.Error("Failed to get admission request err=admission request is nil")
+		return h.sidecarWebhook.AdmissionError(errNilAdmissionRequest)
+	}
+	klog.Infof("Enter validate logic namespace=%s name=%s, kind=%s", req.Namespace, req.Name, req.Kind.Kind)
+	resp := &admissionv1.AdmissionResponse{
+		Allowed: true,
+		UID:     req.UID,
+	}
+
+	// Decode the Object spec from the request.
+	obj := &unstructured.Unstructured{}
+	raw := req.Object.Raw
+	err := json.Unmarshal(raw, &obj)
+	if err != nil {
+		klog.Errorf("Failed to unmarshal request object raw to unstructured with uuid=%s namespace=%s", proxyUUID, req.Namespace)
+		return h.sidecarWebhook.AdmissionError(err)
+	}
+	if obj.Object == nil {
+		klog.Errorf("Failed to get object")
+		return h.sidecarWebhook.AdmissionError(err)
+	}
+
+	dataTypeReq, _, _ := unstructured.NestedString(obj.Object, "spec", "dataType")
+	groupReq, _, _ := unstructured.NestedString(obj.Object, "spec", "group")
+	versionReq, _, _ := unstructured.NestedString(obj.Object, "spec", "version")
+
+	dClient, err := dynamic.NewForConfig(h.kubeConfig)
+	if err != nil {
+		return h.sidecarWebhook.AdmissionError(err)
+	}
+	prClient := provider.NewRegistryRequest(dClient)
+	prs, err := prClient.List(ctx, req.Namespace, metav1.ListOptions{})
+	if err != nil {
+		return h.sidecarWebhook.AdmissionError(err)
+	}
+	for _, pr := range prs.Items {
+		dataType, _, _ := unstructured.NestedString(pr.Object, "spec", "dataType")
+		group, _, _ := unstructured.NestedString(pr.Object, "spec", "group")
+		version, _, _ := unstructured.NestedString(pr.Object, "spec", "version")
+		if dataType == dataTypeReq && group == groupReq && version == versionReq {
+			resp.Allowed = false
+			resp.Result = &metav1.Status{Message: "duplicated provider registry with same dataType,group,version"}
+
+		}
+	}
+
+	return resp
 }

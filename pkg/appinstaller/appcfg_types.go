@@ -63,10 +63,14 @@ type Permission struct {
 }
 
 type SysDataCfg struct {
-	Group    string   `yaml:"group" json:"group"`
-	DataType string   `yaml:"dataType" json:"dataType"`
-	Version  string   `yaml:"version" json:"version"`
-	Ops      []string `yaml:"ops" json:"ops"`
+	AppName   string   `yaml:"appName" json:"appName"`
+	Svc       string   `yaml:"svc,omitempty" json:"svc,omitempty"`
+	Namespace string   `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+	Port      string   `yaml:"port" json:"port"`
+	Group     string   `yaml:"group" json:"group"`
+	DataType  string   `yaml:"dataType" json:"dataType"`
+	Version   string   `yaml:"version" json:"version"`
+	Ops       []string `yaml:"ops" json:"ops"`
 }
 
 type Policy struct {
