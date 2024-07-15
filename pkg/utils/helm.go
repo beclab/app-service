@@ -134,9 +134,6 @@ func GetResourceListFromChart(chartPath string) (resources kube.ResourceList, er
 	values["mongodb"] = map[string]interface{}{
 		"databases": map[string]interface{}{},
 	}
-	values["zinc"] = map[string]interface{}{
-		"indexes": map[string]interface{}{},
-	}
 	values["svcs"] = map[string]interface{}{}
 
 	ret, err := instAction.RunWithContext(context.Background(), chartRequested, values)

@@ -1,12 +1,9 @@
 package tapr
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
-	"os"
 	"strings"
 	"time"
 
@@ -14,10 +11,6 @@ import (
 
 	"github.com/emicklei/go-restful/v3"
 	"github.com/go-resty/resty/v2"
-	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 )
@@ -33,8 +26,6 @@ const (
 	TypeMongoDB MiddlewareType = "mongodb"
 	// TypeRedis indicates the middleware is redis.
 	TypeRedis MiddlewareType = "redis"
-	// TypeZincSearch indicates the middleware is zinc search.
-	TypeZincSearch MiddlewareType = "zinc"
 )
 
 func (mr MiddlewareType) String() string {
@@ -179,32 +170,13 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 			"databases": resp.Databases,
 		}
 	}
-	if middleware.ZincSearch != nil {
-		username := fmt.Sprintf("%s-%s-%s", middleware.ZincSearch.Username, ownerName, appName)
-		err := setZincSearch(kubeConfig, appName, appNamespace, namespace, username,
-			middleware.ZincSearch.Password, chartPath, middleware.ZincSearch.Indexes, TypeZincSearch)
-		if err != nil {
-			return err
-		}
-		resp, err := getMiddlewareRequest(TypeZincSearch)
-		if err != nil {
-			return err
-		}
-		vals["zinc"] = map[string]interface{}{
-			"host":     resp.Host,
-			"port":     resp.Port,
-			"username": resp.UserName,
-			"password": resp.Password,
-			"indexes":  resp.Indexes,
-		}
-	}
 	return nil
 }
 
 func process(kubeConfig *rest.Config, appName, appNamespace, namespace, username, password string,
 	databases []Database, middleware MiddlewareType) error {
 	request, err := GenMiddleRequest(middleware, appName,
-		appNamespace, namespace, username, password, databases, []Index{})
+		appNamespace, namespace, username, password, databases)
 	if err != nil {
 		klog.Errorf("Failed to generate middleware request from template middlewareType=%s err=%v", middleware, err)
 		return err
@@ -218,81 +190,6 @@ func process(kubeConfig *rest.Config, appName, appNamespace, namespace, username
 	_, err = CreateOrUpdateMiddlewareRequest(kubeConfig, namespace, request)
 	if err != nil {
 		klog.Info("Failed to create or update middleware request middlewareType=%s err=%v", middleware, err)
-		return err
-	}
-	return nil
-}
-
-func setZincSearch(config *rest.Config, appName, appNameSpace, namespace, username, password,
-	chartPath string, indexes []Index, middleware MiddlewareType) error {
-	// create configmap before send mr request
-	for _, index := range indexes {
-		err := createOrUpdateConfigMapFromIndexes(config, index.Name, namespace, chartPath)
-		if err != nil {
-			return err
-		}
-	}
-
-	request, err := GenMiddleRequest(middleware, appName, appNameSpace, namespace, username,
-		password, []Database{}, indexes)
-	if err != nil {
-		klog.Info("Failed to generate middleware request middlewareType=%s err=%v", middleware, err)
-		return err
-	}
-	if len(password) == 0 {
-		err = CreateOrUpdateSecret(config, appName, namespace, middleware)
-		if err != nil {
-			return err
-		}
-	}
-	_, err = CreateOrUpdateMiddlewareRequest(config, namespace, request)
-	if err != nil {
-		klog.Errorf("Failed to create middleware request middlewareType=%s err=%v", middleware, err)
-		return err
-	}
-	return nil
-}
-
-func createOrUpdateConfigMapFromIndexes(config *rest.Config, name, namespace, chartPath string) error {
-	client, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return err
-	}
-	f, err := os.Open(chartPath + "/" + name + ".json")
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	data, err := ioutil.ReadAll(f)
-	if err != nil {
-		return err
-	}
-
-	existConfigMap, err := client.CoreV1().ConfigMaps(namespace).Get(context.Background(), name, metav1.GetOptions{})
-	if err != nil {
-		// configmap does not exists, create new configmap
-		if apierrors.IsNotFound(err) {
-			configMap := &corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      name,
-					Namespace: namespace,
-				},
-				Data: map[string]string{
-					"mappings": string(data),
-				},
-			}
-			_, err = client.CoreV1().ConfigMaps(namespace).Create(context.TODO(), configMap, metav1.CreateOptions{})
-			if err != nil {
-				return err
-			}
-		}
-		return err
-	}
-	// configmap already exists, update data mappings
-	existConfigMap.Data["mappings"] = string(data)
-	_, err = client.CoreV1().ConfigMaps(namespace).Update(context.TODO(), existConfigMap, metav1.UpdateOptions{})
-	if err != nil {
 		return err
 	}
 	return nil

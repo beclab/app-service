@@ -2,10 +2,9 @@ package tapr
 
 // Middleware describe middleware config.
 type Middleware struct {
-	Postgres   *PostgresConfig   `yaml:"postgres,omitempty"`
-	Redis      *RedisConfig      `yaml:"redis,omitempty"`
-	MongoDB    *MongodbConfig    `yaml:"mongodb,omitempty"`
-	ZincSearch *ZincSearchConfig `yaml:"zincSearch,omitempty"`
+	Postgres *PostgresConfig `yaml:"postgres,omitempty"`
+	Redis    *RedisConfig    `yaml:"redis,omitempty"`
+	MongoDB  *MongodbConfig  `yaml:"mongodb,omitempty"`
 }
 
 // Database specify database name and if distributed.
@@ -34,16 +33,4 @@ type MongodbConfig struct {
 	Username  string     `yaml:"username" json:"username"`
 	Password  string     `yaml:"password,omitempty" json:"password"`
 	Databases []Database `yaml:"databases" json:"databases"`
-}
-
-// ZincSearchConfig contains fields for zinc search config.
-type ZincSearchConfig struct {
-	Username string  `yaml:"username" json:"username"`
-	Password string  `yaml:"password" json:"password"`
-	Indexes  []Index `yaml:"indexes" json:"indexes"`
-}
-
-// Index zinc search index.
-type Index struct {
-	Name string `yaml:"name" json:"name"`
 }

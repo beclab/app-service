@@ -517,25 +517,6 @@ func toApplicationConfig(app, chart string, cfg *appinstaller.AppConfiguration) 
 		}
 	}
 
-	// check if zincSearch index json file is valid
-	if cfg.Middleware != nil && cfg.Middleware.ZincSearch != nil {
-		for _, index := range cfg.Middleware.ZincSearch.Indexes {
-			err = func() error {
-				f, e := os.Open(chart + "/" + index.Name + ".json")
-				if e != nil {
-					return e
-				}
-				defer f.Close()
-				e = utils.CheckZincSearchMappings(f)
-				return e
-			}()
-
-			if err != nil {
-				klog.Errorf("Failed to get or parse zinc index json file err=%v", err)
-				return nil, chart, err
-			}
-		}
-	}
 	if cfg.Middleware != nil && cfg.Middleware.Redis != nil {
 		if len(cfg.Middleware.Redis.Namespace) == 0 {
 			return nil, chart, errors.New("middleware of Redis namespace can not be empty")

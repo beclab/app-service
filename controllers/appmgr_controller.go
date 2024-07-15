@@ -54,7 +54,7 @@ type ApplicationManagerController struct {
 	client.Client
 }
 
-var middlewareTypes = []string{tapr.TypePostgreSQL.String(), tapr.TypeMongoDB.String(), tapr.TypeRedis.String(), tapr.TypeZincSearch.String()}
+var middlewareTypes = []string{tapr.TypePostgreSQL.String(), tapr.TypeMongoDB.String(), tapr.TypeRedis.String()}
 
 // SetupWithManager sets up the ApplicationManagerController with the provided controller manager
 func (r *ApplicationManagerController) SetupWithManager(mgr ctrl.Manager) error {

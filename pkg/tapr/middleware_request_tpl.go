@@ -99,36 +99,8 @@ spec:
     user: {{ .Middleware.Username }}
 `
 
-const zincRequest = `apiVersion: apr.bytetrade.io/v1alpha1
-kind: MiddlewareRequest
-metadata:
-  name: {{ .AppName }}-zinc
-  namespace: {{ .Namespace }}
-spec:
-  app: {{ .AppName }}
-  appNamespace: {{ .AppNamespace }}
-  middleware: zinc
-  zinc:
-    user: {{ .Middleware.Username }}
-    password:
-     {{- if not (eq .Middleware.Password "") }}
-      value: {{ .Middleware.Password }}
-     {{- else }}
-      valueFrom:
-        secretKeyRef:
-          name: {{ .AppName }}-{{ .Namespace }}-zinc-password
-          key: "password"
-	 {{- end }}
-    indexes:
-    {{- range $k, $v := .Middleware.Indexes }}
-    - name: {{ $v.Name }}
-      namespace: {{ $.Namespace }}
-      key: mappings
-    {{-  end }}
-`
-
 func GenMiddleRequest(middleware MiddlewareType, appName, appNamespace, namespace, username, password string,
-	databases []Database, indexes []Index) ([]byte, error) {
+	databases []Database) ([]byte, error) {
 	switch middleware {
 	case TypePostgreSQL:
 		return genPostgresRequest(appName, appNamespace, namespace, username, password, databases)
@@ -136,8 +108,6 @@ func GenMiddleRequest(middleware MiddlewareType, appName, appNamespace, namespac
 		return genRedisRequest(appName, appNamespace, namespace, password, databases)
 	case TypeMongoDB:
 		return genMongodbRequest(appName, appNamespace, namespace, username, password, databases)
-	case TypeZincSearch:
-		return genZincRequest(appName, appNamespace, namespace, username, password, indexes)
 	default:
 		return []byte{}, nil
 	}
@@ -217,35 +187,6 @@ func genMongodbRequest(appName, appNamespace, namespace, username, password stri
 			Username:  username,
 			Password:  password,
 			Databases: databases,
-		},
-	}
-	err = tpl.Execute(&middlewareRequest, data)
-	if err != nil {
-		return []byte{}, err
-	}
-	return middlewareRequest.Bytes(), nil
-}
-
-func genZincRequest(appName, appNamespace, namespace, username, password string, indexes []Index) ([]byte, error) {
-	tpl, err := template.New("ZincRequest").Parse(zincRequest)
-	if err != nil {
-		return []byte{}, err
-	}
-	var middlewareRequest bytes.Buffer
-
-	data := struct {
-		AppName      string
-		AppNamespace string
-		Namespace    string
-		Middleware   *ZincSearchConfig
-	}{
-		AppName:      appName,
-		AppNamespace: appNamespace,
-		Namespace:    namespace,
-		Middleware: &ZincSearchConfig{
-			Username: username,
-			Password: password,
-			Indexes:  indexes,
 		},
 	}
 	err = tpl.Execute(&middlewareRequest, data)
