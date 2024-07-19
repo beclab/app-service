@@ -209,9 +209,13 @@ func GetRefFromResourceList(chartPath string) (refs []string, err error) {
 	filteredRefs := make([]string, 0)
 	for _, ref := range refs {
 		if _, ok := seen[ref]; !ok {
-			named, _ := refdocker.ParseDockerRef(ref)
-			filteredRefs = append(filteredRefs, named.String())
-			seen[named.String()] = struct{}{}
+			named, err := refdocker.ParseDockerRef(ref)
+			namedRef := ref
+			if err == nil {
+				namedRef = named.String()
+			}
+			filteredRefs = append(filteredRefs, namedRef)
+			seen[namedRef] = struct{}{}
 		}
 	}
 	return filteredRefs, nil
