@@ -251,6 +251,9 @@ func getEnvoyConfigOnlyForOutBound(appcfg *appinstaller.ApplicationConfig, perms
 																				ClusterSpecifier: &routev3.RouteAction_Cluster{
 																					Cluster: "original_dst",
 																				},
+																				Timeout: &duration.Duration{
+																					Seconds: 180,
+																				},
 																			},
 																		},
 																	},
@@ -1147,6 +1150,9 @@ func (ec *envoyConfig) WithProxyOutBound(appcfg *appinstaller.ApplicationConfig,
 							Cluster: "system-server",
 						},
 						PrefixRewrite: "/system-server/v2/" + r.dataType + "/" + r.group + "/" + r.version + "/",
+						Timeout: &duration.Duration{
+							Seconds: 180,
+						},
 					},
 				},
 				RequestHeadersToAdd: []*corev3.HeaderValueOption{
