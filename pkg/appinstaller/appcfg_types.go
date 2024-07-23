@@ -104,6 +104,7 @@ type Options struct {
 	Upload          Upload                   `yaml:"upload" json:"upload"`
 	SyncProvider    []map[string]interface{} `yaml:"syncProvider" json:"syncProvider"`
 	OIDC            OIDC                     `yaml:"oidc" json:"oidc"`
+	ApiTimeout      *int64                   `yaml:"apiTimeout" json:"apiTimeout"`
 }
 
 type ResetCookie struct {

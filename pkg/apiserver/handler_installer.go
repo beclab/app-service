@@ -557,6 +557,7 @@ func toApplicationConfig(app, chart string, cfg *appinstaller.AppConfiguration) 
 		Namespace:          cfg.Spec.Namespace,
 		MobileSupported:    cfg.Options.MobileSupported,
 		OIDC:               cfg.Options.OIDC,
+		ApiTimeout:         cfg.Options.ApiTimeout,
 	}, chart, nil
 }
 

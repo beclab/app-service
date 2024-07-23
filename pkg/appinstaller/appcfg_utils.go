@@ -164,6 +164,7 @@ func getAppConfigFromConfigurationFile(app, chart string) (*ApplicationConfig, e
 		Namespace:          cfg.Spec.Namespace,
 		MobileSupported:    cfg.Options.MobileSupported,
 		OIDC:               cfg.Options.OIDC,
+		ApiTimeout:         cfg.Options.ApiTimeout,
 	}, nil
 }
 
