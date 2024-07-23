@@ -73,4 +73,5 @@ type ApplicationConfig struct {
 	OnlyAdmin          bool
 	MobileSupported    bool
 	OIDC               OIDC
+	ApiTimeout         *int64
 }

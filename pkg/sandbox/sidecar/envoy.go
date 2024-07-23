@@ -162,7 +162,16 @@ func getEnvoyConfig(appcfg *appinstaller.ApplicationConfig, injectPolicy, inject
 	if err != nil {
 		klog.Errorf("Failed to get setCookieInlineCode err=%v", err)
 	}
-	ec := New(appcfg.OwnerName, setCookieInlineCode, getHTTProbePath(pod))
+	opts := options{
+		timeout: func() *int64 {
+			defaultTimeout := int64(15)
+			if appcfg.ApiTimeout == nil || *appcfg.ApiTimeout < 0 {
+				return &defaultTimeout
+			}
+			return appcfg.ApiTimeout
+		}()}
+
+	ec := New(appcfg.OwnerName, setCookieInlineCode, getHTTProbePath(pod), opts)
 	if injectPolicy {
 		ec.WithPolicy()
 	}
@@ -195,65 +204,75 @@ func getEnvoyConfig(appcfg *appinstaller.ApplicationConfig, injectPolicy, inject
 
 func getEnvoyConfigOnlyForOutBound(appcfg *appinstaller.ApplicationConfig, perms []appinstaller.SysDataPermission) string {
 	ec := &envoyConfig{
-		bs: &envoy_bootstrap.Bootstrap{
-			Admin: &envoy_bootstrap.Admin{
-				AccessLogPath: "/dev/stdout",
-				Address:       createSocketAddress("0.0.0.0", 15008),
-			},
-			StaticResources: &envoy_bootstrap.Bootstrap_StaticResources{
-				// add this listener is for compatibility with init iptables
-				Listeners: []*envoy_listener.Listener{
-					{
-						Name:    "listener_0",
-						Address: createSocketAddress("0.0.0.0", 15003),
-						ListenerFilters: []*envoy_listener.ListenerFilter{
-							{
-								Name: "envoy.filters.listener.original_dst",
-								ConfigType: &envoy_listener.ListenerFilter_TypedConfig{
-									TypedConfig: utils.MessageToAny(&originaldst.OriginalDst{}),
-								},
+		username: appcfg.OwnerName,
+		opts: options{
+			timeout: func() *int64 {
+				defaultTimeout := int64(15)
+				if appcfg.ApiTimeout == nil || *appcfg.ApiTimeout < 0 {
+					return &defaultTimeout
+				}
+				return appcfg.ApiTimeout
+			}(),
+		},
+	}
+	ec.bs = &envoy_bootstrap.Bootstrap{
+		Admin: &envoy_bootstrap.Admin{
+			AccessLogPath: "/dev/stdout",
+			Address:       createSocketAddress("0.0.0.0", 15008),
+		},
+		StaticResources: &envoy_bootstrap.Bootstrap_StaticResources{
+			// add this listener is for compatibility with init iptables
+			Listeners: []*envoy_listener.Listener{
+				{
+					Name:    "listener_0",
+					Address: createSocketAddress("0.0.0.0", 15003),
+					ListenerFilters: []*envoy_listener.ListenerFilter{
+						{
+							Name: "envoy.filters.listener.original_dst",
+							ConfigType: &envoy_listener.ListenerFilter_TypedConfig{
+								TypedConfig: utils.MessageToAny(&originaldst.OriginalDst{}),
 							},
 						},
-						FilterChains: []*envoy_listener.FilterChain{
-							{
-								Filters: []*envoy_listener.Filter{
-									{
-										Name: "envoy.filters.network.http_connection_manager",
-										ConfigType: &envoy_listener.Filter_TypedConfig{
-											TypedConfig: utils.MessageToAny(&http_connection_manager.HttpConnectionManager{
-												HttpFilters: []*http_connection_manager.HttpFilter{
-													{
-														Name: "envoy.filters.http.router",
-														ConfigType: &http_connection_manager.HttpFilter_TypedConfig{
-															TypedConfig: utils.MessageToAny(&envoy_router.Router{}),
-														},
+					},
+					FilterChains: []*envoy_listener.FilterChain{
+						{
+							Filters: []*envoy_listener.Filter{
+								{
+									Name: "envoy.filters.network.http_connection_manager",
+									ConfigType: &envoy_listener.Filter_TypedConfig{
+										TypedConfig: utils.MessageToAny(&http_connection_manager.HttpConnectionManager{
+											HttpFilters: []*http_connection_manager.HttpFilter{
+												{
+													Name: "envoy.filters.http.router",
+													ConfigType: &http_connection_manager.HttpFilter_TypedConfig{
+														TypedConfig: utils.MessageToAny(&envoy_router.Router{}),
 													},
 												},
-												StatPrefix:    "orig_http",
-												SkipXffAppend: false,
-												CodecType:     http_connection_manager.HttpConnectionManager_AUTO,
-												RouteSpecifier: &http_connection_manager.HttpConnectionManager_RouteConfig{
-													RouteConfig: &routev3.RouteConfiguration{
-														Name: "local_route",
-														VirtualHosts: []*routev3.VirtualHost{
-															{
-																Name:    "service",
-																Domains: []string{"*"},
-																Routes: []*routev3.Route{
-																	{
-																		Match: &routev3.RouteMatch{
-																			PathSpecifier: &routev3.RouteMatch_Prefix{
-																				Prefix: "/",
-																			},
+											},
+											StatPrefix:    "orig_http",
+											SkipXffAppend: false,
+											CodecType:     http_connection_manager.HttpConnectionManager_AUTO,
+											RouteSpecifier: &http_connection_manager.HttpConnectionManager_RouteConfig{
+												RouteConfig: &routev3.RouteConfiguration{
+													Name: "local_route",
+													VirtualHosts: []*routev3.VirtualHost{
+														{
+															Name:    "service",
+															Domains: []string{"*"},
+															Routes: []*routev3.Route{
+																{
+																	Match: &routev3.RouteMatch{
+																		PathSpecifier: &routev3.RouteMatch_Prefix{
+																			Prefix: "/",
 																		},
-																		Action: &routev3.Route_Route{
-																			Route: &routev3.RouteAction{
-																				ClusterSpecifier: &routev3.RouteAction_Cluster{
-																					Cluster: "original_dst",
-																				},
-																				Timeout: &duration.Duration{
-																					Seconds: 180,
-																				},
+																	},
+																	Action: &routev3.Route_Route{
+																		Route: &routev3.RouteAction{
+																			ClusterSpecifier: &routev3.RouteAction_Cluster{
+																				Cluster: "original_dst",
+																			},
+																			Timeout: &duration.Duration{
+																				Seconds: *ec.opts.timeout,
 																			},
 																		},
 																	},
@@ -262,29 +281,28 @@ func getEnvoyConfigOnlyForOutBound(appcfg *appinstaller.ApplicationConfig, perms
 														},
 													},
 												},
-											}),
-										},
+											},
+										}),
 									},
 								},
 							},
 						},
 					},
 				},
-				Clusters: []*clusterv3.Cluster{
-					{
-						Name: "original_dst",
-						ConnectTimeout: &duration.Duration{
-							Seconds: 5000,
-						},
-						ClusterDiscoveryType: &clusterv3.Cluster_Type{
-							Type: clusterv3.Cluster_ORIGINAL_DST,
-						},
-						LbPolicy: clusterv3.Cluster_CLUSTER_PROVIDED,
+			},
+			Clusters: []*clusterv3.Cluster{
+				{
+					Name: "original_dst",
+					ConnectTimeout: &duration.Duration{
+						Seconds: 5000,
 					},
+					ClusterDiscoveryType: &clusterv3.Cluster_Type{
+						Type: clusterv3.Cluster_ORIGINAL_DST,
+					},
+					LbPolicy: clusterv3.Cluster_CLUSTER_PROVIDED,
 				},
 			},
 		},
-		username: appcfg.OwnerName,
 	}
 
 	_, err := ec.WithProxyOutBound(appcfg, perms)
@@ -450,9 +468,14 @@ func GetUploadSideCarContainerSpec(pod *corev1.Pod, upload *appinstaller.Upload)
 	return &container
 }
 
+type options struct {
+	timeout *int64
+}
+
 type envoyConfig struct {
 	bs       *envoy_bootstrap.Bootstrap
 	username string
+	opts     options
 }
 
 var httpFilters []*http_connection_manager.HttpFilter
@@ -460,7 +483,11 @@ var httpM *http_connection_manager.HttpConnectionManager
 var routeConfig *routev3.RouteConfiguration
 
 // New build a new envoy config.
-func New(username string, inlineCode []byte, probesPath []string) *envoyConfig {
+func New(username string, inlineCode []byte, probesPath []string, opts options) *envoyConfig {
+	ec := &envoyConfig{
+		username: username,
+		opts:     opts,
+	}
 	httpFilters = []*http_connection_manager.HttpFilter{
 		{
 			Name: "envoy.filters.http.router",
@@ -509,6 +536,9 @@ func New(username string, inlineCode []byte, probesPath []string) *envoyConfig {
 							Route: &routev3.RouteAction{
 								ClusterSpecifier: &routev3.RouteAction_Cluster{
 									Cluster: "original_dst",
+								},
+								Timeout: &duration.Duration{
+									Seconds: *ec.opts.timeout,
 								},
 							},
 						},
@@ -562,76 +592,73 @@ func New(username string, inlineCode []byte, probesPath []string) *envoyConfig {
 			AcceptHttp_10: true,
 		},
 	}
-
-	return &envoyConfig{
-		bs: &envoy_bootstrap.Bootstrap{
-			Admin: &envoy_bootstrap.Admin{
-				AccessLogPath: "/dev/stdout",
-				Address:       createSocketAddress("0.0.0.0", 15000),
-			},
-			StaticResources: &envoy_bootstrap.Bootstrap_StaticResources{
-				Listeners: []*envoy_listener.Listener{
-					{
-						Name:    "listener_0",
-						Address: createSocketAddress("0.0.0.0", 15003),
-						ListenerFilters: []*envoy_listener.ListenerFilter{
-							{
-								Name: "envoy.filters.listener.original_dst",
-								ConfigType: &envoy_listener.ListenerFilter_TypedConfig{
-									TypedConfig: utils.MessageToAny(&originaldst.OriginalDst{}),
-								},
+	ec.bs = &envoy_bootstrap.Bootstrap{
+		Admin: &envoy_bootstrap.Admin{
+			AccessLogPath: "/dev/stdout",
+			Address:       createSocketAddress("0.0.0.0", 15000),
+		},
+		StaticResources: &envoy_bootstrap.Bootstrap_StaticResources{
+			Listeners: []*envoy_listener.Listener{
+				{
+					Name:    "listener_0",
+					Address: createSocketAddress("0.0.0.0", 15003),
+					ListenerFilters: []*envoy_listener.ListenerFilter{
+						{
+							Name: "envoy.filters.listener.original_dst",
+							ConfigType: &envoy_listener.ListenerFilter_TypedConfig{
+								TypedConfig: utils.MessageToAny(&originaldst.OriginalDst{}),
 							},
 						},
-						FilterChains: []*envoy_listener.FilterChain{
-							{
-								Filters: []*envoy_listener.Filter{
-									{
-										Name: "envoy.filters.network.http_connection_manager",
-										ConfigType: &envoy_listener.Filter_TypedConfig{
-											TypedConfig: utils.MessageToAny(httpM),
-										},
+					},
+					FilterChains: []*envoy_listener.FilterChain{
+						{
+							Filters: []*envoy_listener.Filter{
+								{
+									Name: "envoy.filters.network.http_connection_manager",
+									ConfigType: &envoy_listener.Filter_TypedConfig{
+										TypedConfig: utils.MessageToAny(httpM),
 									},
 								},
 							},
 						},
 					},
-					{
-						Name:    "listener_image",
-						Address: createSocketAddress("127.0.0.1", 15080),
-						FilterChains: []*envoy_listener.FilterChain{
-							{
-								Filters: []*envoy_listener.Filter{
-									{
-										Name: "envoy.filters.network.http_connection_manager",
-										ConfigType: &envoy_listener.Filter_TypedConfig{
-											TypedConfig: utils.MessageToAny(&http_connection_manager.HttpConnectionManager{
-												StatPrefix: "tapr_http",
-												UpgradeConfigs: []*http_connection_manager.HttpConnectionManager_UpgradeConfig{
-													{
-														UpgradeType: "websocket",
-													},
+				},
+				{
+					Name:    "listener_image",
+					Address: createSocketAddress("127.0.0.1", 15080),
+					FilterChains: []*envoy_listener.FilterChain{
+						{
+							Filters: []*envoy_listener.Filter{
+								{
+									Name: "envoy.filters.network.http_connection_manager",
+									ConfigType: &envoy_listener.Filter_TypedConfig{
+										TypedConfig: utils.MessageToAny(&http_connection_manager.HttpConnectionManager{
+											StatPrefix: "tapr_http",
+											UpgradeConfigs: []*http_connection_manager.HttpConnectionManager_UpgradeConfig{
+												{
+													UpgradeType: "websocket",
 												},
-												SkipXffAppend: false,
-												CodecType:     http_connection_manager.HttpConnectionManager_AUTO,
-												RouteSpecifier: &http_connection_manager.HttpConnectionManager_RouteConfig{
-													RouteConfig: &routev3.RouteConfiguration{
-														Name: "local_route",
-														VirtualHosts: []*routev3.VirtualHost{
-															{
-																Name:    "service",
-																Domains: []string{"*"},
-																Routes: []*routev3.Route{
-																	{
-																		Match: &routev3.RouteMatch{
-																			PathSpecifier: &routev3.RouteMatch_Prefix{
-																				Prefix: "/images/upload",
-																			},
+											},
+											SkipXffAppend: false,
+											CodecType:     http_connection_manager.HttpConnectionManager_AUTO,
+											RouteSpecifier: &http_connection_manager.HttpConnectionManager_RouteConfig{
+												RouteConfig: &routev3.RouteConfiguration{
+													Name: "local_route",
+													VirtualHosts: []*routev3.VirtualHost{
+														{
+															Name:    "service",
+															Domains: []string{"*"},
+															Routes: []*routev3.Route{
+																{
+																	Match: &routev3.RouteMatch{
+																		PathSpecifier: &routev3.RouteMatch_Prefix{
+																			Prefix: "/images/upload",
 																		},
-																		Action: &routev3.Route_Route{
-																			Route: &routev3.RouteAction{
-																				ClusterSpecifier: &routev3.RouteAction_Cluster{
-																					Cluster: "images",
-																				},
+																	},
+																	Action: &routev3.Route_Route{
+																		Route: &routev3.RouteAction{
+																			ClusterSpecifier: &routev3.RouteAction_Cluster{
+																				Cluster: "images",
 																			},
 																		},
 																	},
@@ -640,60 +667,60 @@ func New(username string, inlineCode []byte, probesPath []string) *envoyConfig {
 														},
 													},
 												},
-												HttpFilters: []*http_connection_manager.HttpFilter{
-													{
-														Name: "envoy.filters.http.router",
-														ConfigType: &http_connection_manager.HttpFilter_TypedConfig{
-															TypedConfig: utils.MessageToAny(&envoy_router.Router{}),
-														},
+											},
+											HttpFilters: []*http_connection_manager.HttpFilter{
+												{
+													Name: "envoy.filters.http.router",
+													ConfigType: &http_connection_manager.HttpFilter_TypedConfig{
+														TypedConfig: utils.MessageToAny(&envoy_router.Router{}),
 													},
 												},
-												HttpProtocolOptions: &corev3.Http1ProtocolOptions{
-													AcceptHttp_10: true,
-												},
-											}),
-										},
+											},
+											HttpProtocolOptions: &corev3.Http1ProtocolOptions{
+												AcceptHttp_10: true,
+											},
+										}),
 									},
 								},
 							},
 						},
 					},
 				},
-				Clusters: []*clusterv3.Cluster{
-					{
-						Name: "original_dst",
-						ConnectTimeout: &duration.Duration{
-							Seconds: 5000,
-						},
-						ClusterDiscoveryType: &clusterv3.Cluster_Type{
-							Type: clusterv3.Cluster_ORIGINAL_DST,
-						},
-						LbPolicy: clusterv3.Cluster_CLUSTER_PROVIDED,
+			},
+			Clusters: []*clusterv3.Cluster{
+				{
+					Name: "original_dst",
+					ConnectTimeout: &duration.Duration{
+						Seconds: 5000,
 					},
+					ClusterDiscoveryType: &clusterv3.Cluster_Type{
+						Type: clusterv3.Cluster_ORIGINAL_DST,
+					},
+					LbPolicy: clusterv3.Cluster_CLUSTER_PROVIDED,
+				},
 
-					{
-						Name: "images",
-						ConnectTimeout: &duration.Duration{
-							Seconds: 5,
-						},
-						ClusterDiscoveryType: &clusterv3.Cluster_Type{
-							Type: clusterv3.Cluster_LOGICAL_DNS,
-						},
-						DnsLookupFamily: clusterv3.Cluster_V4_ONLY,
-						DnsRefreshRate: &duration.Duration{
-							Seconds: 600,
-						},
-						LbPolicy: clusterv3.Cluster_ROUND_ROBIN,
-						LoadAssignment: &endpointv3.ClusterLoadAssignment{
-							ClusterName: "images",
-							Endpoints: []*endpointv3.LocalityLbEndpoints{
-								{
-									LbEndpoints: []*endpointv3.LbEndpoint{
-										{
-											HostIdentifier: &endpointv3.LbEndpoint_Endpoint{
-												Endpoint: &endpointv3.Endpoint{
-													Address: createSocketAddress("tapr-images-svc.user-system-"+username, 8080),
-												},
+				{
+					Name: "images",
+					ConnectTimeout: &duration.Duration{
+						Seconds: 5,
+					},
+					ClusterDiscoveryType: &clusterv3.Cluster_Type{
+						Type: clusterv3.Cluster_LOGICAL_DNS,
+					},
+					DnsLookupFamily: clusterv3.Cluster_V4_ONLY,
+					DnsRefreshRate: &duration.Duration{
+						Seconds: 600,
+					},
+					LbPolicy: clusterv3.Cluster_ROUND_ROBIN,
+					LoadAssignment: &endpointv3.ClusterLoadAssignment{
+						ClusterName: "images",
+						Endpoints: []*endpointv3.LocalityLbEndpoints{
+							{
+								LbEndpoints: []*endpointv3.LbEndpoint{
+									{
+										HostIdentifier: &endpointv3.LbEndpoint_Endpoint{
+											Endpoint: &endpointv3.Endpoint{
+												Address: createSocketAddress("tapr-images-svc.user-system-"+username, 8080),
 											},
 										},
 									},
@@ -704,8 +731,8 @@ func New(username string, inlineCode []byte, probesPath []string) *envoyConfig {
 				},
 			},
 		},
-		username: username,
 	}
+	return ec
 }
 
 func (ec *envoyConfig) WithPolicy() *envoyConfig {
@@ -1070,6 +1097,9 @@ func (ec *envoyConfig) WithProxyOutBound(appcfg *appinstaller.ApplicationConfig,
 																	ClusterSpecifier: &routev3.RouteAction_Cluster{
 																		Cluster: "original_dst",
 																	},
+																	Timeout: &duration.Duration{
+																		Seconds: *ec.opts.timeout,
+																	},
 																},
 															},
 														},
@@ -1151,7 +1181,7 @@ func (ec *envoyConfig) WithProxyOutBound(appcfg *appinstaller.ApplicationConfig,
 						},
 						PrefixRewrite: "/system-server/v2/" + r.dataType + "/" + r.group + "/" + r.version + "/",
 						Timeout: &duration.Duration{
-							Seconds: 180,
+							Seconds: *ec.opts.timeout,
 						},
 					},
 				},
@@ -1187,6 +1217,9 @@ func (ec *envoyConfig) WithProxyOutBound(appcfg *appinstaller.ApplicationConfig,
 					Route: &routev3.RouteAction{
 						ClusterSpecifier: &routev3.RouteAction_Cluster{
 							Cluster: "original_dst",
+						},
+						Timeout: &duration.Duration{
+							Seconds: *ec.opts.timeout,
 						},
 					},
 				},
