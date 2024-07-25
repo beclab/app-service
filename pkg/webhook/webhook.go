@@ -416,6 +416,7 @@ type patchOp struct {
 
 var resourcePath = "/spec/template/spec/containers/%d/resources/limits"
 var envPath = "/spec/template/spec/containers/%d/env/%s"
+var runtimeClassPath = "/spec/template/spec/runtimeClassName"
 
 // CreatePatchForDeployment add gpu env for deployment and returns patch bytes.
 func CreatePatchForDeployment(tpl *corev1.PodTemplateSpec, namespace string, gpuRequired *resource.Quantity, typeKey string) ([]byte, error) {
@@ -427,6 +428,22 @@ func CreatePatchForDeployment(tpl *corev1.PodTemplateSpec, namespace string, gpu
 }
 
 func addResourceLimits(tpl *corev1.PodTemplateSpec, namespace string, gpuRequired *resource.Quantity, typeKey string) (patch []patchOp, err error) {
+	if typeKey == constants.NvidiaGPU || typeKey == constants.NvshareGPU {
+		if tpl.Spec.RuntimeClassName != nil {
+			patch = append(patch, patchOp{
+				Op:    constants.PatchOpReplace,
+				Path:  runtimeClassPath,
+				Value: "nvidia",
+			})
+		} else {
+			patch = append(patch, patchOp{
+				Op:    constants.PatchOpAdd,
+				Path:  runtimeClassPath,
+				Value: "nvidia",
+			})
+		}
+	}
+
 	for i := range tpl.Spec.Containers {
 		container := tpl.Spec.Containers[i]
 
