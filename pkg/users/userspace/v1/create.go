@@ -232,6 +232,19 @@ func (c *Creator) installSysApps(ctx context.Context, bflPod *corev1.Pod) error 
 	}
 	vals["os"] = osVals
 
+	var arch string
+	nodes, err := c.clientSet.KubeClient.Kubernetes().CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+	for _, node := range nodes.Items {
+		arch = node.Labels["kubernetes.io/arch"]
+		break
+	}
+	vals["cluster"] = map[string]interface{}{
+		"arch": arch,
+	}
+
 	clientSet, err := kubernetes.NewForConfig(c.k8sConfig)
 	if err != nil {
 		return err

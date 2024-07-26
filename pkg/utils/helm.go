@@ -126,6 +126,7 @@ func GetResourceListFromChart(chartPath string) (resources kube.ResourceList, er
 	}
 
 	values["domain"] = map[string]string{}
+	values["cluster"] = map[string]string{}
 	values["dep"] = map[string]interface{}{}
 	values["postgres"] = map[string]interface{}{
 		"databases": map[string]interface{}{},
