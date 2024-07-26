@@ -412,6 +412,18 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 	values["svcs"] = svcs
 	klog.Info("svcs: ", svcs)
 
+	var arch string
+	nodes, err := kClient.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return values, err
+	}
+	for _, node := range nodes.Items {
+		arch = node.Labels["kubernetes.io/arch"]
+		break
+	}
+	values["cluster"] = map[string]interface{}{
+		"arch": arch,
+	}
 	gpuType, err := utils.FindGpuTypeFromNodes(h.ctx, kClient)
 	if err != nil {
 		return values, err
