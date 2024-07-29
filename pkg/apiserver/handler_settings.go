@@ -667,3 +667,58 @@ func (h *Handler) getProviderRegistry(req *restful.Request, resp *restful.Respon
 	}
 	resp.WriteAsJson(ret)
 }
+
+func (h *Handler) getApplicationProviderList(req *restful.Request, resp *restful.Response) {
+	owner := req.Attribute(constants.UserContextAttribute).(string)
+	app := req.PathParameter(ParamAppName)
+	client, err := dynamic.NewForConfig(h.kubeConfig)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	ret := make([]providerRegistry, 0)
+	rClient := provider.NewRegistryRequest(client)
+	namespace := fmt.Sprintf("user-system-%s", owner)
+	prs, err := rClient.List(req.Request.Context(), namespace, metav1.ListOptions{})
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	for _, ap := range prs.Items {
+		if ap.Object == nil {
+			continue
+		}
+		deployment, _, _ := unstructured.NestedString(ap.Object, "spec", "deployment")
+		kind, _, _ := unstructured.NestedString(ap.Object, "spec", "kind")
+
+		if app == deployment && kind == "provider" {
+			dataType, _, _ := unstructured.NestedString(ap.Object, "spec", "dataType")
+			group, _, _ := unstructured.NestedString(ap.Object, "spec", "group")
+			description, _, _ := unstructured.NestedString(ap.Object, "spec", "description")
+			endpoint, _, _ := unstructured.NestedString(ap.Object, "spec", "endpoint")
+			ns, _, _ := unstructured.NestedString(ap.Object, "spec", "namespace")
+			opApis := make([]opApi, 0)
+			opApiList, _, _ := unstructured.NestedSlice(ap.Object, "spec", "opApis")
+			for _, op := range opApiList {
+				if aop, ok := op.(map[string]interface{}); ok {
+					opApis = append(opApis, opApi{
+						Name: aop["name"].(string),
+						URI:  aop["uri"].(string),
+					})
+				}
+			}
+			ret = append(ret, providerRegistry{
+				DataType:    dataType,
+				Deployment:  deployment,
+				Description: description,
+				Endpoint:    endpoint,
+				Kind:        kind,
+				Group:       group,
+				Namespace:   ns,
+				OpApis:      opApis,
+			})
+
+		}
+	}
+	resp.WriteAsJson(ret)
+}
