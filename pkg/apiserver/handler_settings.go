@@ -599,6 +599,7 @@ type providerRegistry struct {
 	Kind        string  `json:"kind"`
 	Namespace   string  `json:"namespace"`
 	OpApis      []opApi `json:"opApis"`
+	Version     string  `json:"version"`
 }
 
 type opApi struct {
@@ -657,6 +658,7 @@ func (h *Handler) getProviderRegistry(req *restful.Request, resp *restful.Respon
 				Group:       group,
 				Namespace:   ns,
 				OpApis:      opApis,
+				Version:     version,
 			}
 			break
 		}
@@ -697,6 +699,7 @@ func (h *Handler) getApplicationProviderList(req *restful.Request, resp *restful
 			description, _, _ := unstructured.NestedString(ap.Object, "spec", "description")
 			endpoint, _, _ := unstructured.NestedString(ap.Object, "spec", "endpoint")
 			ns, _, _ := unstructured.NestedString(ap.Object, "spec", "namespace")
+			version, _, _ := unstructured.NestedString(ap.Object, "spec", "version")
 			opApis := make([]opApi, 0)
 			opApiList, _, _ := unstructured.NestedSlice(ap.Object, "spec", "opApis")
 			for _, op := range opApiList {
@@ -716,6 +719,7 @@ func (h *Handler) getApplicationProviderList(req *restful.Request, resp *restful
 				Group:       group,
 				Namespace:   ns,
 				OpApis:      opApis,
+				Version:     version,
 			})
 
 		}
