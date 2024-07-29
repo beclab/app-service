@@ -468,6 +468,14 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Param(ws.PathParameter(ParamVersion, "the version of providerregistry")).
 		Returns(http.StatusOK, "success to get an providerregistry", nil))
 
+	ws.Route(ws.GET("/apps/provider-registry/{"+ParamAppName+"}").
+		To(handler.getApplicationProviderList).
+		Doc("get an app provider list").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
+		Param(ws.PathParameter(ParamAppName, "the appName of providerregistry")).
+		Returns(http.StatusOK, "success to get an app providerregistry list", nil))
+
 	ws.Route(ws.GET("/apps/pending-installing/task").
 		To(handler.pendingOrInstallingApps).
 		Doc("get list of pending or installing app").
