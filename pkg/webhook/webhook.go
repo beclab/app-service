@@ -168,19 +168,19 @@ func (wh *Webhook) CreatePatch(
 	policySidecar := sidecar.GetEnvoySidecarContainerSpec(clusterID, envoyFilename, appKey, appSecret)
 	pod.Spec.Containers = append(pod.Spec.Containers, policySidecar)
 
+	appcfg, err := wh.GetAppConfig(req.Namespace)
+	if err != nil {
+		return nil, err
+	}
+	pod.Spec.InitContainers = append([]corev1.Container{sidecar.GetInitContainerSpecForWaitFor(appcfg.OwnerName)},
+		pod.Spec.InitContainers...)
+
 	if injectWs {
-		appcfg, err := wh.GetAppConfig(req.Namespace)
-		if err != nil {
-			return nil, err
-		}
+
 		wsSidecar := sidecar.GetWebSocketSideCarContainerSpec(&appcfg.WsConfig)
 		pod.Spec.Containers = append(pod.Spec.Containers, wsSidecar)
 	}
 	if injectUpload {
-		appcfg, err := wh.GetAppConfig(req.Namespace)
-		if err != nil {
-			return nil, err
-		}
 		uploadSidecar := sidecar.GetUploadSideCarContainerSpec(pod, &appcfg.Upload)
 		if uploadSidecar != nil {
 			pod.Spec.Containers = append(pod.Spec.Containers, *uploadSidecar)
