@@ -38,11 +38,11 @@ func PrettyJSON(v any) string {
 	return buf.String()
 }
 
-// RandString returns random string with 16 char length.
+// RandString returns random string with 64 char length.
 func RandString() string {
 	rand.Seed(time.Now().UnixNano())
 
-	password := make([]byte, 16)
+	password := make([]byte, 64)
 	for i := range password {
 		password[i] = charset[rand.Intn(len(charset))]
 	}

@@ -383,6 +383,7 @@ func generateIptablesCommands() string {
 -A PROXY_OUTBOUND -p tcp --dport 6379 -j RETURN
 -A PROXY_OUTBOUND -p tcp --dport 27017 -j RETURN
 -A PROXY_OUTBOUND -p tcp --dport 443 -j RETURN
+-A PROXY_OUTBOUND -p tcp --dport 4222 -j RETURN
 -A PROXY_OUTBOUND -d ${POD_IP}/32 -j RETURN
 -A PROXY_OUTBOUND -o lo ! -d 127.0.0.1/32 -m owner --uid-owner 1555 -j PROXY_IN_REDIRECT
 -A PROXY_OUTBOUND -o lo -m owner ! --uid-owner 1555 -j RETURN

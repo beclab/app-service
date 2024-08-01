@@ -15,6 +15,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/helm"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/provider"
+	"bytetrade.io/web3os/app-service/pkg/tapr"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 
 	"github.com/emicklei/go-restful/v3"
@@ -722,6 +723,95 @@ func (h *Handler) getApplicationProviderList(req *restful.Request, resp *restful
 				Version:     version,
 			})
 
+		}
+	}
+	resp.WriteAsJson(ret)
+}
+
+func (h *Handler) getApplicationSubject(req *restful.Request, resp *restful.Response) {
+	app := req.PathParameter(ParamAppName)
+	owner := req.Attribute(constants.UserContextAttribute).(string)
+	client, err := dynamic.NewForConfig(h.kubeConfig)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	dc, err := tapr.NewMiddlewareRequest(client)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	namespace := fmt.Sprintf("user-system-%s", owner)
+	mrs, err := dc.List(req.Request.Context(), namespace, metav1.ListOptions{})
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	ret := make([]tapr.NatsConfig, 0)
+	klog.Infof("get Application Subject...............")
+	klog.Infof("mrs.Items:len: %v", len(mrs.Items))
+	if len(mrs.Items) > 0 {
+		for _, mr := range mrs.Items {
+			if mr.Object == nil {
+				continue
+			}
+			middlewareType, _, _ := unstructured.NestedString(mr.Object, "spec", "middleware")
+			klog.Infof("middlewareType: %v", middlewareType)
+			if middlewareType != "nats" {
+				continue
+			}
+			appName, _, _ := unstructured.NestedString(mr.Object, "spec", "app")
+			if appName != app {
+				continue
+			}
+			username, _, _ := unstructured.NestedString(mr.Object, "spec", "nats", "user")
+
+			klog.Infof("appName: %v", appName)
+			natsCfg := tapr.NatsConfig{}
+			natsCfg.Username = username
+			nats, _, _ := unstructured.NestedMap(mr.Object, "spec", "nats")
+			subjects, _, _ := unstructured.NestedSlice(nats, "subjects")
+			klog.Infof("subjects: %v", subjects)
+			for _, s := range subjects {
+				subject := tapr.Subject{}
+				subjectMap := s.(map[string]interface{})
+				subject.Name, _, _ = unstructured.NestedString(subjectMap, "name")
+
+				permission, _, _ := unstructured.NestedMap(subjectMap, "permission")
+				subject.Permission = tapr.Permission{
+					Pub: permission["pub"].(string),
+					Sub: permission["sub"].(string),
+				}
+				export, found, _ := unstructured.NestedMap(subjectMap, "export")
+				if found {
+					subject.Export = &tapr.Permission{
+						AppName: export["appName"].(string),
+						Pub:     export["pub"].(string),
+						Sub:     export["sub"].(string),
+					}
+				}
+				natsCfg.Subjects = append(natsCfg.Subjects, subject)
+			}
+			natsCfg.Refs = make([]tapr.Ref, 0)
+			refs, _, _ := unstructured.NestedSlice(nats, "refs")
+			for _, r := range refs {
+				ref := tapr.Ref{}
+				refMap := r.(map[string]interface{})
+				ref.AppName, _, _ = unstructured.NestedString(refMap, "appName")
+				ref.AppNamespace, _, _ = unstructured.NestedString(refMap, "appNamespace")
+
+				refSubjects, _, _ := unstructured.NestedSlice(refMap, "subjects")
+				for _, rs := range refSubjects {
+					refSubject := tapr.RefSubject{}
+					rsMap := rs.(map[string]interface{})
+					refSubject.Name, _, _ = unstructured.NestedString(rsMap, "name")
+					refSubject.Perm, _, _ = unstructured.NestedStringSlice(rsMap, "perm")
+					ref.Subjects = append(ref.Subjects, refSubject)
+				}
+
+				natsCfg.Refs = append(natsCfg.Refs, ref)
+			}
+			ret = append(ret, natsCfg)
 		}
 	}
 	resp.WriteAsJson(ret)

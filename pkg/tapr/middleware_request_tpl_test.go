@@ -18,7 +18,7 @@ func TestGenMiddleRequest(t *testing.T) {
 	databases := []Database{{Name: "mydb", Distributed: true,
 		Extensions: []string{"vectors", "postgis"}, Scripts: []string{"BEGIN", "COMMIT"}}}
 
-	result, err := GenMiddleRequest(middleware, appName, appNamespace, namespace, username, password, databases)
+	result, err := GenMiddleRequest(middleware, appName, appNamespace, namespace, username, password, databases, nil, "")
 	if err != nil {
 		t.Errorf("GenMiddleRequest returned an error: %v", err)
 	}
@@ -51,7 +51,7 @@ spec:
 
 	// test genRedisRequest function
 	middleware = "redis"
-	result, err = GenMiddleRequest(middleware, appName, appNamespace, namespace, username, password, databases)
+	result, err = GenMiddleRequest(middleware, appName, appNamespace, namespace, username, password, databases, nil, "")
 	if err != nil {
 		t.Errorf("GenMiddleRequest returned an error: %v", err)
 	}
@@ -75,7 +75,7 @@ spec:
 
 	// test genMongodbRequest function
 	middleware = "mongodb"
-	result, err = GenMiddleRequest(middleware, appName, appNamespace, namespace, username, password, databases)
+	result, err = GenMiddleRequest(middleware, appName, appNamespace, namespace, username, password, databases, nil, "")
 	if err != nil {
 		t.Errorf("GenMiddleRequest returned an error: %v", err)
 	}
@@ -101,4 +101,68 @@ spec:
 	if !bytes.Equal(result, expected) {
 		t.Errorf("GenMiddleRequest<mongodb> returned incorrect result.\nExpected:\n%s\nActual:\n%s", expected, result)
 	}
+
+	// test genNatsRequest function
+	middleware = "nats"
+	result, err = GenMiddleRequest(middleware, appName, appNamespace, namespace, username, password, databases, &NatsConfig{
+		Username: "user1",
+		Subjects: []Subject{{
+			Name: "subject1",
+			Permission: Permission{
+				Pub: "allow",
+				Sub: "allow",
+			},
+			//Export: &Permission{
+			//	AppName: "gitlab",
+			//	Pub:     "allow",
+			//	Sub:     "allow",
+			//},
+		}},
+		Refs: []Ref{
+			{
+				AppName: "myapp",
+				Subjects: []RefSubject{
+					{
+						Name: "refsubject2",
+						Perm: []string{"pub", "sub"},
+					},
+				},
+			},
+		},
+	}, "busty")
+	if err != nil {
+		t.Errorf("GenMiddleRequest returned an error: %v", err)
+	}
+	expected = []byte(`apiVersion: apr.bytetrade.io/v1alpha1
+kind: MiddlewareRequest
+metadata:
+  name: myapp-nats
+  namespace: user-system-hysyeah
+spec:
+  app: myapp
+  appNamespace: mynamespace
+  middleware: nats
+  nats:
+    user: myuser
+    subjects:
+      - name: terminus.mynamespace.myapp.subject1
+        permission:
+          pub: allow
+          sub: allow
+        export:
+          appName: gitlab
+          pub: allow
+          sub: allow
+    refs:
+      - appName: myapp
+        subjects:
+          - name: terminus.myapp-busty.myapp.refsubject2
+            perm:
+            - pub
+            - sub
+`)
+	if !bytes.Equal(result, expected) {
+		t.Errorf("GenMiddleRequest<nats> returned incorrect result.\nExpected:\n%s\nActual:\n%s", expected, result)
+	}
+
 }
