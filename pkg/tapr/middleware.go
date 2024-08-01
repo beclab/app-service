@@ -26,6 +26,8 @@ const (
 	TypeMongoDB MiddlewareType = "mongodb"
 	// TypeRedis indicates the middleware is redis.
 	TypeRedis MiddlewareType = "redis"
+	// TypeNats indicates the middleware is nats
+	TypeNats MiddlewareType = "nats"
 )
 
 func (mr MiddlewareType) String() string {
@@ -62,6 +64,8 @@ type MiddlewareRequestResp struct {
 	Port      int32             `json:"port"`
 	Indexes   map[string]string `json:"indexes"`
 	Databases map[string]string `json:"databases"`
+	Subjects  map[string]string `json:"subjects"`
+	Refs      map[string]string `json:"refs"`
 }
 
 type Resp struct {
@@ -115,7 +119,7 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 		username := fmt.Sprintf("%s_%s_%s", middleware.Postgres.Username, ownerName, appName)
 		username = strings.ReplaceAll(username, "-", "_")
 		err := process(kubeConfig, appName, appNamespace, namespace, username,
-			middleware.Postgres.Password, middleware.Postgres.Databases, TypePostgreSQL)
+			middleware.Postgres.Password, middleware.Postgres.Databases, TypePostgreSQL, nil, ownerName)
 		if err != nil {
 			return err
 		}
@@ -135,7 +139,7 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 	if middleware.Redis != nil {
 		username := ""
 		err := process(kubeConfig, appName, appNamespace, namespace, username,
-			middleware.Redis.Password, []Database{{Name: middleware.Redis.Namespace}}, TypeRedis)
+			middleware.Redis.Password, []Database{{Name: middleware.Redis.Namespace}}, TypeRedis, nil, ownerName)
 		if err != nil {
 			return err
 		}
@@ -154,7 +158,7 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 	if middleware.MongoDB != nil {
 		username := fmt.Sprintf("%s-%s-%s", middleware.MongoDB.Username, ownerName, appName)
 		err := process(kubeConfig, appName, appNamespace, namespace, username,
-			middleware.MongoDB.Password, middleware.MongoDB.Databases, TypeMongoDB)
+			middleware.MongoDB.Password, middleware.MongoDB.Databases, TypeMongoDB, nil, ownerName)
 		if err != nil {
 			return err
 		}
@@ -170,13 +174,38 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 			"databases": resp.Databases,
 		}
 	}
+
+	if middleware.Nats != nil {
+		username := fmt.Sprintf("%s-%s", middleware.Nats.Username, appNamespace)
+		err := process(kubeConfig, appName, appNamespace, namespace, username,
+			"", []Database{}, TypeNats, middleware.Nats, ownerName)
+		klog.Infof("middleware.Nats: %#v\n", middleware.Nats)
+		if err != nil {
+			return err
+		}
+		resp, err := getMiddlewareRequest(TypeNats)
+		if err != nil {
+			return err
+		}
+		vals["nats"] = map[string]interface{}{
+			"host":     resp.Host,
+			"port":     resp.Port,
+			"username": resp.UserName,
+			"password": resp.Password,
+			"subjects": resp.Subjects,
+			"refs":     resp.Refs,
+		}
+		klog.Infof("vals[nats]: %v", vals["nats"])
+	}
 	return nil
 }
 
 func process(kubeConfig *rest.Config, appName, appNamespace, namespace, username, password string,
-	databases []Database, middleware MiddlewareType) error {
+	databases []Database, middleware MiddlewareType, natsConfig *NatsConfig, ownerName string) error {
 	request, err := GenMiddleRequest(middleware, appName,
-		appNamespace, namespace, username, password, databases)
+		appNamespace, namespace, username, password, databases, natsConfig, ownerName)
+	klog.Infof("nats: request: %s", string(request))
+	klog.Infof("natsCOnfig: %#v", natsConfig)
 	if err != nil {
 		klog.Errorf("Failed to generate middleware request from template middlewareType=%s err=%v", middleware, err)
 		return err
