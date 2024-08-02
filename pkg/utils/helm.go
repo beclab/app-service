@@ -116,6 +116,10 @@ func GetResourceListFromChart(chartPath string) (resources kube.ResourceList, er
 	values["schedule"] = map[string]interface{}{
 		"nodeName": "node",
 	}
+	values["oidc"] = map[string]interface{}{
+		"client": map[string]interface{}{},
+		"issuer": "issuer",
+	}
 	values["userspace"] = map[string]interface{}{
 		"appCache": "appcache",
 		"userData": "userspace/Home",
