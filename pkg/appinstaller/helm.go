@@ -849,6 +849,25 @@ func (h *HelmOps) createOIDCClient(values map[string]interface{}, userZone, name
 			"secret": secret,
 		},
 	}
+	_, err = client.CoreV1().Namespaces().Get(h.ctx, namespace, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		ns := &corev1.Namespace{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "v1",
+				Kind:       "Namespace",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: namespace,
+				Labels: map[string]string{
+					"name": namespace,
+				},
+			},
+		}
+		_, err = client.CoreV1().Namespaces().Create(h.ctx, ns, metav1.CreateOptions{})
+		if err != nil {
+			return err
+		}
+	}
 
 	_, err = client.CoreV1().Secrets(namespace).Get(h.ctx, oidcSecret.Name, metav1.GetOptions{})
 	if err != nil {
