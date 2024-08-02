@@ -125,11 +125,13 @@ spec:
         permission:
           pub: {{ $v.Permission.Pub }}
           sub: {{ $v.Permission.Sub }}
-        {{- if $v.Export }}
+        {{- if gt (len $v.Export) 0 }}
         export:
-          appName: {{ $v.Export.AppName }}
-          pub: {{ $v.Export.Pub }}
-          sub: {{ $v.Export.Sub }}
+          {{- range $ek, $ev := $v.Export }}
+        - appName: {{ $ev.AppName }}
+          pub: {{ $ev.Pub }}
+          sub: {{ $ev.Sub }}
+          {{- end }}
         {{- end }}
       {{- end }}
     {{- end }}

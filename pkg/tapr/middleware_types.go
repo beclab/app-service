@@ -46,8 +46,8 @@ type NatsConfig struct {
 type Subject struct {
 	Name string `yaml:"name" json:"name"`
 	// Permissions indicates the permission that app can perform on this subject
-	Permission Permission  `yaml:"permission" json:"permission"`
-	Export     *Permission `yaml:"export,omitempty" json:"export,omitempty"`
+	Permission Permission   `yaml:"permission" json:"permission"`
+	Export     []Permission `yaml:"export" json:"export"`
 }
 
 type Export struct {

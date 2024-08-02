@@ -772,6 +772,7 @@ func (h *Handler) getApplicationSubject(req *restful.Request, resp *restful.Resp
 			nats, _, _ := unstructured.NestedMap(mr.Object, "spec", "nats")
 			subjects, _, _ := unstructured.NestedSlice(nats, "subjects")
 			klog.Infof("subjects: %v", subjects)
+			natsCfg.Subjects = make([]tapr.Subject, 0)
 			for _, s := range subjects {
 				subject := tapr.Subject{}
 				subjectMap := s.(map[string]interface{})
@@ -782,12 +783,18 @@ func (h *Handler) getApplicationSubject(req *restful.Request, resp *restful.Resp
 					Pub: permission["pub"].(string),
 					Sub: permission["sub"].(string),
 				}
-				export, found, _ := unstructured.NestedMap(subjectMap, "export")
+				subject.Export = make([]tapr.Permission, 0)
+				export, found, _ := unstructured.NestedSlice(subjectMap, "export")
 				if found {
-					subject.Export = &tapr.Permission{
-						AppName: export["appName"].(string),
-						Pub:     export["pub"].(string),
-						Sub:     export["sub"].(string),
+					for _, e := range export {
+						exportMap := e.(map[string]interface{})
+						subject.Export = append(subject.Export,
+							tapr.Permission{
+								AppName: exportMap["appName"].(string),
+								Pub:     exportMap["pub"].(string),
+								Sub:     exportMap["sub"].(string),
+							},
+						)
 					}
 				}
 				natsCfg.Subjects = append(natsCfg.Subjects, subject)
