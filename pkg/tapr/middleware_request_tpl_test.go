@@ -112,11 +112,18 @@ spec:
 				Pub: "allow",
 				Sub: "allow",
 			},
-			//Export: &Permission{
-			//	AppName: "gitlab",
-			//	Pub:     "allow",
-			//	Sub:     "allow",
-			//},
+			Export: []Permission{
+				{
+					AppName: "gitlab",
+					Pub:     "allow",
+					Sub:     "allow",
+				},
+				{
+					AppName: "gitlab2",
+					Pub:     "allow",
+					Sub:     "allow",
+				},
+			},
 		}},
 		Refs: []Ref{
 			{
