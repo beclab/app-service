@@ -1347,3 +1347,15 @@ end
 `
 	return code
 }
+
+func GetInitContainerSpecForWaitFor(username string) corev1.Container {
+	return corev1.Container{
+		Name:            "check-auth",
+		Image:           "owncloudci/wait-for:latest",
+		ImagePullPolicy: corev1.PullIfNotPresent,
+		Args: []string{
+			"-it",
+			"authelia-backend.user-system-" + username + ":9091",
+		},
+	}
+}
