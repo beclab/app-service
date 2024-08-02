@@ -315,8 +315,6 @@ func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.
 		ctrl.Log.Error(err, "get entrance error")
 	}
 	//
-	settings := r.getAppSettings(ctx, name, owner, deployment, nil, entrances)
-
 	var appid string
 	var isSysApp bool
 	if userspace.IsSysApp(name) {
@@ -325,6 +323,9 @@ func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.
 	} else {
 		appid = utils.Md5String(name)[:8]
 	}
+
+	settings := r.getAppSettings(ctx, name, appid, owner, deployment, nil, entrances)
+
 	// create the application cr
 	newapp := &appv1alpha1.Application{
 		TypeMeta: metav1.TypeMeta{},
@@ -456,7 +457,7 @@ func (r *ApplicationReconciler) getEntranceServiceAddress(ctx context.Context, d
 	return entrances, nil
 }
 
-func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, owner string, deployment client.Object,
+func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, appId, owner string, deployment client.Object,
 	app *appv1alpha1.Application, entrances []appv1alpha1.Entrance) map[string]string {
 	settings := make(map[string]string)
 	settings["source"] = api.Unknown.String()
@@ -549,9 +550,9 @@ func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, own
 							if e.Name == appCfg.OIDC.EntranceName {
 								var appUrl string
 								if multiEntrace {
-									appUrl = fmt.Sprintf("https://%s%d.%s%s", appCfg.AppID, i, zone, appCfg.OIDC.RedirectUri)
+									appUrl = fmt.Sprintf("https://%s%d.%s%s", appId, i, zone, appCfg.OIDC.RedirectUri)
 								} else {
-									appUrl = fmt.Sprintf("https://%s.%s%s", appCfg.AppID, zone, appCfg.OIDC.RedirectUri)
+									appUrl = fmt.Sprintf("https://%s.%s%s", appId, zone, appCfg.OIDC.RedirectUri)
 								}
 								settings["oidc.client.redirect_uri"] = appUrl
 							}
