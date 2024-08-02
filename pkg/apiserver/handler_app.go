@@ -1,7 +1,10 @@
 package apiserver
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -11,6 +14,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
+	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/upgrade"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/utils"
@@ -19,8 +23,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/client-go/dynamic"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -704,4 +710,137 @@ func (h *Handler) allOperateRecommendHistory(req *restful.Request, resp *restful
 	})
 
 	resp.WriteAsJson(map[string]interface{}{"result": ops})
+}
+
+func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
+	client := req.Attribute(constants.KubeSphereClientAttribute).(*clientset.ClientSet)
+	owner := req.Attribute(constants.UserContextAttribute).(string)
+	isSysApp := req.QueryParameter("issysapp")
+	state := req.QueryParameter("state")
+
+	//kClient, _ := utils.GetClient()
+	role, err := kubesphere.GetUserRole(req.Request.Context(), h.kubeConfig, owner)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	if role != "platform-admin" {
+		api.HandleBadRequest(resp, req, errors.New("only admin user can get all user's app"))
+		return
+	}
+
+	ss := make([]string, 0)
+	if state != "" {
+		ss = strings.Split(state, "|")
+	}
+	stateSet := constants.States
+	if len(ss) > 0 {
+		stateSet = sets.String{}
+	}
+	for _, s := range ss {
+		stateSet.Insert(s)
+	}
+
+	filteredApps := make([]v1alpha1.Application, 0)
+	appsMap := make(map[string]v1alpha1.Application)
+	// get pending app's from app managers
+	ams, err := client.AppClient.AppV1alpha1().ApplicationManagers().List(req.Request.Context(), metav1.ListOptions{})
+	for _, am := range ams.Items {
+		if am.Spec.Type != v1alpha1.App {
+			continue
+		}
+
+		if am.Status.State == v1alpha1.Pending || am.Status.State == v1alpha1.Installing ||
+			am.Status.State == v1alpha1.Downloading {
+			if !stateSet.Has(v1alpha1.Pending.String()) || !stateSet.Has(v1alpha1.Installing.String()) ||
+				!stateSet.Has(v1alpha1.Downloading.String()) {
+				continue
+			}
+			if len(isSysApp) > 0 && isSysApp == "true" {
+				continue
+			}
+			var appconfig appinstaller.ApplicationConfig
+			err = json.Unmarshal([]byte(am.Spec.Config), &appconfig)
+			if err != nil {
+				api.HandleError(resp, req, err)
+				return
+			}
+			now := metav1.Now()
+			app := v1alpha1.Application{
+				TypeMeta: metav1.TypeMeta{},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              am.Name,
+					CreationTimestamp: am.CreationTimestamp,
+				},
+				Spec: v1alpha1.ApplicationSpec{
+					Name:      am.Spec.AppName,
+					Appid:     utils.GetAppID(am.Spec.AppName),
+					IsSysApp:  userspace.IsSysApp(am.Spec.AppName),
+					Namespace: am.Spec.AppNamespace,
+					Owner:     am.Spec.AppOwner,
+					Entrances: appconfig.Entrances,
+					Icon:      appconfig.Icon,
+				},
+				Status: v1alpha1.ApplicationStatus{
+					State:      am.Status.State.String(),
+					StatusTime: &now,
+					UpdateTime: &now,
+				},
+			}
+			appsMap[fmt.Sprintf("%s-%s", am.Spec.AppName, am.Spec.AppOwner)] = app
+		}
+	}
+
+	// run with request context for incoming client
+	allApps, err := client.AppClient.AppV1alpha1().Applications().List(req.Request.Context(), metav1.ListOptions{})
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+
+	// filter by application's owner
+	for _, a := range allApps.Items {
+		if !stateSet.Has(a.Status.State) {
+			continue
+		}
+		if len(isSysApp) > 0 && strconv.FormatBool(a.Spec.IsSysApp) != isSysApp {
+			continue
+		}
+		appsMap[fmt.Sprintf("%s-%s", a.Spec.Name, a.Spec.Owner)] = a
+	}
+
+	for _, app := range appsMap {
+		filteredApps = append(filteredApps, app)
+	}
+
+	// sort by create time desc
+	sort.Slice(filteredApps, func(i, j int) bool {
+		return filteredApps[j].CreationTimestamp.Before(&filteredApps[i].CreationTimestamp)
+	})
+
+	resp.WriteAsJson(filteredApps)
+}
+
+func (h *Handler) getAllUser() ([]string, error) {
+	users := make([]string, 0)
+	gvr := schema.GroupVersionResource{
+		Group:    "iam.kubesphere.io",
+		Version:  "v1alpha2",
+		Resource: "users",
+	}
+	dClient, err := dynamic.NewForConfig(h.kubeConfig)
+	if err != nil {
+		return users, err
+	}
+	user, err := dClient.Resource(gvr).List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return users, err
+	}
+	for _, u := range user.Items {
+		if u.Object == nil {
+			continue
+		}
+		users = append(users, u.GetName())
+	}
+	return users, nil
 }
