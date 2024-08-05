@@ -2,17 +2,22 @@ package images
 
 import (
 	"context"
+	"errors"
 	"os"
 	"time"
+
+	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/cmd/ctr/commands"
 	"github.com/containerd/containerd/cmd/ctr/commands/content"
+	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/platforms"
 	refdocker "github.com/containerd/containerd/reference/docker"
 	"github.com/containerd/containerd/remotes/docker"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 )
 
@@ -33,40 +38,45 @@ type imageService struct {
 	client *containerd.Client
 }
 
-func NewClientOrDie(ctx context.Context) (*imageService, context.Context, context.CancelFunc) {
+func NewClient(ctx context.Context) (*imageService, context.Context, context.CancelFunc, error) {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithCancel(ctx)
 	_, err := os.Stat(sock)
 	if err != nil {
-		panic(err)
+		return nil, ctx, cancel, err
 	}
 	client, err := containerd.New(sock, containerd.WithDefaultNamespace("k8s.io"),
 		containerd.WithTimeout(10*time.Second))
 	if err != nil {
-		panic(err)
+		return nil, ctx, cancel, err
 	}
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithCancel(ctx)
 	return &imageService{
 		client: client,
-	}, ctx, cancel
+	}, ctx, cancel, nil
 }
 
-func (is *imageService) PullImage(ctx context.Context, ref string, opts PullOptions) (string, error) {
-	named, err := refdocker.ParseDockerRef(ref)
+func (is *imageService) PullImage(ctx context.Context, ref appv1alpha1.Ref, opts PullOptions) (string, error) {
+	named, err := refdocker.ParseDockerRef(ref.Name)
 	if err != nil {
-		return ref, err
+		return ref.Name, err
 	}
-	ref = named.String()
+	imageRef := named.String()
+	ref.Name = imageRef
 	config := newFetchConfig()
-	ongoing := newJobs(ref)
+	ongoing := newJobs(imageRef)
 
-	klog.Infof("start to pull image name=%s", ref)
+	imageName, err := is.GetExistsImage(imageRef)
+	if err != nil && errors.Is(err, errdefs.ErrNotFound) {
+		klog.Infof("Failed to get image status err=%v", err)
+	}
+	present := imageName != ""
 
 	pctx, stopProgress := context.WithCancel(ctx)
 
 	progress := make(chan struct{})
 	activeSeen := make(map[string]struct{})
 	go func(map[string]struct{}) {
-		showProgress(pctx, ongoing, is.client.ContentStore(), activeSeen, opts)
+		showProgress(pctx, ongoing, is.client.ContentStore(), activeSeen, shouldPUllImage(ref, present), opts)
 		close(progress)
 	}(activeSeen)
 
@@ -94,14 +104,17 @@ func (is *imageService) PullImage(ctx context.Context, ref string, opts PullOpti
 			remoteOpts = append(remoteOpts, containerd.WithPlatform(platform))
 		}
 	}
-	var maxRetries = 5
-	for i := 0; i < maxRetries; i++ {
-		_, err = is.client.Fetch(pctx, ref, remoteOpts...)
-		if err == nil {
-			break
+	if shouldPUllImage(ref, present) {
+		var maxRetries = 5
+		for i := 0; i < maxRetries; i++ {
+			_, err = is.client.Fetch(pctx, imageRef, remoteOpts...)
+			if err == nil {
+				break
+			}
+			time.Sleep(time.Second)
 		}
-		time.Sleep(time.Second)
 	}
+
 	stopProgress()
 	if err != nil {
 		klog.Infof("fetch image name=%s err=%v", ref, err)
@@ -109,11 +122,31 @@ func (is *imageService) PullImage(ctx context.Context, ref string, opts PullOpti
 	}
 
 	<-progress
-	return ref, nil
+	return imageRef, nil
 }
 
 func (is *imageService) Progress(ctx context.Context, ref string, opts PullOptions) (string, error) {
 	return "", nil
+}
+
+func (is *imageService) GetExistsImage(ref string) (string, error) {
+	name, _ := refdocker.ParseDockerRef(ref)
+	image, err := is.client.GetImage(context.TODO(), name.String())
+	if err != nil {
+		return "", err
+	}
+	return image.Name(), nil
+}
+
+func shouldPUllImage(ref appv1alpha1.Ref, imagePresent bool) bool {
+	if ref.ImagePullPolicy == corev1.PullNever {
+		return false
+	}
+	if ref.ImagePullPolicy == corev1.PullAlways ||
+		(ref.ImagePullPolicy == corev1.PullIfNotPresent && (!imagePresent)) {
+		return true
+	}
+	return false
 }
 
 func newFetchConfig() *content.FetchConfig {

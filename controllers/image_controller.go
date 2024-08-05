@@ -1,6 +1,5 @@
 package controllers
 
-//
 import (
 	"context"
 	"errors"
@@ -164,7 +163,7 @@ func (r *ImageManagerController) reconcile2(cur *appv1alpha1.ImageManager) {
 	r.cancel(cur)
 }
 
-func (r *ImageManagerController) download(ctx context.Context, refs []string, opts images.PullOptions) (err error) {
+func (r *ImageManagerController) download(ctx context.Context, refs []appv1alpha1.Ref, opts images.PullOptions) (err error) {
 	if len(refs) == 0 {
 		return errors.New("no image to download")
 	}
@@ -173,13 +172,17 @@ func (r *ImageManagerController) download(ctx context.Context, refs []string, op
 	tokens := make(chan struct{}, 3)
 	for _, ref := range refs {
 		wg.Add(1)
-		go func(ref string) {
+		go func(ref appv1alpha1.Ref) {
 			tokens <- struct{}{}
 			defer wg.Done()
 			defer func() {
 				<-tokens
 			}()
-			iClient, ctx, cancel := images.NewClientOrDie(ctx)
+			iClient, ctx, cancel, err := images.NewClient(ctx)
+			if err != nil {
+				errs = multierror.Append(errs, err)
+				return
+			}
 			defer cancel()
 			_, err = iClient.PullImage(ctx, ref, opts)
 			if err != nil {

@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"strings"
+
+	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 
 	refdocker "github.com/containerd/containerd/reference/docker"
 	"helm.sh/helm/v3/pkg/action"
@@ -21,6 +24,7 @@ import (
 	"helm.sh/helm/v3/pkg/storage"
 	"helm.sh/helm/v3/pkg/storage/driver"
 	v1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -179,11 +183,20 @@ func GetResourceListFromChart(chartPath string) (resources kube.ResourceList, er
 	}
 }
 
-func GetRefFromResourceList(chartPath string) (refs []string, err error) {
+func GetRefFromResourceList(chartPath string) (refs []v1alpha1.Ref, err error) {
 	resources, err := GetResourceListFromChart(chartPath)
 	if err != nil {
 		klog.Infof("get resourcelist from chart err=%v", err)
 		return refs, err
+	}
+	getPullPolicy := func(imageName string, pullPolicy corev1.PullPolicy) corev1.PullPolicy {
+		if pullPolicy != "" {
+			return pullPolicy
+		}
+		if strings.HasSuffix(imageName, ":latest") {
+			return corev1.PullAlways
+		}
+		return corev1.PullIfNotPresent
 	}
 	seen := make(map[string]struct{})
 	for _, r := range resources {
@@ -195,10 +208,17 @@ func GetRefFromResourceList(chartPath string) (refs []string, err error) {
 				return refs, err
 			}
 			for _, c := range deployment.Spec.Template.Spec.InitContainers {
-				refs = append(refs, c.Image)
+				refs = append(refs, v1alpha1.Ref{
+					Name:            c.Image,
+					ImagePullPolicy: getPullPolicy(c.Image, c.ImagePullPolicy),
+				})
 			}
 			for _, c := range deployment.Spec.Template.Spec.Containers {
-				refs = append(refs, c.Image)
+
+				refs = append(refs, v1alpha1.Ref{
+					Name:            c.Image,
+					ImagePullPolicy: getPullPolicy(c.Image, c.ImagePullPolicy),
+				})
 			}
 		}
 		if kind == "StatefulSet" {
@@ -208,22 +228,31 @@ func GetRefFromResourceList(chartPath string) (refs []string, err error) {
 				return refs, err
 			}
 			for _, c := range sts.Spec.Template.Spec.InitContainers {
-				refs = append(refs, c.Image)
+				refs = append(refs, v1alpha1.Ref{
+					Name:            c.Image,
+					ImagePullPolicy: getPullPolicy(c.Image, c.ImagePullPolicy),
+				})
 			}
 			for _, c := range sts.Spec.Template.Spec.Containers {
-				refs = append(refs, c.Image)
+				refs = append(refs, v1alpha1.Ref{
+					Name:            c.Image,
+					ImagePullPolicy: getPullPolicy(c.Image, c.ImagePullPolicy),
+				})
 			}
 		}
 	}
-	filteredRefs := make([]string, 0)
-	for _, ref := range refs {
-		if _, ok := seen[ref]; !ok {
-			named, err := refdocker.ParseDockerRef(ref)
-			namedRef := ref
+	filteredRefs := make([]v1alpha1.Ref, 0)
+	for _, imageRef := range refs {
+		if _, ok := seen[imageRef.Name]; !ok {
+			named, err := refdocker.ParseDockerRef(imageRef.Name)
+			namedRef := imageRef.Name
 			if err == nil {
 				namedRef = named.String()
 			}
-			filteredRefs = append(filteredRefs, namedRef)
+			filteredRefs = append(filteredRefs, v1alpha1.Ref{
+				Name:            namedRef,
+				ImagePullPolicy: imageRef.ImagePullPolicy,
+			})
 			seen[namedRef] = struct{}{}
 		}
 	}
