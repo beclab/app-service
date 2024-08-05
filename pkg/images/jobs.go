@@ -31,7 +31,7 @@ type StatusInfo struct {
 	UpdatedAt time.Time
 }
 
-func showProgress(ctx context.Context, ongoing *jobs, cs content.Store, seen map[string]struct{}, opts PullOptions) {
+func showProgress(ctx context.Context, ongoing *jobs, cs content.Store, seen map[string]struct{}, needPullImage bool, opts PullOptions) {
 	var (
 		interval = rand.Float64() + float64(1)
 		ticker   = time.NewTicker(time.Duration(interval * float64(time.Second)))
@@ -41,6 +41,14 @@ func showProgress(ctx context.Context, ongoing *jobs, cs content.Store, seen map
 		ordered  []StatusInfo
 	)
 	defer ticker.Stop()
+	// no need to pull image, just update image manager status
+	if !needPullImage {
+		err := setPulledImageStatus(ongoing.name, opts)
+		if err != nil {
+			klog.Infof("setPulledImageStatus name=%v, err=%v", ongoing.name, err)
+		}
+		return
+	}
 
 outer:
 	for {
@@ -244,6 +252,41 @@ func updateProgress(statuses []StatusInfo, imageName string, seen map[string]str
 		return err
 	}
 	return nil
+}
+
+func setPulledImageStatus(imageRef string, opts PullOptions) error {
+	client, err := utils.GetClient()
+	if err != nil {
+		return err
+	}
+	thisNode := os.Getenv("NODE_NAME")
+	imageManagerName, _ := utils.FmtAppMgrName(opts.AppName, opts.OwnerName, opts.AppNamespace)
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		im, err := client.AppV1alpha1().ImageManagers().Get(context.TODO(), imageManagerName, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		now := metav1.Now()
+		imCopy := im.DeepCopy()
+		status := imCopy.Status
+		status.StatusTime = &now
+		status.UpdateTime = &now
+		if imCopy.Status.Conditions == nil {
+			imCopy.Status.Conditions = make(map[string]map[string]map[string]string)
+		}
+		if imCopy.Status.Conditions[thisNode] == nil {
+			imCopy.Status.Conditions[thisNode] = make(map[string]map[string]string)
+		}
+		imCopy.Status.Conditions[thisNode][imageRef] = map[string]string{
+			"progress": "100.00",
+		}
+		_, err = client.AppV1alpha1().ImageManagers().UpdateStatus(context.TODO(), imCopy, metav1.UpdateOptions{})
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	return err
 }
 
 // jobs provides a way of identifying the download keys for a particular task

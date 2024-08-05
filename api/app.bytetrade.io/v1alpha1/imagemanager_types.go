@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -40,8 +41,13 @@ type ImageManagerSpec struct {
 	AppName      string   `json:"appName"`
 	AppNamespace string   `json:"appNamespace,omitempty"`
 	AppOwner     string   `json:"appOwner,omitempty"`
-	Refs         []string `json:"refs"`
+	Refs         []Ref    `json:"refs"`
 	Nodes        []string `json:"nodes"`
+}
+
+type Ref struct {
+	Name            string            `json:"name"`
+	ImagePullPolicy corev1.PullPolicy `json:"imagePullPolicy"`
 }
 
 type ImageProgress struct {

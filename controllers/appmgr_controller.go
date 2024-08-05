@@ -947,7 +947,7 @@ func (r *ApplicationManagerController) pollDownloadProgress(ctx context.Context,
 			nodeMap := make(map[string]*progress)
 			for _, nodeName := range im.Spec.Nodes {
 				for _, ref := range im.Spec.Refs {
-					p := im.Status.Conditions[nodeName][ref]["progress"]
+					p := im.Status.Conditions[nodeName][ref.Name]["progress"]
 					if p == "" {
 						p = "0.00"
 					}
@@ -993,7 +993,7 @@ func (r *ApplicationManagerController) pollDownloadProgress(ctx context.Context,
 	}
 }
 
-func (r *ApplicationManagerController) createImageManager(ctx context.Context, appMgr *appv1alpha1.ApplicationManager, refs []string) error {
+func (r *ApplicationManagerController) createImageManager(ctx context.Context, appMgr *appv1alpha1.ApplicationManager, refs []appv1alpha1.Ref) error {
 	var nodes corev1.NodeList
 	err := r.List(ctx, &nodes, &client.ListOptions{})
 	if err != nil {
@@ -1026,7 +1026,6 @@ func (r *ApplicationManagerController) createImageManager(ctx context.Context, a
 			Nodes:        nodeList,
 		},
 	}
-
 	err = r.Create(ctx, &m)
 	if err != nil {
 		return err
