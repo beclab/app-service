@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"encoding/json"
 	"fmt"
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
@@ -12,6 +13,7 @@ import (
 	"github.com/emicklei/go-restful/v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func (h *Handler) releaseVersion(req *restful.Request, resp *restful.Response) {
@@ -73,6 +75,31 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 
 	token := req.HeaderParameter(constants.AuthorizationTokenKey)
 
+	appConfig, _, err := GetAppConfig(req.Request.Context(), app, owner, request.CfgURL, request.RepoURL, request.Version, token)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	config, err := json.Marshal(appConfig)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	var a appv1alpha1.ApplicationManager
+	key := types.NamespacedName{Name: appMgrName}
+	err = h.ctrlClient.Get(req.Request.Context(), key, &a)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	appCopy := a.DeepCopy()
+	appCopy.Spec.Config = string(config)
+
+	err = h.ctrlClient.Patch(req.Request.Context(), appCopy, client.MergeFrom(&a))
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
 	now := metav1.Now()
 	status := appv1alpha1.ApplicationManagerStatus{
 		OpType:  appv1alpha1.UpgradeOp,
