@@ -605,6 +605,16 @@ func (h *HelmOps) Uninstall() error {
 		return err
 	}
 	if !utils.IsProtectedNamespace(h.app.Namespace) {
+		pvcs, err := client.CoreV1().PersistentVolumeClaims(h.app.Namespace).List(context.TODO(), metav1.ListOptions{})
+		if err != nil {
+			return err
+		}
+		for _, pvc := range pvcs.Items {
+			err = client.CoreV1().PersistentVolumeClaims(pvc.Namespace).Delete(context.TODO(), pvc.Name, metav1.DeleteOptions{})
+			if err != nil {
+				return err
+			}
+		}
 		return client.CoreV1().Namespaces().Delete(context.TODO(), h.app.Namespace, metav1.DeleteOptions{})
 	}
 	return nil
