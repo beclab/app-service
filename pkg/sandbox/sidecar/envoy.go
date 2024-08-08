@@ -381,6 +381,7 @@ func generateIptablesCommands() string {
 
 -A PROXY_OUTBOUND -p tcp --dport 5432 -j RETURN
 -A PROXY_OUTBOUND -p tcp --dport 6379 -j RETURN
+-A PROXY_OUTBOUND -p tcp --dport 3306 -j RETURN
 -A PROXY_OUTBOUND -p tcp --dport 27017 -j RETURN
 -A PROXY_OUTBOUND -p tcp --dport 443 -j RETURN
 -A PROXY_OUTBOUND -p tcp --dport 4222 -j RETURN

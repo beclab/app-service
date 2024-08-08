@@ -17,6 +17,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/klog/v2"
 )
@@ -29,6 +30,13 @@ type StatusInfo struct {
 	Total     int64
 	StartedAt time.Time
 	UpdatedAt time.Time
+}
+
+var retryStrategy = wait.Backoff{
+	Steps:    20,
+	Duration: 10 * time.Millisecond,
+	Factor:   3.0,
+	Jitter:   0.1,
 }
 
 func showProgress(ctx context.Context, ongoing *jobs, cs content.Store, seen map[string]struct{}, needPullImage bool, opts PullOptions) {
@@ -150,7 +158,6 @@ outer:
 			err := updateProgress(ordered, ongoing.name, seen, opts)
 			if err != nil {
 				klog.Infof("update progress failed err=%v", err)
-
 			}
 
 			if done {
@@ -209,7 +216,7 @@ func updateProgress(statuses []StatusInfo, imageName string, seen map[string]str
 	klog.Infof("download image %s progress=%v", imageName, progress)
 	klog.Infof("#######################################")
 
-	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+	err = retry.RetryOnConflict(retryStrategy, func() error {
 		name, _ := utils.FmtAppMgrName(opts.AppName, opts.OwnerName, opts.AppNamespace)
 		im, err := client.AppV1alpha1().ImageManagers().Get(context.TODO(), name, metav1.GetOptions{})
 		if err != nil {
@@ -261,7 +268,7 @@ func setPulledImageStatus(imageRef string, opts PullOptions) error {
 	}
 	thisNode := os.Getenv("NODE_NAME")
 	imageManagerName, _ := utils.FmtAppMgrName(opts.AppName, opts.OwnerName, opts.AppNamespace)
-	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+	err = retry.RetryOnConflict(retryStrategy, func() error {
 		im, err := client.AppV1alpha1().ImageManagers().Get(context.TODO(), imageManagerName, metav1.GetOptions{})
 		if err != nil {
 			return err
