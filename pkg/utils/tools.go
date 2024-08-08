@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math/rand"
 	"time"
+	"unicode"
 
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"github.com/go-crypt/crypt/algorithm/pbkdf2"
@@ -45,6 +46,10 @@ func RandString() string {
 	password := make([]byte, 64)
 	for i := range password {
 		password[i] = charset[rand.Intn(len(charset))]
+	}
+	// nats env variable used in .conf does not support a string begin with 0-9 or $
+	if unicode.IsDigit(rune(password[0])) || password[0] == '$' {
+		password[0] = 'T'
 	}
 	return string(password)
 }
