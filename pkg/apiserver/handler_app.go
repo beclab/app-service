@@ -3,7 +3,6 @@ package apiserver
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -724,10 +723,6 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
-	if role != "platform-admin" {
-		api.HandleBadRequest(resp, req, errors.New("only admin user can get all user's app"))
-		return
-	}
 
 	ss := make([]string, 0)
 	if state != "" {
@@ -747,6 +742,9 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 	ams, err := client.AppClient.AppV1alpha1().ApplicationManagers().List(req.Request.Context(), metav1.ListOptions{})
 	for _, am := range ams.Items {
 		if am.Spec.Type != v1alpha1.App {
+			continue
+		}
+		if role != "platform-admin" && am.Spec.AppOwner != owner {
 			continue
 		}
 
@@ -801,6 +799,9 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 	// filter by application's owner
 	for _, a := range allApps.Items {
 		if !stateSet.Has(a.Status.State) {
+			continue
+		}
+		if role != "platform-admin" && a.Spec.Owner != owner {
 			continue
 		}
 		if len(isSysApp) > 0 && strconv.FormatBool(a.Spec.IsSysApp) != isSysApp {
