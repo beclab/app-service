@@ -321,7 +321,7 @@ func (h *Handler) setupAppAuthLevel(req *restful.Request, resp *restful.Response
 			}
 			if authLevel == constants.AuthorizationLevelOfPrivate &&
 				entrances[i].AuthLevel == constants.AuthorizationLevelOfPublic {
-				policy[entrances[i].Name]["default_policy"] = "two_factor"
+				policy[entrances[i].Name]["default_policy"] = "system"
 			}
 		}
 	}
