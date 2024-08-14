@@ -139,7 +139,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	appNames := strings.Split(req.Name, ",")
 
-	for i, name := range appNames {
+	for _, name := range appNames {
 		app, err := r.AppClientset.AppV1alpha1().Applications().Get(ctx, fmtAppName(name, req.Namespace), metav1.GetOptions{})
 		if validAppObject != nil {
 			// create or update application
@@ -147,7 +147,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				if apierrors.IsNotFound(err) {
 					// check if a new deployment created or not
 					ctrl.Log.Info("create app from deployment watching", "name", validAppObject.GetName(), "namespace", validAppObject.GetNamespace())
-					err = r.createApplication(ctx, req, validAppObject, name, i)
+					err = r.createApplication(ctx, req, validAppObject, name)
 					if err != nil {
 						return ctrl.Result{}, err
 					}
@@ -184,7 +184,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				app.Spec.Settings["analyticsEnabled"] != analyticsEnabled ||
 				versionChanged {
 				ctrl.Log.Info("Application update", "name", app.Name, "spec.name", app.Spec.Name, "spec.owner", app.Spec.Owner)
-				err = r.updateApplication(ctx, req, validAppObject, app, i)
+				err = r.updateApplication(ctx, req, validAppObject, app, name)
 				if err != nil {
 					return ctrl.Result{Requeue: true}, err
 				}
@@ -317,7 +317,7 @@ func (r *ApplicationReconciler) addWatch(c controller.Controller, watchedObject 
 // TODO: get application other spec info
 // TODO: make sure entrance service is applied
 func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.Request,
-	deployment client.Object, name string, index int) error {
+	deployment client.Object, name string) error {
 	owner := deployment.GetLabels()[constants.ApplicationOwnerLabel]
 	appNames := getAppName(deployment)
 	isMultiApp := len(appNames) > 1
@@ -335,7 +335,7 @@ func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.
 	} else {
 		appid = utils.Md5String(name)[:8]
 	}
-	settings := r.getAppSettings(ctx, name, appid, owner, deployment, index, isMultiApp, entrancesMap[name])
+	settings := r.getAppSettings(ctx, name, appid, owner, deployment, isMultiApp, entrancesMap[name])
 	// create the application cr
 	newapp := &appv1alpha1.Application{
 		TypeMeta: metav1.TypeMeta{},
@@ -350,7 +350,7 @@ func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.
 			Owner:          owner, // get from deployment
 			DeploymentName: deployment.GetName(),
 			Entrances:      entrancesMap[name],
-			Icon:           icon[index],
+			Icon:           icon[name],
 			Settings:       settings,
 		},
 	}
@@ -390,17 +390,15 @@ func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.
 }
 
 func (r *ApplicationReconciler) updateApplication(ctx context.Context, req ctrl.Request,
-	deployment client.Object, app *appv1alpha1.Application, index int) error {
+	deployment client.Object, app *appv1alpha1.Application, name string) error {
 	appCopy := app.DeepCopy()
 
 	owner := deployment.GetLabels()[constants.ApplicationOwnerLabel]
 	klog.Infof("in updateApplication ....")
-	name := getAppName(deployment)[index]
 	icons := getAppIcon(deployment)
 	var icon string
-	if index < len(icons) {
-		icon = icons[index]
-	}
+
+	icon = icons[name]
 
 	appCopy.Spec.Name = name
 	appCopy.Spec.Namespace = deployment.GetNamespace()
@@ -484,7 +482,7 @@ func (r *ApplicationReconciler) getEntranceServiceAddress(ctx context.Context, d
 }
 
 func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, appId, owner string, deployment client.Object,
-	index int, isMulti bool, entrances []appv1alpha1.Entrance) map[string]string {
+	isMulti bool, entrances []appv1alpha1.Entrance) map[string]string {
 	settings := make(map[string]string)
 	settings["source"] = api.Unknown.String()
 
@@ -497,18 +495,14 @@ func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, app
 	}
 
 	titles := getAppTitle(deployment)
-	if index < len(titles) {
-		settings["title"] = titles[index]
-	}
+	settings["title"] = titles[appName]
 
 	if target, ok := deployment.GetLabels()[constants.ApplicationTargetLabel]; ok {
 		settings["target"] = target
 	}
 
 	versions := getAppVersion(deployment)
-	if index < len(versions) {
-		settings["version"] = versions[index]
-	}
+	settings["version"] = versions[appName]
 
 	settings["analyticsEnabled"] = "false"
 	analyticsEnabledFromAnnotation, ok := deployment.GetAnnotations()[constants.ApplicationAnalytics]
@@ -778,17 +772,41 @@ func getAppName(deployment client.Object) []string {
 	return []string{name}
 }
 
-func getAppIcon(deployment client.Object) []string {
-	iconAnnotation := deployment.GetAnnotations()[constants.ApplicationIconLabel]
-	return strings.Split(iconAnnotation, ",")
+func getAppIcon(deployment client.Object) map[string]string {
+	ret := make(map[string]string)
+	if deployment.GetLabels()[constants.ApplicationAppGroupLabel] == "true" {
+		err := json.Unmarshal([]byte(deployment.GetAnnotations()[constants.ApplicationIconLabel]), &ret)
+		if err != nil {
+			klog.Infof("Failed to unmarshal application icon label err=%v", err)
+		}
+	} else {
+		ret[deployment.GetLabels()[constants.ApplicationNameLabel]] = deployment.GetAnnotations()[constants.ApplicationIconLabel]
+	}
+	return ret
 }
 
-func getAppVersion(deployment client.Object) []string {
-	versionAnnotation := deployment.GetAnnotations()[constants.ApplicationVersionLabel]
-	return strings.Split(versionAnnotation, ",")
+func getAppVersion(deployment client.Object) map[string]string {
+	ret := make(map[string]string)
+	if deployment.GetLabels()[constants.ApplicationAppGroupLabel] == "true" {
+		err := json.Unmarshal([]byte(deployment.GetAnnotations()[constants.ApplicationVersionLabel]), &ret)
+		if err != nil {
+			klog.Infof("Failed to unmarshal application icon label err=%v", err)
+		}
+	} else {
+		ret[deployment.GetLabels()[constants.ApplicationNameLabel]] = deployment.GetAnnotations()[constants.ApplicationVersionLabel]
+	}
+	return ret
 }
 
-func getAppTitle(deployment client.Object) []string {
-	titleAnnotation := deployment.GetAnnotations()[constants.ApplicationTitleLabel]
-	return strings.Split(titleAnnotation, ",")
+func getAppTitle(deployment client.Object) map[string]string {
+	ret := make(map[string]string)
+	if deployment.GetLabels()[constants.ApplicationAppGroupLabel] == "true" {
+		err := json.Unmarshal([]byte(deployment.GetAnnotations()[constants.ApplicationTitleLabel]), &ret)
+		if err != nil {
+			klog.Infof("Failed to unmarshal application icon label err=%v", err)
+		}
+	} else {
+		ret[deployment.GetLabels()[constants.ApplicationNameLabel]] = deployment.GetAnnotations()[constants.ApplicationTitleLabel]
+	}
+	return ret
 }
