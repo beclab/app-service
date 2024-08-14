@@ -10,6 +10,7 @@ const (
 	KubeSphereAPIScheme           = "http"
 	AuthorizationTokenKey         = "X-Authorization"
 	ApplicationNameLabel          = "applications.app.bytetrade.io/name"
+	ApplicationAppGroupLabel      = "applications.app.bytetrade.io/group"
 	ApplicationAuthorLabel        = "applications.app.bytetrade.io/author"
 	ApplicationOwnerLabel         = "applications.app.bytetrade.io/owner"
 	ApplicationIconLabel          = "applications.app.bytetrade.io/icon"

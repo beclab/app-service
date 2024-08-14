@@ -204,23 +204,32 @@ func CreateSysAppMgr(app, owner string) error {
 			Source:       "system",
 		},
 	}
-	a, err := client.AppV1alpha1().ApplicationManagers().Create(context.TODO(), appMgr, metav1.CreateOptions{})
-	if err != nil && !apierrors.IsAlreadyExists(err) {
+
+	a, err := client.AppV1alpha1().ApplicationManagers().Get(context.TODO(), appMgr.Name, metav1.GetOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
-	appMgrCopy := a.DeepCopy()
-	status := v1alpha1.ApplicationManagerStatus{
-		OpType:       v1alpha1.InstallOp,
-		State:        v1alpha1.Completed,
-		OpGeneration: int64(0),
-		Message:      "sys app install completed",
-		UpdateTime:   &now,
-		StatusTime:   &now,
+	if apierrors.IsNotFound(err) {
+		_, err = client.AppV1alpha1().ApplicationManagers().Create(context.TODO(), appMgr, metav1.CreateOptions{})
+		if err != nil && !apierrors.IsAlreadyExists(err) {
+			return err
+		}
+		return nil
+	} else {
+		appMgrCopy := a.DeepCopy()
+		status := v1alpha1.ApplicationManagerStatus{
+			OpType:       v1alpha1.InstallOp,
+			State:        v1alpha1.Completed,
+			OpGeneration: int64(0),
+			Message:      "sys app install completed",
+			UpdateTime:   &now,
+			StatusTime:   &now,
+		}
+		appMgrCopy.Status = status
+		_, err = client.AppV1alpha1().ApplicationManagers().UpdateStatus(context.TODO(), appMgrCopy, metav1.UpdateOptions{})
+		return err
 	}
-	appMgrCopy.Status = status
-	_, err = client.AppV1alpha1().ApplicationManagers().UpdateStatus(context.TODO(), appMgrCopy, metav1.UpdateOptions{})
 
-	return err
 }
 
 // GetAppMgrStatus returns status of an applicationmanager.
