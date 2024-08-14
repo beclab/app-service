@@ -955,7 +955,7 @@ func getApplicationPolicy(policies []AppPolicy, entrances []appv1alpha1.Entrance
 
 	policy := make(map[string]applicationSettingsPolicy)
 	for _, e := range entrances {
-		defaultPolicy := "two_factor"
+		defaultPolicy := "system"
 		sp := subPolicy[e.Name]
 		if e.AuthLevel == constants.AuthorizationLevelOfPublic {
 			defaultPolicy = constants.AuthorizationLevelOfPublic
