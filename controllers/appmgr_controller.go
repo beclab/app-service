@@ -932,7 +932,7 @@ func (r *ApplicationManagerController) pollDownloadProgress(ctx context.Context,
 			var im appv1alpha1.ImageManager
 			err := r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &im)
 			if err != nil {
-				klog.Infof("Failed to get applicationmanagers name=%s err=%v", appMgr.Name, err)
+				klog.Infof("Failed to get imanagermanagers name=%s err=%v", appMgr.Name, err)
 				return err
 			}
 
@@ -1027,10 +1027,14 @@ func (r *ApplicationManagerController) createImageManager(ctx context.Context, a
 			return err
 		}
 	}
-
+	labels := make(map[string]string)
+	if strings.HasSuffix(appMgr.Spec.AppName, "-dev") {
+		labels["dev.bytetrade.io/dev-owner"] = appMgr.Spec.AppOwner
+	}
 	m := appv1alpha1.ImageManager{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: appMgr.Name,
+			Name:   appMgr.Name,
+			Labels: labels,
 		},
 		Spec: appv1alpha1.ImageManagerSpec{
 			AppName:      appMgr.Spec.AppName,
