@@ -155,8 +155,6 @@ func (h *HelmOps) Install() error {
 
 // NewHelmOps constructs a new helmOps.
 func NewHelmOps(ctx context.Context, kubeConfig *rest.Config, app *ApplicationConfig, token string, options Opt) (*HelmOps, error) {
-	klog.Infof("uninstall: namespace:%s, app:%s", app.Namespace, app.AppName)
-
 	actionConfig, settings, err := helm.InitConfig(kubeConfig, app.Namespace)
 	if err != nil {
 		return nil, err
