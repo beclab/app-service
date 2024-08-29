@@ -58,7 +58,8 @@ type Entrance struct {
 	AuthLevel string `yaml:"authLevel,omitempty" json:"authLevel,omitempty"`
 	Invisible bool   `yaml:"invisible,omitempty" json:"invisible,omitempty"`
 	// openMethod has three choices default, iframe, window
-	OpenMethod string `yaml:"openMethod,omitempty" json:"openMethod,omitempty"`
+	OpenMethod      string `yaml:"openMethod,omitempty" json:"openMethod,omitempty"`
+	WindowPushState bool   `yaml:"windowPushState,omitempty" json:"windowPushState,omitempty"`
 }
 
 // ApplicationStatus defines the observed state of Application
