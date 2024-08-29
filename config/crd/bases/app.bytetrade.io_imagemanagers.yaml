@@ -66,6 +66,8 @@ spec:
                 items:
                   properties:
                     imagePullPolicy:
+                      description: PullPolicy describes a policy for if/when to pull
+                        a container image
                       type: string
                     name:
                       type: string
