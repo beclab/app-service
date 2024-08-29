@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http/httputil"
+	"os"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -431,6 +432,10 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 	if h.app.OIDC.Enabled {
 		err = h.createOIDCClient(values, zone, h.app.Namespace)
 	}
+
+	sharedLibPath := os.Getenv("SHARED_LIB_PATH")
+	values["sharedlib"] = sharedLibPath
+
 	return values, err
 }
 
