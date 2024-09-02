@@ -64,6 +64,18 @@ func (h *Handler) status(req *restful.Request, resp *restful.Response) {
 			api.HandleError(resp, req, e)
 			return
 		}
+
+		if (am.Status.OpType == v1alpha1.InstallOp && am.Status.State == v1alpha1.Canceled) ||
+			(am.Status.OpType == v1alpha1.UninstallOp && am.Status.State == v1alpha1.Completed) {
+			api.HandleNotFound(resp, req, fmt.Errorf("app %s not found", app))
+			return
+		}
+
+		state := v1alpha1.Pending
+		if am.Status.State == v1alpha1.Downloading || am.Status.State == v1alpha1.Installing {
+			state = am.Status.State
+		}
+
 		now := metav1.Now()
 		sts = appinstaller.Status{
 			Name:              am.Spec.AppName,
@@ -72,7 +84,7 @@ func (h *Handler) status(req *restful.Request, resp *restful.Response) {
 			CreationTimestamp: now,
 			Source:            am.Spec.Source,
 			AppStatus: v1alpha1.ApplicationStatus{
-				State:      v1alpha1.AppPending.String(),
+				State:      state.String(),
 				StatusTime: &now,
 				UpdateTime: &now,
 			},
@@ -108,6 +120,7 @@ func (h *Handler) appsStatus(req *restful.Request, resp *restful.Response) {
 
 	// filter by application's owner
 	filteredApps := make([]appinstaller.Status, 0)
+	appSets := sets.String{}
 	for _, a := range allApps.Items {
 		if a.Spec.Owner == owner {
 			if !stateSet.Has(a.Status.State) {
@@ -128,6 +141,7 @@ func (h *Handler) appsStatus(req *restful.Request, resp *restful.Response) {
 				Source:            source,
 				AppStatus:         a.Status,
 			}
+			appSets.Insert(a.Spec.Name)
 			filteredApps = append(filteredApps, status)
 		}
 	}
@@ -138,8 +152,9 @@ func (h *Handler) appsStatus(req *restful.Request, resp *restful.Response) {
 		return
 	}
 	for _, am := range appAms.Items {
-		if am.Spec.AppOwner == owner && am.Status.State == v1alpha1.Pending {
-			if !stateSet.Has(v1alpha1.Pending.String()) {
+		if am.Spec.AppOwner == owner && (am.Status.State == v1alpha1.Pending ||
+			am.Status.State == v1alpha1.Downloading || am.Status.State == v1alpha1.Installing) {
+			if !stateSet.Has(v1alpha1.Pending.String()) || !stateSet.Has(v1alpha1.Downloading.String()) || !stateSet.Has(v1alpha1.Installing.String()) {
 				continue
 			}
 			if len(isSysApp) > 0 && isSysApp == "true" {
@@ -153,12 +168,14 @@ func (h *Handler) appsStatus(req *restful.Request, resp *restful.Response) {
 				CreationTimestamp: now,
 				Source:            am.Spec.Source,
 				AppStatus: v1alpha1.ApplicationStatus{
-					State:      v1alpha1.AppPending.String(),
+					State:      am.Status.State.String(),
 					StatusTime: &now,
 					UpdateTime: &now,
 				},
 			}
-			filteredApps = append(filteredApps, status)
+			if !appSets.Has(am.Spec.AppName) {
+				filteredApps = append(filteredApps, status)
+			}
 		}
 	}
 
