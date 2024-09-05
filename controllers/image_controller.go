@@ -145,7 +145,7 @@ func (r *ImageManagerController) reconcile(instance *appv1alpha1.ImageManager) {
 
 func (r *ImageManagerController) preEnqueueCheckForCreate(obj client.Object) bool {
 	im, _ := obj.(*appv1alpha1.ImageManager)
-	klog.Infof("enqueue check: %v", im.Status)
+	klog.Infof("enqueue check: %v", im.Status.State)
 	if im.Status.State == appv1alpha1.Failed.String() || im.Status.State == appv1alpha1.Canceled.String() || im.Status.State == appv1alpha1.Completed.String() {
 		return false
 	}
