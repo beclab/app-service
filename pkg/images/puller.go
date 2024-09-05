@@ -3,7 +3,10 @@ package images
 import (
 	"context"
 	"errors"
+	"net"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
@@ -16,12 +19,21 @@ import (
 	"github.com/containerd/containerd/platforms"
 	refdocker "github.com/containerd/containerd/reference/docker"
 	"github.com/containerd/containerd/remotes/docker"
+	srvconfig "github.com/containerd/containerd/services/server/config"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 )
 
+const defaultRegistry = "https://registry-1.docker.io"
+
 var sock = "/var/run/containerd/containerd.sock"
+var mirrorsEndpoint []string
+
+func init() {
+	mirrorsEndpoint = getMirrorsEndpoint()
+	klog.Infof("mirrorsEndPoint: %v", mirrorsEndpoint)
+}
 
 type PullOptions struct {
 	AppName      string
@@ -56,16 +68,18 @@ func NewClient(ctx context.Context) (*imageService, context.Context, context.Can
 }
 
 func (is *imageService) PullImage(ctx context.Context, ref appv1alpha1.Ref, opts PullOptions) (string, error) {
-	named, err := refdocker.ParseDockerRef(ref.Name)
+	originNamed, err := refdocker.ParseDockerRef(ref.Name)
 	if err != nil {
 		return ref.Name, err
 	}
-	imageRef := named.String()
-	ref.Name = imageRef
+	ref.Name = originNamed.String()
 	config := newFetchConfig()
-	ongoing := newJobs(imageRef)
+	// replaced image ref
+	replacedRef := replacedImageRef(originNamed.String())
 
-	imageName, err := is.GetExistsImage(imageRef)
+	ongoing := newJobs(replacedRef, originNamed.String())
+
+	imageName, err := is.GetExistsImage(originNamed.String())
 	if err != nil && errors.Is(err, errdefs.ErrNotFound) {
 		klog.Infof("Failed to get image status err=%v", err)
 	}
@@ -107,9 +121,12 @@ func (is *imageService) PullImage(ctx context.Context, ref appv1alpha1.Ref, opts
 	if shouldPUllImage(ref, present) {
 		var maxRetries = 5
 		for i := 0; i < maxRetries; i++ {
-			_, err = is.client.Fetch(pctx, imageRef, remoteOpts...)
+			_, err = is.client.Fetch(pctx, replacedRef, remoteOpts...)
 			if err == nil {
-				break
+				err = is.tag(pctx, replacedRef, originNamed.String())
+				if err == nil {
+					break
+				}
 			}
 			time.Sleep(time.Second)
 		}
@@ -122,7 +139,7 @@ func (is *imageService) PullImage(ctx context.Context, ref appv1alpha1.Ref, opts
 	}
 
 	<-progress
-	return imageRef, nil
+	return originNamed.String(), nil
 }
 
 func (is *imageService) Progress(ctx context.Context, ref string, opts PullOptions) (string, error) {
@@ -136,6 +153,33 @@ func (is *imageService) GetExistsImage(ref string) (string, error) {
 		return "", err
 	}
 	return image.Name(), nil
+}
+
+func (is *imageService) tag(ctx context.Context, ref, targetRef string) error {
+	ctx, done, err := is.client.WithLease(ctx)
+	if err != nil {
+		return err
+	}
+	defer done(ctx)
+	imgService := is.client.ImageService()
+	image, err := imgService.Get(ctx, ref)
+	if err != nil {
+		return err
+	}
+	image.Name = targetRef
+	if _, err = imgService.Create(ctx, image); err != nil {
+		if errdefs.IsAlreadyExists(err) {
+			if err = imgService.Delete(ctx, targetRef); err != nil {
+				return err
+			}
+			if _, err = imgService.Create(ctx, image); err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+	return nil
 }
 
 func shouldPUllImage(ref appv1alpha1.Ref, imagePresent bool) bool {
@@ -158,3 +202,52 @@ func newFetchConfig() *content.FetchConfig {
 	}
 	return config
 }
+
+func getMirrorsEndpoint() (ep []string) {
+	config := &srvconfig.Config{}
+	err := srvconfig.LoadConfig("/etc/containerd/config.toml", config)
+	if err != nil {
+		klog.Infof("load mirrors endpoint failed err=%v", err)
+		return
+	}
+	plugins := config.Plugins["io.containerd.grpc.v1.cri"]
+	r := plugins.GetPath([]string{"registry", "mirrors", "docker.io", "endpoint"})
+	if r == nil {
+		return
+	}
+	for _, e := range r.([]interface{}) {
+		ep = append(ep, e.(string))
+	}
+	return ep
+}
+
+func replacedImageRef(oldImageRef string) string {
+	if len(mirrorsEndpoint) == 0 {
+		return oldImageRef
+	}
+	for _, e := range mirrorsEndpoint {
+		if e != defaultRegistry {
+			url, _ := url.Parse(e)
+			if url.Scheme == "http" {
+				continue
+			}
+			host := url.Host
+			if !hasPort(url.Host) {
+				host = net.JoinHostPort(url.Host, "443")
+			}
+			conn, err := net.DialTimeout("tcp", host, 2*time.Second)
+			if err != nil {
+				continue
+			}
+			if conn != nil {
+				conn.Close()
+			}
+			parts := strings.Split(oldImageRef, "/")
+			parts[0] = url.Host
+			return strings.Join(parts, "/")
+		}
+	}
+	return oldImageRef
+}
+
+func hasPort(s string) bool { return strings.LastIndex(s, ":") > strings.LastIndex(s, "]") }

@@ -155,7 +155,7 @@ outer:
 				ordered = append(ordered, statuses[key])
 			}
 			klog.Infof("downloading image %v", ongoing.name)
-			err := updateProgress(ordered, ongoing.name, seen, opts)
+			err := updateProgress(ordered, ongoing, seen, opts)
 			if err != nil {
 				klog.Infof("update progress failed err=%v", err)
 			}
@@ -171,7 +171,7 @@ outer:
 	}
 }
 
-func updateProgress(statuses []StatusInfo, imageName string, seen map[string]struct{}, opts PullOptions) error {
+func updateProgress(statuses []StatusInfo, ongoing *jobs, seen map[string]struct{}, opts PullOptions) error {
 	client, err := utils.GetClient()
 	if err != nil {
 		return err
@@ -180,7 +180,7 @@ func updateProgress(statuses []StatusInfo, imageName string, seen map[string]str
 	var progress float64
 
 	klog.Infof("seen: %v", seen)
-	klog.Infof("imageName=%s", imageName)
+	klog.Infof("imageName=%s", ongoing.name)
 	for _, status := range statuses {
 		klog.Infof("status: %s,ref: %v, offset: %v, Total: %v", status.Status, status.Ref, status.Offset, status.Total)
 		switch status.Status {
@@ -213,7 +213,7 @@ func updateProgress(statuses []StatusInfo, imageName string, seen map[string]str
 	if size > 0 {
 		progress = float64(offset) / float64(size) * float64(100)
 	}
-	klog.Infof("download image %s progress=%v", imageName, progress)
+	klog.Infof("download image %s progress=%v", ongoing.name, progress)
 	klog.Infof("#######################################")
 
 	err = retry.RetryOnConflict(retryStrategy, func() error {
@@ -231,7 +231,7 @@ func updateProgress(statuses []StatusInfo, imageName string, seen map[string]str
 		status.UpdateTime = &now
 
 		thisNode := os.Getenv("NODE_NAME")
-		p := im.Status.Conditions[thisNode][imageName]["progress"]
+		p := im.Status.Conditions[thisNode][ongoing.originRef]["progress"]
 		originProgress, _ := strconv.ParseFloat(p, 64)
 		if originProgress >= progress {
 			return nil
@@ -244,7 +244,7 @@ func updateProgress(statuses []StatusInfo, imageName string, seen map[string]str
 			imCopy.Status.Conditions[thisNode] = make(map[string]map[string]string)
 
 		}
-		imCopy.Status.Conditions[thisNode][imageName] = map[string]string{"progress": strconv.FormatFloat(progress, 'f', 2, 64)}
+		imCopy.Status.Conditions[thisNode][ongoing.originRef] = map[string]string{"progress": strconv.FormatFloat(progress, 'f', 2, 64)}
 
 		_, err = client.AppV1alpha1().ImageManagers().UpdateStatus(context.TODO(), imCopy, metav1.UpdateOptions{})
 		if err != nil {
@@ -302,17 +302,19 @@ func setPulledImageStatus(imageRef string, opts PullOptions) error {
 // This is very minimal and will probably be replaced with something more
 // featured.
 type jobs struct {
-	name     string
-	added    map[digest.Digest]struct{}
-	descs    []ocispec.Descriptor
-	mu       sync.Mutex
-	resolved bool
+	name      string
+	added     map[digest.Digest]struct{}
+	descs     []ocispec.Descriptor
+	mu        sync.Mutex
+	resolved  bool
+	originRef string
 }
 
-func newJobs(name string) *jobs {
+func newJobs(name string, originRef string) *jobs {
 	return &jobs{
-		name:  name,
-		added: map[digest.Digest]struct{}{},
+		name:      name,
+		originRef: originRef,
+		added:     map[digest.Digest]struct{}{},
 	}
 }
 
