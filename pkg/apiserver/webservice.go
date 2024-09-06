@@ -293,6 +293,13 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Returns(http.StatusOK, "App namespace validated success", nil)).
 		Consumes(restful.MIME_JSON)
 
+	ws.Route(ws.POST("/pods/eviction").
+		To(handler.podEvictionValidate).
+		Doc("validating webhook for validate pod eviction").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Returns(http.StatusOK, "pod eviction validated success", nil)).
+		Consumes(restful.MIME_JSON)
+
 	ws.Route(ws.POST("/gpulimit/inject").
 		To(handler.gpuLimitInject).
 		Doc("add resources limits for deployment/statefulset").

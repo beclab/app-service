@@ -11,6 +11,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/provider"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
+	"bytetrade.io/web3os/app-service/pkg/utils"
 	"bytetrade.io/web3os/app-service/pkg/webhook"
 
 	"github.com/emicklei/go-restful/v3"
@@ -20,6 +21,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -27,6 +29,11 @@ import (
 
 var (
 	errNilAdmissionRequest = fmt.Errorf("nil admission request")
+)
+
+const (
+	deployment  = "Deployment"
+	statefulSet = "StatefulSet"
 )
 
 func (h *Handler) sandboxInject(req *restful.Request, resp *restful.Response) {
@@ -399,4 +406,145 @@ func (h *Handler) validateProviderRegistry(ctx context.Context, req *admissionv1
 	}
 
 	return resp
+}
+
+func (h *Handler) podEvictionValidate(req *restful.Request, resp *restful.Response) {
+	klog.Infof("Received POD Eviction validate webhook request: Method=%v, URL=%v", req.Request.Method, req.Request.URL)
+	admissionReqBody, ok := h.sidecarWebhook.GetAdmissionRequestBody(req, resp)
+	if !ok {
+		return
+	}
+
+	var admissionReq, admissionResp admissionv1.AdmissionReview
+	proxyUUID := uuid.New()
+	if _, _, err := webhook.Deserializer.Decode(admissionReqBody, nil, &admissionReq); err != nil {
+		klog.Errorf("Failed to decode admission request body err=%v", err)
+		admissionResp.Response = h.sidecarWebhook.AdmissionError(err)
+	} else {
+		admissionResp.Response = h.eviction2stop(req.Request.Context(), admissionReq.Request, proxyUUID)
+	}
+	admissionResp.TypeMeta = admissionReq.TypeMeta
+	admissionResp.Kind = admissionReq.Kind
+
+	requestForNamespace := "unknown"
+	if admissionReq.Request != nil {
+		requestForNamespace = admissionReq.Request.Namespace
+	}
+	err := resp.WriteAsJson(&admissionResp)
+	if err != nil {
+		klog.Errorf("Failed to write response validate review in namespace=%s err=%v", requestForNamespace, err)
+		return
+	}
+	klog.Errorf("Done responding to admission[validate app namespace] request with uuid=%s namespace=%s", proxyUUID, requestForNamespace)
+}
+
+func (h *Handler) eviction2stop(ctx context.Context, req *admissionv1.AdmissionRequest, proxyUUID uuid.UUID) *admissionv1.AdmissionResponse {
+	if req == nil {
+		klog.Error("Failed to get admission request err=admission request is nil")
+		return h.sidecarWebhook.AdmissionError(errNilAdmissionRequest)
+	}
+	resp := &admissionv1.AdmissionResponse{
+		Allowed: false,
+		UID:     req.UID,
+	}
+
+	var nodes corev1.NodeList
+	err := h.ctrlClient.List(ctx, &nodes, &client.ListOptions{})
+	if err != nil {
+		return h.sidecarWebhook.AdmissionError(err)
+	}
+	canScheduleNodes := 0
+	for _, node := range nodes.Items {
+		if utils.IsNodeReady(&node) && !node.Spec.Unschedulable {
+			canScheduleNodes++
+		}
+	}
+	if canScheduleNodes > 1 {
+		resp.Allowed = true
+		return resp
+	}
+
+	object := struct {
+		metav1.ObjectMeta `json:"metadata,omitempty"`
+	}{}
+	raw := req.Object.Raw
+	err = json.Unmarshal(raw, &object)
+	if err != nil {
+		klog.Errorf("Failed to unmarshal request object raw with uuid=%s namespace=%s", proxyUUID, req.Namespace)
+		return h.sidecarWebhook.AdmissionError(err)
+	}
+	podName := object.GetName()
+	namespace := object.GetNamespace()
+	allow, err := h.setDeployOrStsReplicas(ctx, podName, namespace, int32(0))
+	if err != nil {
+		return h.sidecarWebhook.AdmissionError(err)
+	}
+	if allow {
+		resp.Allowed = true
+	}
+	return resp
+}
+
+func (h *Handler) setDeployOrStsReplicas(ctx context.Context, podName, namespace string, replicas int32) (bool, error) {
+	var pod corev1.Pod
+	key := types.NamespacedName{Name: podName, Namespace: namespace}
+	err := h.ctrlClient.Get(ctx, key, &pod)
+	if err != nil {
+		return false, err
+	}
+	if len(pod.OwnerReferences) == 0 {
+		return true, nil
+	}
+	var kind, name string
+	ownerRef := pod.OwnerReferences[0]
+	switch ownerRef.Kind {
+	case "ReplicaSet":
+		key = types.NamespacedName{Namespace: namespace, Name: ownerRef.Name}
+		var rs appsv1.ReplicaSet
+		err = h.ctrlClient.Get(ctx, key, &rs)
+		if err != nil {
+			return false, err
+		}
+		if len(rs.OwnerReferences) > 0 && rs.OwnerReferences[0].Kind == deployment {
+			kind = deployment
+			name = rs.OwnerReferences[0].Name
+		}
+	case statefulSet:
+		kind = statefulSet
+		name = ownerRef.Name
+	}
+	if kind == "" {
+		return true, nil
+	}
+	switch kind {
+	case deployment:
+		var deploy appsv1.Deployment
+		key = types.NamespacedName{Name: name, Namespace: namespace}
+		err = h.ctrlClient.Get(ctx, key, &deploy)
+		if err != nil {
+			return false, err
+		}
+		deployCopy := deploy.DeepCopy()
+		deployCopy.Spec.Replicas = &replicas
+
+		err = h.ctrlClient.Patch(ctx, deployCopy, client.MergeFrom(&deploy))
+		if err != nil {
+			return false, err
+		}
+	case statefulSet:
+		var sts appsv1.StatefulSet
+		key = types.NamespacedName{Name: name, Namespace: namespace}
+		err = h.ctrlClient.Get(ctx, key, &sts)
+		if err != nil {
+			return false, err
+		}
+		stsCopy := sts.DeepCopy()
+		stsCopy.Spec.Replicas = &replicas
+
+		err = h.ctrlClient.Patch(ctx, stsCopy, client.MergeFrom(&sts))
+		if err != nil {
+			return false, err
+		}
+	}
+	return false, nil
 }

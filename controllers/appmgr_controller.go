@@ -1000,17 +1000,10 @@ func (r *ApplicationManagerController) createImageManager(ctx context.Context, a
 		klog.Infof("Failed to list err=%v", err)
 		return err
 	}
-	isNodeReady := func(node *corev1.Node) bool {
-		for _, c := range node.Status.Conditions {
-			if c.Type == corev1.NodeReady {
-				return c.Status == corev1.ConditionTrue
-			}
-		}
-		return false
-	}
+
 	nodeList := make([]string, 0)
 	for _, node := range nodes.Items {
-		if !isNodeReady(&node) || node.Spec.Unschedulable {
+		if !utils.IsNodeReady(&node) || node.Spec.Unschedulable {
 			continue
 		}
 		nodeList = append(nodeList, node.Name)

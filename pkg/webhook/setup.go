@@ -27,6 +27,8 @@ const (
 	webhookServiceName                    = "app-service"
 	webhookServiceNamespace               = "os-system"
 	defaultCaPath                         = "/etc/certs/ca.crt"
+	evictionWebhookName                   = "eviction-webhook"
+	evictionValidatingWebhookName         = "pods-eviction-webhook.bytetrade.io"
 )
 
 // CreateOrUpdateSandboxMutatingWebhook creates or updates the sandbox mutating webhook.
@@ -184,7 +186,7 @@ func (wh *Webhook) CreateOrUpdateAppNamespaceValidatingWebhook() error {
 				TimeoutSeconds:          &webhookTimeout,
 				AdmissionReviewVersions: []string{"v1"}}},
 	}
-	if _, err := wh.kubeClient.AdmissionregistrationV1().ValidatingWebhookConfigurations().
+	if _, err = wh.kubeClient.AdmissionregistrationV1().ValidatingWebhookConfigurations().
 		Create(context.Background(), &mwc, metav1.CreateOptions{}); err != nil {
 		if apierrors.IsAlreadyExists(err) {
 			existing, err := wh.kubeClient.AdmissionregistrationV1().ValidatingWebhookConfigurations().
@@ -377,5 +379,86 @@ func (wh *Webhook) CreateOrUpdateProviderRegistryValidatingWebhook() error {
 		}
 	}
 	klog.Info("Finished creating ValidatingWebhookConfiguration name=%s", providerRegistryWebhookName)
+	return nil
+}
+
+func (wh *Webhook) CreateOrUpdateEvictionValidatingWebhook() error {
+	webhookPath := "/app-service/v1/pods/eviction"
+	port, err := strconv.Atoi(strings.Split(constants.WebhookServerListenAddress, ":")[1])
+	if err != nil {
+		return err
+	}
+	webhookPort := int32(port)
+	failurePolicy := admissionregv1.Fail
+	matchPolicy := admissionregv1.Exact
+	webhookTimeout := int32(30)
+
+	vwhcLabels := map[string]string{"velero.io/exclude-from-backup": "true"}
+
+	caBundle, err := ioutil.ReadFile(defaultCaPath)
+	if err != nil {
+		return err
+	}
+	vwc := admissionregv1.ValidatingWebhookConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   evictionWebhookName,
+			Labels: vwhcLabels,
+		},
+		Webhooks: []admissionregv1.ValidatingWebhook{
+			{
+				Name: evictionValidatingWebhookName,
+				ClientConfig: admissionregv1.WebhookClientConfig{
+					CABundle: caBundle,
+					Service: &admissionregv1.ServiceReference{
+						Namespace: webhookServiceNamespace,
+						Name:      webhookServiceName,
+						Path:      &webhookPath,
+						Port:      &webhookPort,
+					},
+				},
+				FailurePolicy: &failurePolicy,
+				MatchPolicy:   &matchPolicy,
+				Rules: []admissionregv1.RuleWithOperations{
+					{
+						Operations: []admissionregv1.OperationType{admissionregv1.Create},
+						Rule: admissionregv1.Rule{
+							APIGroups:   []string{"*"},
+							APIVersions: []string{"*"},
+							Resources:   []string{"pods/eviction"},
+						},
+					},
+				},
+				SideEffects: func() *admissionregv1.SideEffectClass {
+					sideEffect := admissionregv1.SideEffectClassNoneOnDryRun
+					return &sideEffect
+				}(),
+				TimeoutSeconds:          &webhookTimeout,
+				AdmissionReviewVersions: []string{"v1"},
+			},
+		},
+	}
+	if _, err = wh.kubeClient.AdmissionregistrationV1().ValidatingWebhookConfigurations().
+		Create(context.TODO(), &vwc, metav1.CreateOptions{}); err != nil {
+		if apierrors.IsAlreadyExists(err) {
+			existing, err := wh.kubeClient.AdmissionregistrationV1().ValidatingWebhookConfigurations().
+				Get(context.Background(), vwc.Name, metav1.GetOptions{})
+			if err != nil {
+				klog.Errorf("Failed to get ValidatingWebhookConfiguration name=%s err=%v", vwc.Name, err)
+				return err
+			}
+			vwc.ObjectMeta = existing.ObjectMeta
+			if _, err = wh.kubeClient.AdmissionregistrationV1().ValidatingWebhookConfigurations().
+				Update(context.TODO(), &vwc, metav1.UpdateOptions{}); err != nil {
+				if !apierrors.IsConflict(err) {
+					klog.Errorf("Failed to update ValidatingWebhookConfiguration name=%s err=%v", vwc.Name, err)
+					return err
+				}
+			}
+		} else {
+			klog.Errorf("Failed to create ValidatingWebhookConfiguration name=%s err=%v", vwc.Name, err)
+			return err
+		}
+	}
+	klog.Info("Finished creating ValidatingWebhookConfiguration name=%s", vwc.Name)
 	return nil
 }
