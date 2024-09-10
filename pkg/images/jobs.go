@@ -226,10 +226,8 @@ func updateProgress(statuses []StatusInfo, ongoing *jobs, seen map[string]struct
 
 		now := metav1.Now()
 		imCopy := im.DeepCopy()
-		status := imCopy.Status
-		status.StatusTime = &now
-		status.UpdateTime = &now
-
+		imCopy.Status.StatusTime = &now
+		imCopy.Status.UpdateTime = &now
 		thisNode := os.Getenv("NODE_NAME")
 		p := im.Status.Conditions[thisNode][ongoing.originRef]["progress"]
 		originProgress, _ := strconv.ParseFloat(p, 64)
@@ -275,9 +273,9 @@ func setPulledImageStatus(imageRef string, opts PullOptions) error {
 		}
 		now := metav1.Now()
 		imCopy := im.DeepCopy()
-		status := imCopy.Status
-		status.StatusTime = &now
-		status.UpdateTime = &now
+		imCopy.Status.StatusTime = &now
+		imCopy.Status.UpdateTime = &now
+
 		if imCopy.Status.Conditions == nil {
 			imCopy.Status.Conditions = make(map[string]map[string]map[string]string)
 		}
