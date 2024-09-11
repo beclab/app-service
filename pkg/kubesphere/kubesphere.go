@@ -162,3 +162,35 @@ func GetUserCPULimit(ctx context.Context, kubeConfig *rest.Config, username stri
 func GetUserMemoryLimit(ctx context.Context, kubeConfig *rest.Config, username string) (string, error) {
 	return GetUserAnnotation(ctx, kubeConfig, username, userAnnotationMemoryLimitKey)
 }
+
+// GetAdminUsername returns admin username, an error if there is any.
+func GetAdminUsername(ctx context.Context, kubeConfig *rest.Config) (string, error) {
+	gvr := schema.GroupVersionResource{
+		Group:    "iam.kubesphere.io",
+		Version:  "v1alpha2",
+		Resource: "users",
+	}
+	client, err := dynamic.NewForConfig(kubeConfig)
+	if err != nil {
+		return "", err
+	}
+	data, err := client.Resource(gvr).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		klog.Errorf("Failed to get user list err=%v", err)
+		return "", err
+	}
+
+	var admin string
+	for _, u := range data.Items {
+		if u.Object == nil {
+			continue
+		}
+		annotations := u.GetAnnotations()
+		if annotations["bytetrade.io/owner-role"] == "platform-admin" {
+			admin = u.GetName()
+			break
+		}
+	}
+
+	return admin, nil
+}
