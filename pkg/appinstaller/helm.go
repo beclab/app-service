@@ -425,6 +425,7 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 	}
 	gpuType, err := utils.FindGpuTypeFromNodes(h.ctx, kClient)
 	if err != nil {
+		klog.Errorf("Failed to get gpuType err=%v", err)
 		return values, err
 	}
 	values["gpu"] = gpuType
@@ -436,6 +437,11 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 	sharedLibPath := os.Getenv("SHARED_LIB_PATH")
 	values["sharedlib"] = sharedLibPath
 
+	admin, err := kubesphere.GetAdminUsername(context.TODO(), h.kubeConfig)
+	if err != nil {
+		return values, err
+	}
+	values["admin"] = admin
 	return values, err
 }
 
