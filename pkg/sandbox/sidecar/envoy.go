@@ -1069,6 +1069,11 @@ func (ec *envoyConfig) WithProxyOutBound(appcfg *appinstaller.ApplicationConfig,
 							Name: "envoy.filters.network.http_connection_manager",
 							ConfigType: &envoy_listener.Filter_TypedConfig{
 								TypedConfig: utils.MessageToAny(&http_connection_manager.HttpConnectionManager{
+									UpgradeConfigs: []*http_connection_manager.HttpConnectionManager_UpgradeConfig{
+										{
+											UpgradeType: "websocket",
+										},
+									},
 									HttpFilters: []*http_connection_manager.HttpFilter{
 										{
 											Name: "envoy.filters.http.router",
