@@ -553,8 +553,8 @@ func New(username string, inlineCode []byte, probesPath []string, opts options) 
 		routeConfig.VirtualHosts[0].Routes = append(
 			[]*routev3.Route{{
 				Match: &routev3.RouteMatch{
-					PathSpecifier: &routev3.RouteMatch_Prefix{
-						Prefix: path,
+					PathSpecifier: &routev3.RouteMatch_Path{
+						Path: path,
 					},
 				},
 				Action: &routev3.Route_Route{
