@@ -562,6 +562,9 @@ func New(username string, inlineCode []byte, probesPath []string, opts options) 
 						ClusterSpecifier: &routev3.RouteAction_Cluster{
 							Cluster: "original_dst",
 						},
+						Timeout: &duration.Duration{
+							Seconds: *ec.opts.timeout,
+						},
 					},
 				},
 				TypedPerFilterConfig: map[string]*any.Any{
