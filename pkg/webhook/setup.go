@@ -27,8 +27,8 @@ const (
 	webhookServiceName                    = "app-service"
 	webhookServiceNamespace               = "os-system"
 	defaultCaPath                         = "/etc/certs/ca.crt"
-	evictionWebhookName                   = "eviction-webhook"
-	evictionValidatingWebhookName         = "pods-eviction-webhook.bytetrade.io"
+	evictionWebhookName                   = "kubelet-eviction-webhook"
+	evictionValidatingWebhookName         = "kubelet-eviction-webhook.bytetrade.io"
 )
 
 // CreateOrUpdateSandboxMutatingWebhook creates or updates the sandbox mutating webhook.
@@ -382,16 +382,16 @@ func (wh *Webhook) CreateOrUpdateProviderRegistryValidatingWebhook() error {
 	return nil
 }
 
-func (wh *Webhook) CreateOrUpdateEvictionValidatingWebhook() error {
-	webhookPath := "/app-service/v1/pods/eviction"
+func (wh *Webhook) CreateOrUpdateKubeletEvictionValidatingWebhook() error {
+	webhookPath := "/app-service/v1/pods/kubelet/eviction"
 	port, err := strconv.Atoi(strings.Split(constants.WebhookServerListenAddress, ":")[1])
 	if err != nil {
 		return err
 	}
 	webhookPort := int32(port)
-	failurePolicy := admissionregv1.Fail
+	failurePolicy := admissionregv1.Ignore
 	matchPolicy := admissionregv1.Exact
-	webhookTimeout := int32(30)
+	webhookTimeout := int32(5)
 
 	vwhcLabels := map[string]string{"velero.io/exclude-from-backup": "true"}
 
@@ -418,13 +418,32 @@ func (wh *Webhook) CreateOrUpdateEvictionValidatingWebhook() error {
 				},
 				FailurePolicy: &failurePolicy,
 				MatchPolicy:   &matchPolicy,
+				NamespaceSelector: &metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "kubernetes.io/metadata.name",
+							Operator: metav1.LabelSelectorOpNotIn,
+							Values:   security.UnderLayerNamespaces,
+						},
+						{
+							Key:      "kubernetes.io/metadata.name",
+							Operator: metav1.LabelSelectorOpNotIn,
+							Values:   security.OSSystemNamespaces,
+						},
+						{
+							Key:      "kubernetes.io/metadata.name",
+							Operator: metav1.LabelSelectorOpNotIn,
+							Values:   security.GPUSystemNamespaces,
+						},
+					},
+				},
 				Rules: []admissionregv1.RuleWithOperations{
 					{
-						Operations: []admissionregv1.OperationType{admissionregv1.Create},
+						Operations: []admissionregv1.OperationType{admissionregv1.Update},
 						Rule: admissionregv1.Rule{
 							APIGroups:   []string{"*"},
 							APIVersions: []string{"*"},
-							Resources:   []string{"pods/eviction"},
+							Resources:   []string{"pods/status"},
 						},
 					},
 				},
