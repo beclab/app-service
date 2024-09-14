@@ -408,50 +408,43 @@ func (h *Handler) validateProviderRegistry(ctx context.Context, req *admissionv1
 	return resp
 }
 
-func (h *Handler) podEvictionValidate(req *restful.Request, resp *restful.Response) {
-	klog.Infof("Received POD Eviction validate webhook request: Method=%v, URL=%v", req.Request.Method, req.Request.URL)
-	admissionReqBody, ok := h.sidecarWebhook.GetAdmissionRequestBody(req, resp)
-	if !ok {
-		return
-	}
-
-	var admissionReq, admissionResp admissionv1.AdmissionReview
-	proxyUUID := uuid.New()
-	if _, _, err := webhook.Deserializer.Decode(admissionReqBody, nil, &admissionReq); err != nil {
-		klog.Errorf("Failed to decode admission request body err=%v", err)
-		admissionResp.Response = h.sidecarWebhook.AdmissionError(err)
-	} else {
-		admissionResp.Response = h.eviction2stop(req.Request.Context(), admissionReq.Request, proxyUUID)
-	}
-	admissionResp.TypeMeta = admissionReq.TypeMeta
-	admissionResp.Kind = admissionReq.Kind
-
-	requestForNamespace := "unknown"
-	if admissionReq.Request != nil {
-		requestForNamespace = admissionReq.Request.Namespace
-	}
-	err := resp.WriteAsJson(&admissionResp)
-	if err != nil {
-		klog.Errorf("Failed to write response validate review in namespace=%s err=%v", requestForNamespace, err)
-		return
-	}
-	klog.Errorf("Done responding to admission[validate app namespace] request with uuid=%s namespace=%s", proxyUUID, requestForNamespace)
-}
-
 func (h *Handler) eviction2stop(ctx context.Context, req *admissionv1.AdmissionRequest, proxyUUID uuid.UUID) *admissionv1.AdmissionResponse {
 	if req == nil {
 		klog.Error("Failed to get admission request err=admission request is nil")
 		return h.sidecarWebhook.AdmissionError(errNilAdmissionRequest)
 	}
 	resp := &admissionv1.AdmissionResponse{
-		Allowed: false,
+		Allowed: true,
 		UID:     req.UID,
 	}
 
-	var nodes corev1.NodeList
-	err := h.ctrlClient.List(ctx, &nodes, &client.ListOptions{})
+	object := struct {
+		metav1.ObjectMeta `json:"metadata,omitempty"`
+	}{}
+	raw := req.Object.Raw
+	err := json.Unmarshal(raw, &object)
 	if err != nil {
-		return h.sidecarWebhook.AdmissionError(err)
+		klog.Errorf("Failed to unmarshal request object raw with uuid=%s namespace=%s", proxyUUID, req.Namespace)
+		return resp
+	}
+	podName := object.GetName()
+	namespace := object.GetNamespace()
+	var pod corev1.Pod
+	err = h.ctrlClient.Get(ctx, types.NamespacedName{Name: podName, Namespace: namespace}, &pod)
+	if err != nil {
+		klog.Infof("Failed to get pod.Name=%s, pod.Namespace=%s, err=%v", podName, namespace, err)
+		return resp
+	}
+	klog.Infof("pod.Name=%s, pod.Namespace=%s,pod.Status.Reason=%s", podName, namespace, pod.Status.Reason)
+
+	if pod.Status.Reason != "Evicted" {
+		klog.Infof("skip pod admission request pod=%s, namespace=%s", podName, namespace)
+		return resp
+	}
+	var nodes corev1.NodeList
+	err = h.ctrlClient.List(ctx, &nodes, &client.ListOptions{})
+	if err != nil {
+		return resp
 	}
 	canScheduleNodes := 0
 	for _, node := range nodes.Items {
@@ -460,28 +453,22 @@ func (h *Handler) eviction2stop(ctx context.Context, req *admissionv1.AdmissionR
 		}
 	}
 	if canScheduleNodes > 1 {
-		resp.Allowed = true
 		return resp
 	}
 
-	object := struct {
-		metav1.ObjectMeta `json:"metadata,omitempty"`
-	}{}
-	raw := req.Object.Raw
-	err = json.Unmarshal(raw, &object)
+	_, err = h.setDeployOrStsReplicas(ctx, podName, namespace, int32(0))
 	if err != nil {
-		klog.Errorf("Failed to unmarshal request object raw with uuid=%s namespace=%s", proxyUUID, req.Namespace)
-		return h.sidecarWebhook.AdmissionError(err)
+		klog.Infof("Failed to set deploy/sts replicas to zero err=%v", err)
+		return resp
 	}
-	podName := object.GetName()
-	namespace := object.GetNamespace()
-	allow, err := h.setDeployOrStsReplicas(ctx, podName, namespace, int32(0))
+	err = h.ctrlClient.Delete(ctx, &pod)
 	if err != nil {
-		return h.sidecarWebhook.AdmissionError(err)
+		klog.Infof("Failed to delete evicted pod name=%s,namespace=%s,err=%v", podName, namespace, err)
+		return resp
 	}
-	if allow {
-		resp.Allowed = true
-	}
+
+	klog.Infof("success to set deploy/sts replicas to zero pod=%s", podName)
+
 	return resp
 }
 
@@ -547,4 +534,35 @@ func (h *Handler) setDeployOrStsReplicas(ctx context.Context, podName, namespace
 		}
 	}
 	return false, nil
+}
+
+func (h *Handler) kubeletPodEviction(req *restful.Request, resp *restful.Response) {
+	klog.Infof("Received kubelet pod eviction validate webhook request: Method=%v, URL=%v", req.Request.Method, req.Request.URL)
+	admissionRequestBody, ok := h.sidecarWebhook.GetAdmissionRequestBody(req, resp)
+	if !ok {
+		klog.Errorf("Failed to get admission request body")
+		return
+	}
+	var admissionReq, admissionResp admissionv1.AdmissionReview
+	proxyUUID := uuid.New()
+	if _, _, err := webhook.Deserializer.Decode(admissionRequestBody, nil, &admissionReq); err != nil {
+		klog.Errorf("Failed to decoding admission request body err=%v", err)
+		admissionResp.Response = h.sidecarWebhook.AdmissionError(err)
+	} else {
+		admissionResp.Response = h.eviction2stop(req.Request.Context(), admissionReq.Request, proxyUUID)
+	}
+	admissionResp.TypeMeta = admissionReq.TypeMeta
+	admissionResp.Kind = admissionReq.Kind
+
+	requestForNamespace := "unknown"
+	if admissionReq.Request != nil {
+		requestForNamespace = admissionReq.Request.Namespace
+	}
+
+	err := resp.WriteAsJson(&admissionResp)
+	if err != nil {
+		klog.Infof("kubeletPodEviction: write response failed namespace=%s, err=%v", requestForNamespace, err)
+		return
+	}
+	klog.Infof("Done kubeletPodEviction admission request with uuid=%s, namespace=%s", proxyUUID, requestForNamespace)
 }
