@@ -418,23 +418,14 @@ func (h *Handler) eviction2stop(ctx context.Context, req *admissionv1.AdmissionR
 		UID:     req.UID,
 	}
 
-	object := struct {
-		metav1.ObjectMeta `json:"metadata,omitempty"`
-	}{}
-	raw := req.Object.Raw
-	err := json.Unmarshal(raw, &object)
+	var pod corev1.Pod
+	err := json.Unmarshal(req.Object.Raw, &pod)
 	if err != nil {
 		klog.Errorf("Failed to unmarshal request object raw with uuid=%s namespace=%s", proxyUUID, req.Namespace)
 		return resp
 	}
-	podName := object.GetName()
-	namespace := object.GetNamespace()
-	var pod corev1.Pod
-	err = h.ctrlClient.Get(ctx, types.NamespacedName{Name: podName, Namespace: namespace}, &pod)
-	if err != nil {
-		klog.Infof("Failed to get pod.Name=%s, pod.Namespace=%s, err=%v", podName, namespace, err)
-		return resp
-	}
+	podName := pod.GetName()
+	namespace := pod.GetNamespace()
 	klog.Infof("pod.Name=%s, pod.Namespace=%s,pod.Status.Reason=%s", podName, namespace, pod.Status.Reason)
 
 	if pod.Status.Reason != "Evicted" {
