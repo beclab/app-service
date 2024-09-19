@@ -213,44 +213,9 @@ func (h *Handler) uninstall(req *restful.Request, resp *restful.Response) {
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 	token := req.HeaderParameter(constants.AuthorizationTokenKey)
 
-	// check is have app depends on this app
 	name, err := utils.FmtAppMgrName(app, owner, "")
 	if err != nil {
 		api.HandleError(resp, req, err)
-		return
-	}
-	var mgr v1alpha1.ApplicationManager
-	key := types.NamespacedName{Name: name}
-	err = h.ctrlClient.Get(req.Request.Context(), key, &mgr)
-	if err != nil {
-		api.HandleError(resp, req, err)
-		return
-	}
-	var appConfig appinstaller.ApplicationConfig
-	err = json.Unmarshal([]byte(mgr.Spec.Config), &appConfig)
-	if err != nil {
-		api.HandleError(resp, req, err)
-		return
-	}
-	existDependsApp := false
-	if len(appConfig.AppScope.AppRef) > 0 {
-		var appList v1alpha1.ApplicationList
-		err = h.ctrlClient.List(req.Request.Context(), &appList)
-		if err != nil {
-			api.HandleError(resp, req, err)
-			return
-		}
-		for _, ref := range appConfig.AppScope.AppRef {
-			for _, a := range appList.Items {
-				if ref == a.Spec.Name {
-					existDependsApp = true
-					break
-				}
-			}
-		}
-	}
-	if existDependsApp {
-		api.HandleBadRequest(resp, req, errors.New("can not uninstall, because already have app depends on its"))
 		return
 	}
 
