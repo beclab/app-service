@@ -51,7 +51,7 @@ func showProgress(ctx context.Context, ongoing *jobs, cs content.Store, seen map
 	defer ticker.Stop()
 	// no need to pull image, just update image manager status
 	if !needPullImage {
-		err := setPulledImageStatus(ongoing.name, opts)
+		err := setPulledImageStatus(ongoing.originRef, opts)
 		if err != nil {
 			klog.Infof("setPulledImageStatus name=%v, err=%v", ongoing.name, err)
 		}
