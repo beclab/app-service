@@ -3,6 +3,7 @@ package images
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/url"
 	"os"
@@ -26,6 +27,7 @@ import (
 )
 
 const defaultRegistry = "https://registry-1.docker.io"
+const maxRetries = 6
 
 var sock = "/var/run/containerd/containerd.sock"
 var mirrorsEndpoint []string
@@ -119,17 +121,54 @@ func (is *imageService) PullImage(ctx context.Context, ref appv1alpha1.Ref, opts
 		}
 	}
 	if shouldPUllImage(ref, present) {
-		var maxRetries = 5
-		for i := 0; i < maxRetries; i++ {
-			_, err = is.client.Fetch(pctx, replacedRef, remoteOpts...)
-			if err == nil {
-				err = is.tag(pctx, replacedRef, originNamed.String())
+		downloadFunc := func() error {
+			attempt := 1
+
+			for {
+				_, err = is.client.Fetch(pctx, replacedRef, remoteOpts...)
+
 				if err == nil {
 					break
 				}
+
+				select {
+				case <-pctx.Done():
+					return pctx.Err()
+				default:
+				}
+
+				if attempt >= maxRetries {
+					return fmt.Errorf("download failed after %d attempts: %v", attempt, err)
+				}
+
+				delay := attempt * 5
+				ticker := time.NewTicker(time.Second)
+				klog.Infof("attempt %d", attempt)
+				attempt++
+			selectLoop:
+				for {
+					klog.Infof("Retrying in %d seconds", delay)
+					select {
+					case <-ticker.C:
+						delay--
+						if delay == 0 {
+							ticker.Stop()
+							break selectLoop
+						}
+					case <-pctx.Done():
+						ticker.Stop()
+						return pctx.Err()
+					}
+				}
 			}
-			time.Sleep(time.Second)
+			err = is.tag(pctx, replacedRef, originNamed.String())
+			if err != nil {
+				return err
+			}
+			return nil
 		}
+
+		err = downloadFunc()
 	}
 
 	stopProgress()
@@ -156,6 +195,9 @@ func (is *imageService) GetExistsImage(ref string) (string, error) {
 }
 
 func (is *imageService) tag(ctx context.Context, ref, targetRef string) error {
+	if ref == targetRef {
+		return nil
+	}
 	ctx, done, err := is.client.WithLease(ctx)
 	if err != nil {
 		return err

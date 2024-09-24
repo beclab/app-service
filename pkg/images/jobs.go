@@ -181,6 +181,8 @@ func updateProgress(statuses []StatusInfo, ongoing *jobs, seen map[string]struct
 
 	klog.Infof("seen: %v", seen)
 	klog.Infof("imageName=%s", ongoing.name)
+	statusesLen := len(statuses)
+	doneLayer := 0
 	for _, status := range statuses {
 		klog.Infof("status: %s,ref: %v, offset: %v, Total: %v", status.Status, status.Ref, status.Offset, status.Total)
 		switch status.Status {
@@ -193,6 +195,9 @@ func updateProgress(statuses []StatusInfo, ongoing *jobs, seen map[string]struct
 		case "resolving", "waiting", "resolved":
 			progress = 0
 		default:
+			if status.Status == "done" || status.Status == "exists" {
+				doneLayer++
+			}
 			if _, ok := seen[status.Ref]; ok && status.Status == "done" {
 				if !strings.HasPrefix(status.Ref, "manifest-") && !strings.HasPrefix(status.Ref, "index-") {
 					size += status.Total
@@ -212,6 +217,9 @@ func updateProgress(statuses []StatusInfo, ongoing *jobs, seen map[string]struct
 
 	if size > 0 {
 		progress = float64(offset) / float64(size) * float64(100)
+	}
+	if int(progress) == 100 && doneLayer != statusesLen {
+		progress = 0
 	}
 	klog.Infof("download image %s progress=%v", ongoing.name, progress)
 	klog.Infof("#######################################")
