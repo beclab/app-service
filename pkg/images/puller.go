@@ -195,6 +195,9 @@ func (is *imageService) GetExistsImage(ref string) (string, error) {
 }
 
 func (is *imageService) tag(ctx context.Context, ref, targetRef string) error {
+	if ref == targetRef {
+		return nil
+	}
 	ctx, done, err := is.client.WithLease(ctx)
 	if err != nil {
 		return err
