@@ -82,7 +82,7 @@ func (is *imageService) PullImage(ctx context.Context, ref appv1alpha1.Ref, opts
 	ongoing := newJobs(replacedRef, originNamed.String())
 
 	imageName, err := is.GetExistsImage(originNamed.String())
-	if err != nil && errors.Is(err, errdefs.ErrNotFound) {
+	if err != nil && !errors.Is(err, errdefs.ErrNotFound) {
 		klog.Infof("Failed to get image status err=%v", err)
 	}
 	present := imageName != ""
@@ -90,11 +90,6 @@ func (is *imageService) PullImage(ctx context.Context, ref appv1alpha1.Ref, opts
 	pctx, stopProgress := context.WithCancel(ctx)
 
 	progress := make(chan struct{})
-	activeSeen := make(map[string]struct{})
-	go func(map[string]struct{}) {
-		showProgress(pctx, ongoing, is.client.ContentStore(), activeSeen, shouldPUllImage(ref, present), opts)
-		close(progress)
-	}(activeSeen)
 
 	h := images.HandlerFunc(func(ctx context.Context, desc ocispec.Descriptor) ([]ocispec.Descriptor, error) {
 		if desc.MediaType != images.MediaTypeDockerSchema1Manifest {
@@ -120,13 +115,20 @@ func (is *imageService) PullImage(ctx context.Context, ref appv1alpha1.Ref, opts
 			remoteOpts = append(remoteOpts, containerd.WithPlatform(platform))
 		}
 	}
+
+	rCtx, _ := fetchCtx(is.client, remoteOpts...)
+
+	go func() {
+		showProgress(pctx, rCtx, ongoing, is.client.ContentStore(), shouldPUllImage(ref, present), opts)
+		close(progress)
+	}()
+
 	if shouldPUllImage(ref, present) {
 		downloadFunc := func() error {
 			attempt := 1
 
 			for {
-				_, err = is.client.Fetch(pctx, replacedRef, remoteOpts...)
-
+				_, err = is.client.Pull(pctx, replacedRef, remoteOpts...)
 				if err == nil {
 					break
 				}
@@ -293,3 +295,31 @@ func replacedImageRef(oldImageRef string) string {
 }
 
 func hasPort(s string) bool { return strings.LastIndex(s, ":") > strings.LastIndex(s, "]") }
+
+func fetchCtx(client *containerd.Client, remoteOpts ...containerd.RemoteOpt) (*containerd.RemoteContext, error) {
+	rCtx := &containerd.RemoteContext{
+		Resolver: docker.NewResolver(docker.ResolverOptions{}),
+	}
+	for _, o := range remoteOpts {
+		if err := o(client, rCtx); err != nil {
+			return nil, err
+		}
+	}
+	if rCtx.PlatformMatcher == nil {
+		if len(rCtx.Platforms) == 0 {
+			rCtx.PlatformMatcher = platforms.All
+		} else {
+			var ps []ocispec.Platform
+			for _, s := range rCtx.Platforms {
+				p, err := platforms.Parse(s)
+				if err != nil {
+					return nil, fmt.Errorf("invalid platform %s: %w", s, err)
+				}
+				ps = append(ps, p)
+			}
+
+			rCtx.PlatformMatcher = platforms.Any(ps...)
+		}
+	}
+	return rCtx, nil
+}
