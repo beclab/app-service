@@ -75,10 +75,7 @@ func showProgress(ctx context.Context, rCtx *containerd.RemoteContext, ongoing *
 		Factor:   2.0,
 		Jitter:   0.1,
 	}, func(error) bool { return true }, func() error {
-		_, desc, err := rCtx.Resolver.Resolve(ctx, ongoing.name)
-		if errors.Is(err, context.Canceled) {
-			return nil
-		}
+		_, desc, err := rCtx.Resolver.Resolve(context.TODO(), ongoing.name)
 		if err != nil {
 			klog.Infof("resolve ref failed err=%v", err)
 			return err
@@ -245,6 +242,7 @@ func updateProgress(statuses []StatusInfo, ongoing *jobs, seen map[string]int64,
 	for _, status := range statuses {
 		klog.Infof("status: %s,ref: %v, offset: %v, Total: %v", status.Status, status.Ref, status.Offset, status.Total)
 		if !isLayerType(status.Ref) {
+			statusesLen--
 			continue
 		}
 		if status.Status == "done" {
@@ -260,7 +258,7 @@ func updateProgress(statuses []StatusInfo, ongoing *jobs, seen map[string]int64,
 		}
 		offset += status.Offset
 	}
-	if doneLayer == statusesLen && statusesLen == len(seen) {
+	if doneLayer == statusesLen {
 		offset = imageSize
 	}
 	if imageSize != 0 {
