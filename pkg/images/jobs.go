@@ -2,6 +2,7 @@ package images
 
 import (
 	"context"
+	"errors"
 	"math/rand"
 	"os"
 	"strconv"
@@ -11,8 +12,10 @@ import (
 
 	"bytetrade.io/web3os/app-service/pkg/utils"
 
+	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/content"
 	"github.com/containerd/containerd/errdefs"
+	"github.com/containerd/containerd/images"
 	"github.com/containerd/containerd/remotes"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -39,7 +42,7 @@ var retryStrategy = wait.Backoff{
 	Jitter:   0.1,
 }
 
-func showProgress(ctx context.Context, ongoing *jobs, cs content.Store, seen map[string]struct{}, needPullImage bool, opts PullOptions) {
+func showProgress(ctx context.Context, rCtx *containerd.RemoteContext, ongoing *jobs, cs content.Store, needPullImage bool, opts PullOptions) {
 	var (
 		interval = rand.Float64() + float64(1)
 		ticker   = time.NewTicker(time.Duration(interval * float64(time.Second)))
@@ -49,6 +52,7 @@ func showProgress(ctx context.Context, ongoing *jobs, cs content.Store, seen map
 		ordered  []StatusInfo
 	)
 	defer ticker.Stop()
+
 	// no need to pull image, just update image manager status
 	if !needPullImage {
 		err := setPulledImageStatus(ongoing.originRef, opts)
@@ -58,6 +62,58 @@ func showProgress(ctx context.Context, ongoing *jobs, cs content.Store, seen map
 		return
 	}
 
+	if rCtx == nil {
+		klog.Infof("show progress with nil remote context")
+		return
+	}
+
+	attempt := 0
+	var descs []ocispec.Descriptor
+	err := retry.OnError(wait.Backoff{
+		Steps:    10,
+		Duration: time.Second,
+		Factor:   2.0,
+		Jitter:   0.1,
+	}, func(error) bool { return true }, func() error {
+		_, desc, err := rCtx.Resolver.Resolve(ctx, ongoing.name)
+		if errors.Is(err, context.Canceled) {
+			return nil
+		}
+		if err != nil {
+			klog.Infof("resolve ref failed err=%v", err)
+			return err
+		}
+		descs, err = getAllLayerDescriptor(rCtx, desc, cs)
+		if err != nil {
+			attempt++
+			klog.Infof("attempt %d to get layer descriptor err=%v", attempt, err)
+			return err
+		}
+		for _, desc := range descs {
+			if images.IsLayerType(desc.MediaType) {
+				return nil
+			}
+		}
+		return errors.New("not get completed layers")
+	})
+	if err != nil {
+		klog.Infof("get all layer descriptor failed err=%v", err)
+		return
+	}
+	var imageSize int64
+	descSet := make(map[string]int64)
+	for _, d := range descs {
+		if _, ok := descSet[d.Digest.String()]; ok {
+			continue
+		}
+		if images.IsLayerType(d.MediaType) {
+			klog.Infof("typ: %s, Digest: %s, size: %d", d.MediaType, d.Digest.String(), d.Size)
+			imageSize += d.Size
+		}
+
+		descSet[d.Digest.String()] = d.Size
+	}
+	klog.Infof("imagesize: %v", imageSize)
 outer:
 	for {
 		select {
@@ -150,19 +206,17 @@ outer:
 					if key == ongoing.name {
 						continue
 					}
-					seen[key] = struct{}{}
 				}
 				ordered = append(ordered, statuses[key])
 			}
 			klog.Infof("downloading image %v", ongoing.name)
-			err := updateProgress(ordered, ongoing, seen, opts)
+			err := updateProgress(ordered, ongoing, descSet, imageSize, opts)
 			if err != nil {
 				klog.Infof("update progress failed err=%v", err)
 			}
 
 			if done {
 				klog.Infof("progress is done")
-				seen = map[string]struct{}{}
 				return
 			}
 		case <-ctx.Done():
@@ -171,57 +225,49 @@ outer:
 	}
 }
 
-func updateProgress(statuses []StatusInfo, ongoing *jobs, seen map[string]struct{}, opts PullOptions) error {
+func updateProgress(statuses []StatusInfo, ongoing *jobs, seen map[string]int64, imageSize int64, opts PullOptions) error {
 	client, err := utils.GetClient()
 	if err != nil {
 		return err
 	}
-	var offset, size int64
+	var offset int64
 	var progress float64
 
-	klog.Infof("seen: %v", seen)
 	klog.Infof("imageName=%s", ongoing.name)
 	statusesLen := len(statuses)
 	doneLayer := 0
+	isLayerType := func(mediaType string) bool {
+		if strings.HasPrefix(mediaType, "manifest-") || strings.HasPrefix(mediaType, "index-") || strings.HasPrefix(mediaType, "config-") {
+			return false
+		}
+		return true
+	}
 	for _, status := range statuses {
 		klog.Infof("status: %s,ref: %v, offset: %v, Total: %v", status.Status, status.Ref, status.Offset, status.Total)
-		switch status.Status {
-		case "downloading", "uploading":
-			if !strings.HasPrefix(status.Ref, "manifest") && !strings.HasPrefix(status.Ref, "index") {
-				size += status.Total
-				offset += status.Offset
-			}
-
-		case "resolving", "waiting", "resolved":
-			progress = 0
-		default:
-			if status.Status == "done" || status.Status == "exists" {
-				doneLayer++
-			}
-			if _, ok := seen[status.Ref]; ok && status.Status == "done" {
-				if !strings.HasPrefix(status.Ref, "manifest-") && !strings.HasPrefix(status.Ref, "index-") {
-					size += status.Total
-					// some time ref have status equal done, but offset not equal total, so add status.Total to offset
-					offset += status.Total
-				}
-			}
-			// omit ref with prefix manifest-, index-, because in some situation this would be cause progress back
-			if strings.HasPrefix(status.Ref, "manifest-") || strings.HasPrefix(status.Ref, "index-") {
-				progress = 0
-			} else {
-				progress = 100
-
-			}
+		if !isLayerType(status.Ref) {
+			continue
 		}
+		if status.Status == "done" {
+			offset += status.Total
+			doneLayer++
+			continue
+		}
+		if status.Status == "exists" {
+			key := strings.Split(status.Ref, "-")[1]
+			offset += seen[key]
+			doneLayer++
+			continue
+		}
+		offset += status.Offset
+	}
+	if doneLayer == statusesLen && statusesLen == len(seen) {
+		offset = imageSize
+	}
+	if imageSize != 0 {
+		progress = float64(offset) / float64(imageSize) * float64(100)
 	}
 
-	if size > 0 {
-		progress = float64(offset) / float64(size) * float64(100)
-	}
-	if int(progress) == 100 && doneLayer != statusesLen {
-		progress = 0
-	}
-	klog.Infof("download image %s progress=%v", ongoing.name, progress)
+	klog.Infof("download image %s progress=%v, imageSize=%d, offset=%d", ongoing.name, progress, imageSize, offset)
 	klog.Infof("#######################################")
 
 	err = retry.RetryOnConflict(retryStrategy, func() error {
@@ -348,4 +394,33 @@ func (j *jobs) isResolved() bool {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	return j.resolved
+}
+
+func getAllLayerDescriptor(rCtx *containerd.RemoteContext, root ocispec.Descriptor, cs content.Store) ([]ocispec.Descriptor, error) {
+	ans := make([]ocispec.Descriptor, 0)
+	childrenHandler := images.ChildrenHandler(cs)
+	childrenHandler = images.SetChildrenMappedLabels(cs, childrenHandler, rCtx.ChildLabelMap)
+	if rCtx.AllMetadata {
+		childrenHandler = remotes.FilterManifestByPlatformHandler(childrenHandler, rCtx.PlatformMatcher)
+	} else {
+		childrenHandler = images.FilterPlatforms(childrenHandler, rCtx.PlatformMatcher)
+	}
+
+	var getDescriptor func(descs ...ocispec.Descriptor) error
+	getDescriptor = func(descs ...ocispec.Descriptor) error {
+		if len(descs) == 0 {
+			return nil
+		}
+		for _, c := range descs {
+			ans = append(ans, c)
+			children, err := childrenHandler.Handle(context.TODO(), c)
+			if err != nil {
+				return err
+			}
+			getDescriptor(children...)
+		}
+		return nil
+	}
+	err := getDescriptor(root)
+	return ans, err
 }

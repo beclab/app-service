@@ -677,10 +677,10 @@ func (r *ApplicationManagerController) upgrade(ctx context.Context, appMgr *appv
 		if err != nil {
 			return err
 		}
-		_, err = apiserver.CheckDependencies(ctx, appconfig.Dependencies, r.Client, appMgr.Spec.AppOwner, false)
-		if err != nil {
-			return err
-		}
+		//_, err = apiserver.CheckDependencies(ctx, appconfig.Dependencies, r.Client, appMgr.Spec.AppOwner, false)
+		//if err != nil {
+		//	return err
+		//}
 	} else {
 		chartPath, err = apiserver.GetIndexAndDownloadChart(ctx, appMgr.Spec.AppName, repoURL, version, token)
 		if err != nil {
