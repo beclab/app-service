@@ -4,13 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
-	"net/url"
 	"os"
-	"strings"
 	"time"
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/utils"
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/cmd/ctr/commands"
@@ -20,20 +18,18 @@ import (
 	"github.com/containerd/containerd/platforms"
 	refdocker "github.com/containerd/containerd/reference/docker"
 	"github.com/containerd/containerd/remotes/docker"
-	srvconfig "github.com/containerd/containerd/services/server/config"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 )
 
-const defaultRegistry = "https://registry-1.docker.io"
 const maxRetries = 6
 
 var sock = "/var/run/containerd/containerd.sock"
 var mirrorsEndpoint []string
 
 func init() {
-	mirrorsEndpoint = getMirrorsEndpoint()
+	mirrorsEndpoint = utils.GetMirrorsEndpoint()
 	klog.Infof("mirrorsEndPoint: %v", mirrorsEndpoint)
 }
 
@@ -77,7 +73,7 @@ func (is *imageService) PullImage(ctx context.Context, ref appv1alpha1.Ref, opts
 	ref.Name = originNamed.String()
 	config := newFetchConfig()
 	// replaced image ref
-	replacedRef := replacedImageRef(originNamed.String())
+	replacedRef := utils.ReplacedImageRef(mirrorsEndpoint, originNamed.String(), true)
 
 	ongoing := newJobs(replacedRef, originNamed.String())
 
@@ -246,58 +242,6 @@ func newFetchConfig() *content.FetchConfig {
 	}
 	return config
 }
-
-func getMirrorsEndpoint() (ep []string) {
-	config := &srvconfig.Config{}
-	err := srvconfig.LoadConfig("/etc/containerd/config.toml", config)
-	if err != nil {
-		klog.Infof("load mirrors endpoint failed err=%v", err)
-		return
-	}
-	plugins := config.Plugins["io.containerd.grpc.v1.cri"]
-	r := plugins.GetPath([]string{"registry", "mirrors", "docker.io", "endpoint"})
-	if r == nil {
-		return
-	}
-	for _, e := range r.([]interface{}) {
-		ep = append(ep, e.(string))
-	}
-	return ep
-}
-
-func replacedImageRef(oldImageRef string) string {
-	if len(mirrorsEndpoint) == 0 {
-		return oldImageRef
-	}
-	for _, e := range mirrorsEndpoint {
-		if e != "" && e != defaultRegistry {
-			url, err := url.Parse(e)
-			if err != nil {
-				continue
-			}
-			if url.Scheme == "http" {
-				continue
-			}
-			host := url.Host
-			if !hasPort(url.Host) {
-				host = net.JoinHostPort(url.Host, "443")
-			}
-			conn, err := net.DialTimeout("tcp", host, 2*time.Second)
-			if err != nil {
-				continue
-			}
-			if conn != nil {
-				conn.Close()
-			}
-			parts := strings.Split(oldImageRef, "/")
-			parts[0] = url.Host
-			return strings.Join(parts, "/")
-		}
-	}
-	return oldImageRef
-}
-
-func hasPort(s string) bool { return strings.LastIndex(s, ":") > strings.LastIndex(s, "]") }
 
 func fetchCtx(client *containerd.Client, remoteOpts ...containerd.RemoteOpt) (*containerd.RemoteContext, error) {
 	rCtx := &containerd.RemoteContext{

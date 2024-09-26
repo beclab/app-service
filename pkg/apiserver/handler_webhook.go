@@ -14,6 +14,8 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/utils"
 	"bytetrade.io/web3os/app-service/pkg/webhook"
 
+	wfv1alpha1 "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
+	"github.com/containerd/containerd/reference/docker"
 	"github.com/emicklei/go-restful/v3"
 	"github.com/google/uuid"
 	admissionv1 "k8s.io/api/admission/v1"
@@ -25,11 +27,17 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 var (
 	errNilAdmissionRequest = fmt.Errorf("nil admission request")
+	mirrorsEndpoint        []string
 )
+
+func init() {
+	mirrorsEndpoint = utils.GetMirrorsEndpoint()
+}
 
 const (
 	deployment  = "Deployment"
@@ -556,4 +564,78 @@ func (h *Handler) kubeletPodEviction(req *restful.Request, resp *restful.Respons
 		return
 	}
 	klog.Infof("Done kubeletPodEviction admission request with uuid=%s, namespace=%s", proxyUUID, requestForNamespace)
+}
+
+func (h *Handler) cronWorkflowInject(req *restful.Request, resp *restful.Response) {
+	klog.Infof("Received cron workflow mutating webhook request: Method=%v, URL=%v", req.Request.Method, req.Request.URL)
+	admissionRequestBody, ok := h.sidecarWebhook.GetAdmissionRequestBody(req, resp)
+	if !ok {
+		klog.Errorf("Failed to get admission request body")
+		return
+	}
+	var admissionReq, admissionResp admissionv1.AdmissionReview
+	proxyUUID := uuid.New()
+	if _, _, err := webhook.Deserializer.Decode(admissionRequestBody, nil, &admissionReq); err != nil {
+		klog.Errorf("Failed to decoding admission request body err=%v", err)
+		admissionResp.Response = h.sidecarWebhook.AdmissionError(err)
+	} else {
+		admissionResp.Response = h.cronWorkflowMutate(req.Request.Context(), admissionReq.Request, proxyUUID)
+	}
+	admissionResp.TypeMeta = admissionReq.TypeMeta
+	admissionResp.Kind = admissionReq.Kind
+
+	requestForNamespace := "unknown"
+	if admissionReq.Request != nil {
+		requestForNamespace = admissionReq.Request.Namespace
+	}
+
+	err := resp.WriteAsJson(&admissionResp)
+	if err != nil {
+		klog.Infof("cron workflow: write response failed namespace=%s, err=%v", requestForNamespace, err)
+		return
+	}
+	klog.Infof("Done cron workflow injection admission request with uuid=%s, namespace=%s", proxyUUID, requestForNamespace)
+}
+
+func (h *Handler) cronWorkflowMutate(ctx context.Context, req *admissionv1.AdmissionRequest, proxyUUID uuid.UUID) *admissionv1.AdmissionResponse {
+	if req == nil {
+		klog.Error("Failed to get admission request err=admission request is nil")
+		return h.sidecarWebhook.AdmissionError(errNilAdmissionRequest)
+	}
+	resp := &admissionv1.AdmissionResponse{
+		Allowed: true,
+		UID:     req.UID,
+	}
+
+	var wf wfv1alpha1.CronWorkflow
+	err := json.Unmarshal(req.Object.Raw, &wf)
+	if err != nil {
+		klog.Errorf("Failed to unmarshal request object raw with uuid=%s namespace=%s", proxyUUID, req.Namespace)
+		return resp
+	}
+	for i, t := range wf.Spec.WorkflowSpec.Templates {
+		if t.Container == nil || t.Container.Image == "" {
+			continue
+		}
+		ref, err := docker.ParseDockerRef(t.Container.Image)
+		if err != nil {
+			continue
+		}
+		newImage := utils.ReplacedImageRef(mirrorsEndpoint, ref.String(), false)
+		wf.Spec.WorkflowSpec.Templates[i].Container.Image = newImage
+	}
+	original := req.Object.Raw
+	current, err := json.Marshal(wf)
+	if err != nil {
+		klog.Errorf("Failed to marshal cron workflow err=%v", err)
+		return resp
+	}
+	admissionResponse := admission.PatchResponseFromRaw(original, current)
+	patchBytes, err := json.Marshal(admissionResponse.Patches)
+	if err != nil {
+		klog.Errorf("Failed to marshal cron workflow patch bytes err=%v", err)
+		return resp
+	}
+	h.sidecarWebhook.PatchAdmissionResponse(resp, patchBytes)
+	return resp
 }

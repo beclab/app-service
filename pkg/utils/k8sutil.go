@@ -2,10 +2,15 @@ package utils
 
 import (
 	"context"
+	"net"
+	"net/url"
+	"strings"
+	"time"
 
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 
+	srvconfig "github.com/containerd/containerd/services/server/config"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -15,6 +20,7 @@ import (
 
 // CalicoTunnelAddrAnnotation annotation key for calico tunnel address.
 const CalicoTunnelAddrAnnotation = "projectcalico.org/IPv4IPIPTunnelAddr"
+const DefaultRegistry = "https://registry-1.docker.io"
 
 // GetAllNodesPodCIDRs returns all node pod's cidr.
 func GetAllNodesPodCIDRs() (cidrs []string) {
@@ -106,3 +112,60 @@ func IsNodeReady(node *corev1.Node) bool {
 	}
 	return false
 }
+
+func GetMirrorsEndpoint() (ep []string) {
+	config := &srvconfig.Config{}
+	err := srvconfig.LoadConfig("/etc/containerd/config.toml", config)
+	if err != nil {
+		klog.Infof("load mirrors endpoint failed err=%v", err)
+		return
+	}
+	plugins := config.Plugins["io.containerd.grpc.v1.cri"]
+	r := plugins.GetPath([]string{"registry", "mirrors", "docker.io", "endpoint"})
+	if r == nil {
+		return
+	}
+	for _, e := range r.([]interface{}) {
+		ep = append(ep, e.(string))
+	}
+	return ep
+}
+
+func ReplacedImageRef(mirrorsEndpoint []string, oldImageRef string, checkConnection bool) string {
+	if len(mirrorsEndpoint) == 0 {
+		return oldImageRef
+	}
+	for _, ep := range mirrorsEndpoint {
+		if ep != "" && ep != DefaultRegistry {
+			url, err := url.Parse(ep)
+			if err != nil {
+				continue
+			}
+			if url.Scheme == "http" {
+				continue
+			}
+			if checkConnection {
+				host := url.Host
+				if !hasPort(url.Host) {
+					host = net.JoinHostPort(url.Host, "443")
+				}
+				conn, err := net.DialTimeout("tcp", host, 2*time.Second)
+				if err != nil {
+					continue
+				}
+				if conn != nil {
+					conn.Close()
+				}
+			}
+
+			parts := strings.Split(oldImageRef, "/")
+			klog.Infof("parts: %s", parts)
+			parts[0] = url.Host
+			klog.Infof("parts2: %s", parts)
+			return strings.Join(parts, "/")
+		}
+	}
+	return oldImageRef
+}
+
+func hasPort(s string) bool { return strings.LastIndex(s, ":") > strings.LastIndex(s, "]") }
