@@ -270,8 +270,11 @@ func replacedImageRef(oldImageRef string) string {
 		return oldImageRef
 	}
 	for _, e := range mirrorsEndpoint {
-		if e != defaultRegistry {
-			url, _ := url.Parse(e)
+		if e != "" && e != defaultRegistry {
+			url, err := url.Parse(e)
+			if err != nil {
+				continue
+			}
 			if url.Scheme == "http" {
 				continue
 			}
