@@ -281,9 +281,9 @@ func updateProgress(statuses []StatusInfo, ongoing *jobs, seen map[string]int64,
 		imCopy.Status.StatusTime = &now
 		imCopy.Status.UpdateTime = &now
 		thisNode := os.Getenv("NODE_NAME")
-		p := im.Status.Conditions[thisNode][ongoing.originRef]["progress"]
-		originProgress, _ := strconv.ParseFloat(p, 64)
-		if originProgress >= progress {
+		p := im.Status.Conditions[thisNode][ongoing.originRef]["offset"]
+		oldOffset, _ := strconv.ParseInt(p, 10, 64)
+		if oldOffset >= offset {
 			return nil
 		}
 
@@ -294,7 +294,10 @@ func updateProgress(statuses []StatusInfo, ongoing *jobs, seen map[string]int64,
 			imCopy.Status.Conditions[thisNode] = make(map[string]map[string]string)
 
 		}
-		imCopy.Status.Conditions[thisNode][ongoing.originRef] = map[string]string{"progress": strconv.FormatFloat(progress, 'f', 2, 64)}
+		imCopy.Status.Conditions[thisNode][ongoing.originRef] = map[string]string{
+			"total":  strconv.FormatInt(imageSize, 10),
+			"offset": strconv.FormatInt(offset, 10),
+		}
 
 		_, err = client.AppV1alpha1().ImageManagers().UpdateStatus(context.TODO(), imCopy, metav1.UpdateOptions{})
 		if err != nil {
