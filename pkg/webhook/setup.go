@@ -481,3 +481,85 @@ func (wh *Webhook) CreateOrUpdateKubeletEvictionValidatingWebhook() error {
 	klog.Info("Finished creating ValidatingWebhookConfiguration name=%s", vwc.Name)
 	return nil
 }
+
+func (wh *Webhook) CreateOrUpdateCronWorkflowMutatingWebhook() error {
+	webhookPath := "/app-service/v1/workflow/inject"
+	port, err := strconv.Atoi(strings.Split(constants.WebhookServerListenAddress, ":")[1])
+	if err != nil {
+		return err
+	}
+	webhookPort := int32(port)
+	failurePolicy := admissionregv1.Ignore
+	matchPolicy := admissionregv1.Exact
+	webhookTimeout := int32(5)
+
+	mwhcLabels := map[string]string{"velero.io/exclude-from-backup": "true"}
+
+	caBundle, err := ioutil.ReadFile(defaultCaPath)
+	if err != nil {
+		return err
+	}
+	mwc := admissionregv1.MutatingWebhookConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "cron-workflow-webhook",
+			Labels: mwhcLabels,
+		},
+		Webhooks: []admissionregv1.MutatingWebhook{
+			{
+				Name: "cron-workflow-webhook.bytetrade.io",
+				ClientConfig: admissionregv1.WebhookClientConfig{
+					CABundle: caBundle,
+					Service: &admissionregv1.ServiceReference{
+						Namespace: webhookServiceNamespace,
+						Name:      webhookServiceName,
+						Path:      &webhookPath,
+						Port:      &webhookPort,
+					},
+				},
+				FailurePolicy:     &failurePolicy,
+				MatchPolicy:       &matchPolicy,
+				NamespaceSelector: &metav1.LabelSelector{},
+				Rules: []admissionregv1.RuleWithOperations{
+					{
+						Operations: []admissionregv1.OperationType{admissionregv1.Create},
+						Rule: admissionregv1.Rule{
+							APIGroups:   []string{"*"},
+							APIVersions: []string{"v1alpha1"},
+							Resources:   []string{"cronworkflows"},
+						},
+					},
+				},
+				SideEffects: func() *admissionregv1.SideEffectClass {
+					sideEffect := admissionregv1.SideEffectClassNoneOnDryRun
+					return &sideEffect
+				}(),
+				TimeoutSeconds:          &webhookTimeout,
+				AdmissionReviewVersions: []string{"v1"},
+			},
+		},
+	}
+	if _, err = wh.kubeClient.AdmissionregistrationV1().MutatingWebhookConfigurations().
+		Create(context.TODO(), &mwc, metav1.CreateOptions{}); err != nil {
+		if apierrors.IsAlreadyExists(err) {
+			existing, err := wh.kubeClient.AdmissionregistrationV1().MutatingWebhookConfigurations().
+				Get(context.Background(), mwc.Name, metav1.GetOptions{})
+			if err != nil {
+				klog.Errorf("Failed to get MutatingWebhookConfiguration name=%s err=%v", mwc.Name, err)
+				return err
+			}
+			mwc.ObjectMeta = existing.ObjectMeta
+			if _, err = wh.kubeClient.AdmissionregistrationV1().MutatingWebhookConfigurations().
+				Update(context.TODO(), &mwc, metav1.UpdateOptions{}); err != nil {
+				if !apierrors.IsConflict(err) {
+					klog.Errorf("Failed to update MutatingWebhookConfiguration name=%s err=%v", mwc.Name, err)
+					return err
+				}
+			}
+		} else {
+			klog.Errorf("Failed to create MutatingWebhookConfiguration name=%s err=%v", mwc.Name, err)
+			return err
+		}
+	}
+	klog.Info("Finished creating MutatingWebhookConfiguration name=%s", mwc.Name)
+	return nil
+}

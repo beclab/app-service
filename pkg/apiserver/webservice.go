@@ -300,6 +300,13 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Returns(http.StatusOK, "pod eviction validated success", nil)).
 		Consumes(restful.MIME_JSON)
 
+	ws.Route(ws.POST("/workflow/inject").
+		To(handler.cronWorkflowInject).
+		Doc("mutating webhook for cron workflow").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Returns(http.StatusOK, "cron workflow inject success", nil)).
+		Consumes(restful.MIME_JSON)
+
 	ws.Route(ws.POST("/gpulimit/inject").
 		To(handler.gpuLimitInject).
 		Doc("add resources limits for deployment/statefulset").
