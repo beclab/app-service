@@ -338,7 +338,8 @@ func setPulledImageStatus(imageRef string, opts PullOptions) error {
 			imCopy.Status.Conditions[thisNode] = make(map[string]map[string]string)
 		}
 		imCopy.Status.Conditions[thisNode][imageRef] = map[string]string{
-			"progress": "100.00",
+			"offset": "56782302",
+			"total":  "56782302",
 		}
 		_, err = client.AppV1alpha1().ImageManagers().UpdateStatus(context.TODO(), imCopy, metav1.UpdateOptions{})
 		if err != nil {
