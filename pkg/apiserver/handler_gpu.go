@@ -51,8 +51,6 @@ func (h *Handler) nvshareSwitch(req *restful.Request, enable bool) error {
 		return fmt.Errorf("last operation is still running")
 	}
 
-	running = true
-
 	deployments, err := client.KubeClient.Kubernetes().AppsV1().Deployments("").List(req.Request.Context(), metav1.ListOptions{})
 	if err != nil {
 		klog.Error("list deployment error, ", err)
@@ -138,6 +136,7 @@ func (h *Handler) nvshareSwitch(req *restful.Request, enable bool) error {
 		return err
 	}
 
+	running = true
 	// delay 30s, assume the all pods will be reload in 30s.
 	delay := time.NewTimer(30 * time.Second)
 	go func() {
@@ -145,7 +144,7 @@ func (h *Handler) nvshareSwitch(req *restful.Request, enable bool) error {
 		switchLock.Lock()
 		defer switchLock.Unlock()
 
-		running = true
+		running = false
 	}()
 
 	return nil
