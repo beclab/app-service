@@ -248,6 +248,27 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to set the application entrance policy", nil))
 
+	ws.Route(ws.POST("/gpu/disable/managed-memory").
+		To(handler.disableGpuManagedMemory).
+		Doc("disable nvshare's managed memory ").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
+		Returns(http.StatusOK, "Success to disable", nil))
+
+	ws.Route(ws.POST("/gpu/enable/managed-memory").
+		To(handler.enableGpuManagedMemory).
+		Doc("enable nvshare's managed memory ").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
+		Returns(http.StatusOK, "Success to enable", nil))
+
+	ws.Route(ws.GET("/gpu/managed-memory").
+		To(handler.getManagedMemoryValue).
+		Doc("get nvshare's managed memory enabled or not").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
+		Returns(http.StatusOK, "Success to get ", &ResultResponse{}))
+
 	// handler_upgrade
 	ws.Route(ws.GET("/upgrade/newversion").
 		To(handler.newVersion).
