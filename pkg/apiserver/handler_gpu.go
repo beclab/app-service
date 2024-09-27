@@ -1,6 +1,10 @@
 package apiserver
 
 import (
+	"fmt"
+	"sync"
+	"time"
+
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
@@ -12,6 +16,9 @@ import (
 	"k8s.io/client-go/util/retry"
 	"k8s.io/klog/v2"
 )
+
+var running bool = false
+var switchLock sync.Mutex
 
 func (h *Handler) disableGpuManagedMemory(req *restful.Request, resp *restful.Response) {
 	if err := h.nvshareSwitch(req, false); err != nil {
@@ -37,6 +44,14 @@ func (h *Handler) enableGpuManagedMemory(req *restful.Request, resp *restful.Res
 
 func (h *Handler) nvshareSwitch(req *restful.Request, enable bool) error {
 	client := req.Attribute(constants.KubeSphereClientAttribute).(*clientset.ClientSet)
+	switchLock.Lock()
+	defer switchLock.Unlock()
+
+	if running {
+		return fmt.Errorf("last operation is still running")
+	}
+
+	running = true
 
 	deployments, err := client.KubeClient.Kubernetes().AppsV1().Deployments("").List(req.Request.Context(), metav1.ListOptions{})
 	if err != nil {
@@ -53,7 +68,7 @@ func (h *Handler) nvshareSwitch(req *restful.Request, enable bool) error {
 		shouldUpdate := false
 		for i, c := range d.Spec.Template.Spec.Containers {
 			found := false
-			for k, _ := range c.Resources.Requests {
+			for k := range c.Resources.Requests {
 				if k == constants.NvshareGPU {
 					found = true
 					break
@@ -119,9 +134,21 @@ func (h *Handler) nvshareSwitch(req *restful.Request, enable bool) error {
 
 	if err != nil {
 		klog.Error("update terminus error, ", err)
+
+		return err
 	}
 
-	return err
+	// delay 30s, assume the all pods will be reload in 30s.
+	delay := time.NewTimer(30 * time.Second)
+	go func() {
+		<-delay.C
+		switchLock.Lock()
+		defer switchLock.Unlock()
+
+		running = true
+	}()
+
+	return nil
 }
 
 func (h *Handler) getManagedMemoryValue(req *restful.Request, resp *restful.Response) {
