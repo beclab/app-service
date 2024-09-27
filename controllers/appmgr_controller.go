@@ -941,31 +941,58 @@ func (r *ApplicationManagerController) pollDownloadProgress(ctx context.Context,
 			}
 
 			type progress struct {
-				sum   float64
-				count int
+				offset int64
+				total  int64
 			}
+			maxImageSize := int64(0)
+
+			for _, nodeName := range im.Spec.Nodes {
+				for _, ref := range im.Spec.Refs {
+					size := im.Status.Conditions[nodeName][ref.Name]["total"]
+					if size == "" {
+						continue
+					}
+					total, _ := strconv.ParseInt(size, 10, 64)
+					if total > maxImageSize {
+						maxImageSize = total
+					}
+				}
+			}
+
 			nodeMap := make(map[string]*progress)
 			for _, nodeName := range im.Spec.Nodes {
 				for _, ref := range im.Spec.Refs {
-					p := im.Status.Conditions[nodeName][ref.Name]["progress"]
-					if p == "" {
-						p = "0.00"
+					t := im.Status.Conditions[nodeName][ref.Name]["total"]
+					if t == "" {
+						t = strconv.FormatInt(maxImageSize, 10)
 					}
-					n, _ := strconv.ParseFloat(p, 64)
+
+					total, _ := strconv.ParseInt(t, 10, 64)
+
+					t = im.Status.Conditions[nodeName][ref.Name]["offset"]
+					if t == "" {
+						t = "0"
+					}
+					offset, _ := strconv.ParseInt(t, 10, 64)
 
 					if _, ok := nodeMap[nodeName]; ok {
-						nodeMap[nodeName].sum += n
-						nodeMap[nodeName].count += 1
+						nodeMap[nodeName].offset += offset
+						nodeMap[nodeName].total += total
 					} else {
-						nodeMap[nodeName] = &progress{sum: n, count: 1}
+						nodeMap[nodeName] = &progress{offset: offset, total: total}
 					}
 				}
 			}
 			ret := math.MaxFloat64
 			for _, p := range nodeMap {
-				if p.sum/float64(p.count) <= ret {
-					ret = p.sum / float64(p.count)
+				var nodeProgress float64
+				if p.total != 0 {
+					nodeProgress = float64(p.offset) / float64(p.total)
 				}
+				if nodeProgress < ret {
+					ret = nodeProgress * 100
+				}
+
 			}
 
 			var cur appv1alpha1.ApplicationManager
@@ -976,6 +1003,10 @@ func (r *ApplicationManagerController) pollDownloadProgress(ctx context.Context,
 			}
 
 			appMgrCopy := cur.DeepCopy()
+			oldProgress, _ := strconv.ParseFloat(cur.Status.Progress, 64)
+			if oldProgress > ret {
+				continue
+			}
 			cur.Status.Progress = strconv.FormatFloat(ret, 'f', 2, 64)
 			err = r.Status().Patch(ctx, &cur, client.MergeFrom(appMgrCopy))
 			if err != nil {
