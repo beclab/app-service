@@ -167,11 +167,8 @@ func (h *Handler) getManagedMemoryValue(req *restful.Request, resp *restful.Resp
 		managed = false
 	}
 
-	resp.WriteAsJson(&ResultResponse{
-		Code: 0,
-		Data: map[string]interface{}{
-			"managed_memory": managed,
-		},
+	resp.WriteAsJson(&map[string]interface{}{
+		"managed_memory": managed,
 	},
 	)
 }
