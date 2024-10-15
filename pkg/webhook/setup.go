@@ -521,7 +521,7 @@ func (wh *Webhook) CreateOrUpdateCronWorkflowMutatingWebhook() error {
 				NamespaceSelector: &metav1.LabelSelector{},
 				Rules: []admissionregv1.RuleWithOperations{
 					{
-						Operations: []admissionregv1.OperationType{admissionregv1.Create},
+						Operations: []admissionregv1.OperationType{admissionregv1.Create, admissionregv1.Update},
 						Rule: admissionregv1.Rule{
 							APIGroups:   []string{"*"},
 							APIVersions: []string{"v1alpha1"},
