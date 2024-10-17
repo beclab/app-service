@@ -45,13 +45,13 @@ func (h *Handler) enableServiceSync(req *restful.Request, resp *restful.Response
 	}
 
 	vals := make(map[string]interface{})
-	vals["bfl"] = map[string]string{
+	vals["bfl"] = map[string]interface{}{
 		"username": owner,
 		"nodeName": bfl.Spec.NodeName,
 	}
 
 	// appCache hostpath to mount with apps
-	vals["userspace"] = map[string]string{
+	vals["userspace"] = map[string]interface{}{
 		"appCache": fmt.Sprintf("%s/Cache", pvPath),
 		"userData": fmt.Sprintf("%s/Home", pvPath),
 	}
@@ -105,12 +105,12 @@ func (h *Handler) enableServiceBackup(req *restful.Request, resp *restful.Respon
 	}
 
 	vals := make(map[string]interface{})
-	vals["bfl"] = map[string]string{
+	vals["bfl"] = map[string]interface{}{
 		"username": owner,
 		"nodeName": bfl.Spec.NodeName,
 	}
 
-	vals["userspace"] = map[string]string{
+	vals["userspace"] = map[string]interface{}{
 		"appCache": fmt.Sprintf("%s/Cache", pvPath),
 		"userData": fmt.Sprintf("%s/Home", pvPath),
 	}
