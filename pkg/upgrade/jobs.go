@@ -3,8 +3,10 @@ package upgrade
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
+	"strings"
 
 	"k8s.io/klog/v2"
 )
@@ -14,6 +16,8 @@ type DownloadRelease struct {
 	jobCancel context.CancelFunc
 	devMode   bool
 }
+
+const CDN = "https://dc3p1870nn3cj.cloudfront.net"
 
 func (d *DownloadRelease) Run(ctx *PipelineContext) error {
 	d.jobCtx, d.jobCancel = context.WithCancel(ctx.InstallCtx)
@@ -38,7 +42,20 @@ func (d *DownloadRelease) Run(ctx *PipelineContext) error {
 
 		ctx.InstallPackgePath, err = github.downloadAndUnpack(d.jobCtx, installTgz)
 		if err != nil {
-			return err
+			klog.Error(err)
+			urlStrTokens := strings.Split(installTgz.String(), "/")
+			cdnUrlStr := strings.Join([]string{CDN, urlStrTokens[len(urlStrTokens)-1]}, "/")
+			cdnUrl, err := url.Parse(cdnUrlStr)
+			if err != nil {
+				klog.Error("get cdn url error, ", err)
+				return err
+			}
+
+			klog.Warning("failed to download release package, ", ctx.ReleaseVersion, ", try to download from cdn, ", cdnUrlStr)
+			ctx.InstallPackgePath, err = github.downloadAndUnpack(d.jobCtx, cdnUrl)
+			if err != nil {
+				return err
+			}
 		}
 
 	default:
