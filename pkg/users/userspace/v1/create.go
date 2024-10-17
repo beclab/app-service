@@ -186,7 +186,7 @@ func (c *Creator) installSysApps(ctx context.Context, bflPod *corev1.Pod) error 
 
 	bflDocURL := fmt.Sprintf("//%s:%d/bfl/apidocs.json", ip, port)
 
-	vals["bfl"] = map[string]string{
+	vals["bfl"] = map[string]interface{}{
 		"username": c.user,
 		"nodeName": bflPod.Spec.NodeName,
 		"url":      bflDocURL,
@@ -210,11 +210,11 @@ func (c *Creator) installSysApps(ctx context.Context, bflPod *corev1.Pod) error 
 
 	// pvc to mount with filebrowser
 	pvPath := pv.Spec.HostPath.Path
-	vals["pvc"] = map[string]string{
+	vals["pvc"] = map[string]interface{}{
 		"userspace": pvcData.userspacePvc,
 	}
 
-	vals["userspace"] = map[string]string{
+	vals["userspace"] = map[string]interface{}{
 		"appCache": pvcData.appCacheHostPath,
 		"userData": fmt.Sprintf("%s/Home", pvPath),
 		"appData":  fmt.Sprintf("%s/Data", pvPath),
@@ -253,7 +253,7 @@ func (c *Creator) installSysApps(ctx context.Context, bflPod *corev1.Pod) error 
 	if err != nil {
 		return err
 	}
-	vals["kubesphere"] = map[string]string{
+	vals["kubesphere"] = map[string]interface{}{
 		"redis_password": string(redisSecret.Data["auth"]),
 	}
 
@@ -282,7 +282,7 @@ func (c *Creator) installLauncher(ctx context.Context, userspace string) (string
 	vals := make(map[string]interface{})
 
 	k, s := c.genAppkeyAndSecret("bfl")
-	vals["bfl"] = map[string]string{
+	vals["bfl"] = map[string]interface{}{
 		"username":  c.user,
 		"appKey":    k,
 		"appSecret": s,
