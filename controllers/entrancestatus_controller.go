@@ -108,10 +108,10 @@ func (r *EntranceStatusManagerController) preEnqueueCheckForUpdate(old, new clie
 	return false
 }
 
-func (r *EntranceStatusManagerController) getStsOrDeploymentReplicasByPod(pod *corev1.Pod) (replicas int32, err error) {
+func (r *EntranceStatusManagerController) getStsOrDeploymentReplicasByPod(pod *corev1.Pod) (replicas int32, labelSelector *metav1.LabelSelector, err error) {
 	replicas = 1
 	if len(pod.OwnerReferences) == 0 {
-		return replicas, nil
+		return replicas, nil, nil
 	}
 	var kind, name string
 	ownerRef := pod.OwnerReferences[0]
@@ -121,7 +121,7 @@ func (r *EntranceStatusManagerController) getStsOrDeploymentReplicasByPod(pod *c
 		var rs appsv1.ReplicaSet
 		err = r.Get(context.TODO(), key, &rs)
 		if err != nil {
-			return replicas, err
+			return replicas, nil, err
 		}
 		if len(rs.OwnerReferences) > 0 && rs.OwnerReferences[0].Kind == deployment {
 			kind = deployment
@@ -132,7 +132,7 @@ func (r *EntranceStatusManagerController) getStsOrDeploymentReplicasByPod(pod *c
 		name = ownerRef.Name
 	}
 	if kind == "" {
-		return replicas, nil
+		return replicas, nil, nil
 	}
 	switch kind {
 	case deployment:
@@ -140,23 +140,24 @@ func (r *EntranceStatusManagerController) getStsOrDeploymentReplicasByPod(pod *c
 		key := types.NamespacedName{Name: name, Namespace: pod.Namespace}
 		err = r.Get(context.TODO(), key, &deploy)
 		if err != nil {
-			return replicas, err
+			return replicas, nil, err
 		}
 		deployCopy := deploy.DeepCopy()
+		labelSelector = deploy.Spec.Selector
 		replicas = *deployCopy.Spec.Replicas
-
 	case statefulSet:
 		var sts appsv1.StatefulSet
 		key := types.NamespacedName{Name: name, Namespace: pod.Namespace}
 		err = r.Get(context.TODO(), key, &sts)
 		if err != nil {
-			return replicas, err
+			return replicas, nil, err
 		}
 		stsCopy := sts.DeepCopy()
+		labelSelector = sts.Spec.Selector
 		replicas = *stsCopy.Spec.Replicas
 
 	}
-	return replicas, nil
+	return replicas, labelSelector, nil
 }
 
 func (r *EntranceStatusManagerController) updateEntranceStatus(pod *corev1.Pod) error {
@@ -166,9 +167,14 @@ func (r *EntranceStatusManagerController) updateEntranceStatus(pod *corev1.Pod) 
 	if err != nil {
 		return err
 	}
-	var app v1alpha1.Application
-	var entranceName string
-OuterLoop:
+
+	type appInfo struct {
+		name         string
+		startedTime  *metav1.Time
+		entranceName string
+	}
+	filteredApp := make([]appInfo, 0)
+
 	for _, a := range apps.Items {
 		for _, e := range a.Spec.Entrances {
 			isSelected, err := r.isEntrancePod(pod, e.Host, namespace)
@@ -176,44 +182,50 @@ OuterLoop:
 				return err
 			}
 			if isSelected {
-				klog.Infof(" entrancePod, appName=%v", a.Spec.Name)
-				app = a
-				entranceName = e.Name
-				break OuterLoop
+				filteredApp = append(filteredApp, appInfo{
+					name:         a.Name,
+					startedTime:  a.Status.StartedTime,
+					entranceName: e.Name,
+				})
+
 			}
 		}
-
-	}
-	// not entrancePod or app has not been started, ignore it
-	if app.Name == "" || app.Status.StartedTime.IsZero() {
-		return nil
 	}
 
-	appCopy := app.DeepCopy()
-	// check if one entranceStatus exist, append it else update
-	entranceState, rm, err := r.calEntranceState(pod)
-	if err != nil {
-		return err
-	}
-	for i := len(appCopy.Status.EntranceStatuses) - 1; i >= 0; i-- {
-		if appCopy.Status.EntranceStatuses[i].Name == entranceName {
-			appCopy.Status.EntranceStatuses[i].State = entranceState
-			appCopy.Status.EntranceStatuses[i].Reason = rm.Reason
-			appCopy.Status.EntranceStatuses[i].Message = rm.Message
-			now := metav1.Now()
-			appCopy.Status.EntranceStatuses[i].StatusTime = &now
+	for _, a := range filteredApp {
+		if a.startedTime.IsZero() {
+			continue
+		}
+		var selectedApp v1alpha1.Application
+		err = r.Get(context.TODO(), types.NamespacedName{Name: a.name}, &selectedApp)
+		if err != nil {
+			return err
+		}
+		appCopy := selectedApp.DeepCopy()
+		entranceState, rm, err := r.calEntranceState(pod)
+		if err != nil {
+			return err
+		}
+		for i := len(appCopy.Status.EntranceStatuses) - 1; i >= 0; i-- {
+			if appCopy.Status.EntranceStatuses[i].Name == a.entranceName {
+				appCopy.Status.EntranceStatuses[i].State = entranceState
+				appCopy.Status.EntranceStatuses[i].Reason = rm.Reason
+				appCopy.Status.EntranceStatuses[i].Message = rm.Message
+				now := metav1.Now()
+				appCopy.Status.EntranceStatuses[i].StatusTime = &now
+			}
+		}
+		patchApp := client.MergeFrom(&selectedApp)
+		err = r.Status().Patch(context.TODO(), appCopy, patchApp)
+		if err != nil {
+			klog.Errorf("failed to patch err=%v", err)
+			return err
 		}
 	}
-	patchApp := client.MergeFrom(&app)
-	err = r.Status().Patch(context.TODO(), appCopy, patchApp)
-	if err != nil {
-		klog.Errorf("failed to patch err=%v", err)
-	}
-	return err
+	return nil
 }
 
 func (r *EntranceStatusManagerController) isEntrancePod(pod *corev1.Pod, svcName, namespace string) (bool, error) {
-	klog.Infof("check isEntrancePod,svcName: %v, namespace: %v", svcName, namespace)
 	var svc corev1.Service
 	key := types.NamespacedName{Namespace: namespace, Name: svcName}
 	err := r.Get(context.TODO(), key, &svc)
@@ -225,29 +237,54 @@ func (r *EntranceStatusManagerController) isEntrancePod(pod *corev1.Pod, svcName
 		return false, err
 	}
 	isSelected := selector.Matches(labels.Set(pod.GetLabels()))
-	klog.Infof("svcName: %v, podName: %v, namespace: %v, isSelected: %v", svcName, pod.Name, namespace, isSelected)
 	return isSelected, nil
 }
 
 func (r *EntranceStatusManagerController) calEntranceState(pod *corev1.Pod) (v1alpha1.EntranceState, ReasonedMessage, error) {
-	rm := ReasonedMessage{
-		Reason: string(pod.Status.Phase),
-	}
+	var message string
+	reason := string(pod.Status.Phase)
 
-	replicas, err := r.getStsOrDeploymentReplicasByPod(pod)
+	replicas, labelSelector, err := r.getStsOrDeploymentReplicasByPod(pod)
 	if err != nil {
-		return "", rm, err
+		return "", ReasonedMessage{Reason: reason}, err
 	}
 	if replicas == 0 {
-		rm.Reason = "suspend"
-		return v1alpha1.EntranceSuspend, rm, nil
+		reason = "suspend"
+		return v1alpha1.EntranceSuspend, ReasonedMessage{
+			Reason: reason,
+		}, nil
+	}
+	var state v1alpha1.EntranceState
+	if labelSelector == nil {
+		state, reason, message = makeEntranceState(pod)
+		return state, ReasonedMessage{Reason: reason, Message: message}, nil
 	}
 
+	var podList corev1.PodList
+	err = r.List(context.TODO(), &podList, client.InNamespace(pod.Namespace), client.MatchingLabels(labelSelector.MatchLabels))
+	for _, pod := range podList.Items {
+		state, reason, message = makeEntranceState(&pod)
+		if state == v1alpha1.EntranceRunning {
+			return state, ReasonedMessage{
+				Reason:  reason,
+				Message: message,
+			}, nil
+		}
+	}
+	return state, ReasonedMessage{
+		Reason:  reason,
+		Message: message,
+	}, nil
+}
+
+func makeEntranceState(pod *corev1.Pod) (v1alpha1.EntranceState, string, string) {
+	var reason, message string
+	reason = string(pod.Status.Phase)
 	if pod.Status.Reason != "" {
-		rm.Reason = pod.Status.Reason
+		reason = pod.Status.Reason
 	}
 	if pod.Status.Message != "" {
-		rm.Message = pod.Status.Message
+		message = pod.Status.Message
 	}
 	initializing := false
 	for i := range pod.Status.InitContainerStatuses {
@@ -258,30 +295,29 @@ func (r *EntranceStatusManagerController) calEntranceState(pod *corev1.Pod) (v1a
 		case container.State.Terminated != nil:
 			if len(container.State.Terminated.Reason) == 0 {
 				if container.State.Terminated.Signal != 0 {
-					rm.Reason = fmt.Sprintf("Init:Signal:%d", container.State.Terminated.Signal)
+					reason = fmt.Sprintf("Init:Signal:%d", container.State.Terminated.Signal)
 				} else {
-					rm.Reason = fmt.Sprintf("Init:ExitCode:%d", container.State.Terminated.ExitCode)
+					reason = fmt.Sprintf("Init:ExitCode:%d", container.State.Terminated.ExitCode)
 				}
 			} else {
-				rm.Reason = "Init:" + container.State.Terminated.Reason
+				reason = "Init:" + container.State.Terminated.Reason
 			}
 			if container.State.Terminated.Message != "" {
-				rm.Message = container.State.Terminated.Message
+				message = container.State.Terminated.Message
 			}
 			initializing = true
 		case container.State.Waiting != nil && len(container.State.Waiting.Reason) > 0 && container.State.Waiting.Reason != "PodInitializing":
-			rm.Reason = "Init:" + container.State.Waiting.Reason
+			reason = "Init:" + container.State.Waiting.Reason
 			if container.State.Waiting.Message != "" {
-				rm.Message = container.State.Waiting.Message
+				message = container.State.Waiting.Message
 			}
 			initializing = true
 		default:
-			rm.Reason = fmt.Sprintf("Init:%d/%d", i, len(pod.Spec.InitContainers))
+			reason = fmt.Sprintf("Init:%d/%d", i, len(pod.Spec.InitContainers))
 			initializing = true
 		}
 		break
 	}
-
 	totalContainers := len(pod.Spec.Containers)
 	readyContainers := 0
 
@@ -290,23 +326,23 @@ func (r *EntranceStatusManagerController) calEntranceState(pod *corev1.Pod) (v1a
 			container := pod.Status.ContainerStatuses[i]
 
 			if container.State.Waiting != nil && container.State.Waiting.Reason != "" {
-				rm.Reason = container.State.Waiting.Reason
+				reason = container.State.Waiting.Reason
 				if container.State.Waiting.Message != "" {
-					rm.Message = container.State.Waiting.Message
+					message = container.State.Waiting.Message
 				}
 			} else if container.State.Terminated != nil && container.State.Terminated.Reason != "" {
-				rm.Reason = container.State.Terminated.Reason
+				reason = container.State.Terminated.Reason
 				if container.State.Terminated.Message != "" {
-					rm.Message = container.State.Terminated.Message
+					message = container.State.Terminated.Message
 				}
 			} else if container.State.Terminated != nil && container.State.Terminated.Reason == "" {
 				if container.State.Terminated.Signal != 0 {
-					rm.Reason = fmt.Sprintf("Signal:%d", container.State.Terminated.Signal)
+					reason = fmt.Sprintf("Signal:%d", container.State.Terminated.Signal)
 				} else {
-					rm.Reason = fmt.Sprintf("ExitCode:%d", container.State.Terminated.ExitCode)
+					reason = fmt.Sprintf("ExitCode:%d", container.State.Terminated.ExitCode)
 				}
 				if container.State.Terminated.Message != "" {
-					rm.Message = container.State.Terminated.Message
+					message = container.State.Terminated.Message
 				}
 			} else if container.Ready && container.State.Running != nil {
 				readyContainers++
@@ -314,7 +350,8 @@ func (r *EntranceStatusManagerController) calEntranceState(pod *corev1.Pod) (v1a
 		}
 	}
 	if readyContainers == totalContainers && readyContainers != 0 {
-		return v1alpha1.EntranceRunning, rm, nil
+		return v1alpha1.EntranceRunning, reason, message
 	}
-	return v1alpha1.EntranceCrash, rm, nil
+
+	return v1alpha1.EntranceCrash, reason, message
 }
