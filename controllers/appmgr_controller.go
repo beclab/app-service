@@ -793,7 +793,7 @@ func (r *ApplicationManagerController) suspend(appMgr *appv1alpha1.ApplicationMa
 			}
 		}
 	}()
-	err = suspendOrResumeApp(context.TODO(), r.Client, namespace, int32(0))
+	err = suspendOrResumeApp(context.TODO(), r.Client, appMgr, int32(0))
 	if err != nil {
 		return err
 	}
@@ -801,8 +801,9 @@ func (r *ApplicationManagerController) suspend(appMgr *appv1alpha1.ApplicationMa
 	return r.updateStatus(appMgr, appv1alpha1.Completed, nil, appv1alpha1.AppSuspend, message)
 }
 
-func suspendOrResumeApp(ctx context.Context, cli client.Client, namespace string, replicas int32) error {
+func suspendOrResumeApp(ctx context.Context, cli client.Client, appMgr *appv1alpha1.ApplicationManager, replicas int32) error {
 	suspend := func(list client.ObjectList) error {
+		namespace := appMgr.Spec.AppNamespace
 		err := cli.List(ctx, list, client.InNamespace(namespace))
 		if err != nil && !apierrors.IsNotFound(err) {
 			klog.Errorf("Failed to get workload namespace=%s err=%v", namespace, err)
@@ -814,21 +815,36 @@ func suspendOrResumeApp(ctx context.Context, cli client.Client, namespace string
 			klog.Errorf("Failed to extract list namespace=%s err=%v", namespace, err)
 			return err
 		}
+		check := func(appName, deployName string) bool {
+			if namespace == fmt.Sprintf("user-space-%s", appMgr.Spec.AppOwner) ||
+				namespace == fmt.Sprintf("user-system-%s", appMgr.Spec.AppOwner) {
+				if appName == deployName {
+					return true
+				}
+			} else {
+				return true
+			}
+			return false
+		}
 
 		//var zeroReplica int32 = 0
 		for _, w := range listObjects {
 			workloadName := ""
 			switch workload := w.(type) {
 			case *appsv1.Deployment:
-				workload.Annotations[suspendAnnotation] = "app-service"
-				workload.Annotations[suspendCauseAnnotation] = "user operate"
-				workload.Spec.Replicas = &replicas
-				workloadName = workload.Namespace + "/" + workload.Name
+				if check(appMgr.Spec.AppName, workload.Name) {
+					workload.Annotations[suspendAnnotation] = "app-service"
+					workload.Annotations[suspendCauseAnnotation] = "user operate"
+					workload.Spec.Replicas = &replicas
+					workloadName = workload.Namespace + "/" + workload.Name
+				}
 			case *appsv1.StatefulSet:
-				workload.Annotations[suspendAnnotation] = "app-service"
-				workload.Annotations[suspendCauseAnnotation] = "user operate"
-				workload.Spec.Replicas = &replicas
-				workloadName = workload.Namespace + "/" + workload.Name
+				if check(appMgr.Spec.AppName, workload.Name) {
+					workload.Annotations[suspendAnnotation] = "app-service"
+					workload.Annotations[suspendCauseAnnotation] = "user operate"
+					workload.Spec.Replicas = &replicas
+					workloadName = workload.Namespace + "/" + workload.Name
+				}
 			}
 			if replicas == 0 {
 				klog.Infof("Try to suspend workload name=%s", workloadName)
@@ -871,7 +887,7 @@ func (r *ApplicationManagerController) resumeAppAndWaitForLaunch(appMgr *appv1al
 	}()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	err = suspendOrResumeApp(ctx, r.Client, appMgr.Spec.AppNamespace, int32(1))
+	err = suspendOrResumeApp(ctx, r.Client, appMgr, int32(1))
 	if err != nil {
 		return err
 	}
