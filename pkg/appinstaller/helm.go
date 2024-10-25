@@ -13,6 +13,7 @@ import (
 	"time"
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
 	"bytetrade.io/web3os/app-service/pkg/helm"
@@ -74,7 +75,10 @@ type HelmOps struct {
 	app          *ApplicationConfig
 	settings     *cli.EnvSettings
 	token        string
-	options      Opt
+	//client       *kubernetes.Clientset
+	//dyClient dynamic.Interface
+	client  *clientset.ClientSet
+	options Opt
 }
 
 func (h *HelmOps) install(values map[string]interface{}) error {
@@ -160,6 +164,11 @@ func NewHelmOps(ctx context.Context, kubeConfig *rest.Config, app *ApplicationCo
 	if err != nil {
 		return nil, err
 	}
+
+	client, err := clientset.New(kubeConfig)
+	if err != nil {
+		return nil, err
+	}
 	ops := &HelmOps{
 		ctx:          ctx,
 		kubeConfig:   kubeConfig,
@@ -167,6 +176,7 @@ func NewHelmOps(ctx context.Context, kubeConfig *rest.Config, app *ApplicationCo
 		actionConfig: actionConfig,
 		settings:     settings,
 		token:        token,
+		client:       client,
 		options:      options,
 	}
 	return ops, nil
@@ -201,6 +211,15 @@ func (h *HelmOps) addApplicationLabelsToDeployment() error {
 				constants.ApplicationVersionLabel: h.app.Version,
 				constants.ApplicationEntrancesKey: services,
 				constants.ApplicationSourceLabel:  h.options.Source,
+			},
+		},
+		"spec": map[string]interface{}{
+			"template": map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"labels": map[string]string{
+						"io.bytetrade.app": "true",
+					},
+				},
 			},
 		},
 	}
@@ -910,6 +929,10 @@ func (h *HelmOps) createOIDCClient(values map[string]interface{}, userZone, name
 }
 
 func (h *HelmOps) waitForLaunch() bool {
+	ok := h.waitForStartUp()
+	if !ok {
+		return false
+	}
 	timer := time.NewTicker(2 * time.Second)
 	entrances := h.app.Entrances
 	entranceCount := len(entrances)
@@ -933,6 +956,76 @@ func (h *HelmOps) waitForLaunch() bool {
 			return false
 		}
 	}
+}
+func (h *HelmOps) waitForStartUp() bool {
+	timer := time.NewTicker(1 * time.Second)
+	for {
+		select {
+		case <-timer.C:
+			startedUp := h.isStartUp()
+			if startedUp {
+				name, _ := utils.FmtAppMgrName(h.app.AppName, h.app.OwnerName, h.app.Namespace)
+				appMgr := &appv1alpha1.ApplicationManager{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: name,
+					},
+					Spec: appv1alpha1.ApplicationManagerSpec{
+						AppName:  h.app.AppName,
+						AppOwner: h.app.OwnerName,
+					},
+				}
+				err := utils.UpdateAppState(appMgr, appv1alpha1.AppInitializing)
+				if err != nil {
+					klog.Errorf("update app state err=%v", err)
+				}
+
+				klog.Infof("time: %v, appState: %v", time.Now(), appv1alpha1.AppInitializing)
+				return true
+			}
+
+		case <-h.ctx.Done():
+			klog.Infof("Waiting for app startup canceled appName=%s", h.app.AppName)
+			return false
+		}
+	}
+}
+
+func (h *HelmOps) isStartUp() bool {
+	var labelSelector string
+	deployment, err := h.client.KubeClient.Kubernetes().AppsV1().Deployments(h.app.Namespace).
+		Get(context.TODO(), h.app.AppName, metav1.GetOptions{})
+
+	if err == nil {
+		labelSelector = metav1.FormatLabelSelector(deployment.Spec.Selector)
+	}
+
+	if apierrors.IsNotFound(err) {
+		sts, err := h.client.KubeClient.Kubernetes().AppsV1().StatefulSets(h.app.Namespace).
+			Get(context.TODO(), h.app.AppName, metav1.GetOptions{})
+		if err != nil {
+			return false
+		}
+		labelSelector = metav1.FormatLabelSelector(sts.Spec.Selector)
+	}
+	pods, err := h.client.KubeClient.Kubernetes().CoreV1().Pods(h.app.Namespace).
+		List(context.TODO(), metav1.ListOptions{LabelSelector: labelSelector})
+	if len(pods.Items) == 0 {
+		return false
+	}
+	for _, pod := range pods.Items {
+		totalContainers := len(pod.Spec.Containers)
+		startedContainers := 0
+		for i := len(pod.Status.ContainerStatuses) - 1; i >= 0; i-- {
+			container := pod.Status.ContainerStatuses[i]
+			if *container.Started == true {
+				startedContainers++
+			}
+		}
+		if startedContainers == totalContainers {
+			return true
+		}
+	}
+	return false
 }
 
 type applicationSettingsSubPolicy struct {

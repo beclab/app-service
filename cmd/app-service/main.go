@@ -122,6 +122,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = (&controllers.EntranceStatusManagerController{
+		Client: mgr.GetClient(),
+	}).SetUpWithManager(mgr); err != nil {
+		setupLog.Error(err, "Unable to create controller", "controller", "EntranceStatus Manager")
+		os.Exit(1)
+	}
+
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

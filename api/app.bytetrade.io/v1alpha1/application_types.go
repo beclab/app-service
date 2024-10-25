@@ -48,6 +48,18 @@ type ApplicationSpec struct {
 	Settings map[string]string `json:"settings,omitempty"`
 }
 
+type EntranceState string
+
+const (
+	EntranceRunning EntranceState = "running"
+	EntranceCrash   EntranceState = "crash"
+	EntranceSuspend EntranceState = "suspend"
+)
+
+func (e EntranceState) String() string {
+	return string(e)
+}
+
 // Entrance contains details for application entrance
 type Entrance struct {
 	Name      string `yaml:"name" json:"name"`
@@ -71,6 +83,17 @@ type ApplicationStatus struct {
 	State      string       `json:"state,omitempty"`
 	UpdateTime *metav1.Time `json:"updateTime"`
 	StatusTime *metav1.Time `json:"statusTime"`
+	// StartedTime is the time that app first to running state
+	StartedTime      *metav1.Time     `json:"startedTime,omitempty"`
+	EntranceStatuses []EntranceStatus `json:"entranceStatuses,omitempty"`
+}
+
+type EntranceStatus struct {
+	Name       string        `json:"name"`
+	State      EntranceState `json:"state"`
+	StatusTime *metav1.Time  `json:"statusTime"`
+	Reason     string        `json:"reason"`
+	Message    string        `json:"message,omitempty"`
 }
 
 //+genclient
