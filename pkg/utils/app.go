@@ -96,6 +96,21 @@ func UpdateAppState(appmgr *v1alpha1.ApplicationManager, state v1alpha1.Applicat
 		appCopy.Status.StatusTime = &now
 		appCopy.Status.UpdateTime = &now
 
+		// set startedTime when app first become running
+		if state == v1alpha1.AppRunning && appCopy.Status.StartedTime.IsZero() {
+			appCopy.Status.StartedTime = &now
+			entranceStatues := make([]v1alpha1.EntranceStatus, 0, len(app.Spec.Entrances))
+			for _, e := range app.Spec.Entrances {
+				entranceStatues = append(entranceStatues, v1alpha1.EntranceStatus{
+					Name:       e.Name,
+					State:      v1alpha1.EntranceRunning,
+					StatusTime: &now,
+					Reason:     v1alpha1.EntranceRunning.String(),
+				})
+			}
+			appCopy.Status.EntranceStatuses = entranceStatues
+		}
+
 		if appCopy.Name == "" {
 			return nil
 		}

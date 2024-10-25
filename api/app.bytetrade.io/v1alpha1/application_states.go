@@ -19,8 +19,10 @@ const (
 	// AppUpgrading means that an upgrade operation is underway.
 	AppUpgrading ApplicationState = "upgrading"
 	// AppResuming means that a resume operation is underway.
-	AppResuming    ApplicationState = "resuming"
-	AppDownloading ApplicationState = "downloading"
+	AppResuming ApplicationState = "resuming"
+	// AppDownloading in that state cr app not yet been created
+	AppDownloading  ApplicationState = "downloading"
+	AppInitializing ApplicationState = "initializing"
 )
 
 func (a ApplicationState) String() string {
@@ -28,19 +30,19 @@ func (a ApplicationState) String() string {
 }
 
 /* ApplicationState change
-+---------+     +------------+     +--------------+     +---------+     +----------+
-| pending | --> | installing | --> |              | --> | suspend | --> | resuming |
-+---------+     +------------+     |              |     +---------+     +----------+
-                                   |              |                       |
-                  +--------------> |   running    | <---------------------+
-                  |                |              |
-                +------------+     |              |
-                | upgrading  | <-- |              |
-                +------------+     +--------------+
-                                     |
-                                     |
-                                     v
-                                   +--------------+
-                                   | uninstalling |
-                                   +--------------+
++---------+  install   +-------------+     +------------+     +--------------+            +--------------+  suspend   +---------+  resume   +----------+
+| pending | ---------> | downloading | --> | installing | --> | initializing | ---------> |              | ---------> | suspend | --------> | resuming |
++---------+            +-------------+     +------------+     +--------------+            |              |            +---------+           +----------+
+                                                                                          |              |                                    |
+                                                                +-----------------------> |   running    | <----------------------------------+
+                                                                |                         |              |
+                                                              +--------------+  upgrade   |              |
+                                                              |  upgrading   | <--------- |              |
+                                                              +--------------+            +--------------+
+                                                                                            |
+                                                                                            | install
+                                                                                            v
+                                                                                          +--------------+
+                                                                                          | uninstalling |
+                                                                                          +--------------+
 */

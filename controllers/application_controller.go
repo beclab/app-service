@@ -381,6 +381,23 @@ func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.
 	app.Status.StatusTime = &now
 	app.Status.UpdateTime = &now
 
+	// set startedTime when app first become running
+	klog.Infof("createApplication: appState: %v", app.Status.State)
+	klog.Infof("createApplication,startedTime: %v", appCopy.Status.StartedTime.IsZero())
+	if app.Status.State == appv1alpha1.AppRunning.String() && appCopy.Status.StartedTime.IsZero() {
+		app.Status.StartedTime = &now
+		entranceStatues := make([]appv1alpha1.EntranceStatus, 0, len(app.Spec.Entrances))
+		for _, e := range app.Spec.Entrances {
+			entranceStatues = append(entranceStatues, appv1alpha1.EntranceStatus{
+				Name:       e.Name,
+				State:      appv1alpha1.EntranceRunning,
+				StatusTime: &now,
+				Reason:     appv1alpha1.EntranceRunning.String(),
+			})
+		}
+		app.Status.EntranceStatuses = entranceStatues
+	}
+
 	err = r.Status().Patch(ctx, app, client.MergeFrom(appCopy))
 	if err != nil {
 		klog.Infof("Failed to patch err=%v", err)
