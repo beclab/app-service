@@ -50,6 +50,7 @@ const (
 
 type ApplicationConfig struct {
 	AppID              string
+	CfgFileVersion     string
 	Namespace          string
 	ChartsName         string
 	RepoURL            string
@@ -59,6 +60,7 @@ type ApplicationConfig struct {
 	AppName            string // name of application displayed on shortcut
 	OwnerName          string // name of owner who installed application
 	Entrances          []v1alpha1.Entrance
+	Ports              []v1alpha1.ServicePort
 	Icon               string          // base64 icon data
 	Permission         []AppPermission // app permission requests
 	Requirement        AppRequirement

@@ -61,6 +61,11 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
+	if !utils.MatchVersion(appConfig.CfgFileVersion, MinCfgFileVersion) {
+		api.HandleBadRequest(resp, req, fmt.Errorf("terminusManifest.version must %s", MinCfgFileVersion))
+		return
+	}
+
 	if utils.IsForbidNamespace(appConfig.Namespace) {
 		api.HandleBadRequest(resp, req, fmt.Errorf("unsupported namespace: %s", appConfig.Namespace))
 		return
@@ -495,15 +500,17 @@ func toApplicationConfig(app, chart string, cfg *appinstaller.AppConfiguration) 
 	}
 
 	return &appinstaller.ApplicationConfig{
-		AppID:      appid,
-		AppName:    app,
-		Title:      cfg.Metadata.Title,
-		Version:    cfg.Metadata.Version,
-		Target:     cfg.Metadata.Target,
-		ChartsName: chart,
-		Entrances:  cfg.Entrances,
-		Icon:       cfg.Metadata.Icon,
-		Permission: permission,
+		AppID:          appid,
+		CfgFileVersion: cfg.ConfigVersion,
+		AppName:        app,
+		Title:          cfg.Metadata.Title,
+		Version:        cfg.Metadata.Version,
+		Target:         cfg.Metadata.Target,
+		ChartsName:     chart,
+		Entrances:      cfg.Entrances,
+		Ports:          cfg.Ports,
+		Icon:           cfg.Metadata.Icon,
+		Permission:     permission,
 		Requirement: appinstaller.AppRequirement{
 			Memory: mem,
 			CPU:    cpu,

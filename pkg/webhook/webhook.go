@@ -145,6 +145,10 @@ func (wh *Webhook) CreatePatch(
 	if err != nil {
 		return nil, err
 	}
+	appcfg, err := wh.GetAppConfig(req.Namespace)
+	if err != nil {
+		return nil, err
+	}
 
 	volume := sidecar.GetSidecarVolumeSpec(configMapName)
 
@@ -154,7 +158,7 @@ func (wh *Webhook) CreatePatch(
 
 	pod.Spec.Volumes = append(pod.Spec.Volumes, volume)
 
-	initContainer := sidecar.GetInitContainerSpec()
+	initContainer := sidecar.GetInitContainerSpec(appcfg)
 	pod.Spec.InitContainers = append(pod.Spec.InitContainers, initContainer)
 
 	clusterID := fmt.Sprintf("%s.%s", pod.Spec.ServiceAccountName, req.Name)
@@ -168,10 +172,6 @@ func (wh *Webhook) CreatePatch(
 	policySidecar := sidecar.GetEnvoySidecarContainerSpec(clusterID, envoyFilename, appKey, appSecret)
 	pod.Spec.Containers = append(pod.Spec.Containers, policySidecar)
 
-	appcfg, err := wh.GetAppConfig(req.Namespace)
-	if err != nil {
-		return nil, err
-	}
 	pod.Spec.InitContainers = append([]corev1.Container{sidecar.GetInitContainerSpecForWaitFor(appcfg.OwnerName)},
 		pod.Spec.InitContainers...)
 

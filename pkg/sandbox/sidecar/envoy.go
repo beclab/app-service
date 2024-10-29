@@ -326,8 +326,8 @@ func getEnvoyConfigOnlyForOutBound(appcfg *appinstaller.ApplicationConfig, perms
 }
 
 // GetInitContainerSpec returns init container spec.
-func GetInitContainerSpec() corev1.Container {
-	iptablesInitCommand := generateIptablesCommands()
+func GetInitContainerSpec(appcfg *appinstaller.ApplicationConfig) corev1.Container {
+	iptablesInitCommand := generateIptablesCommands(appcfg)
 	enablePrivilegedInitContainer := true
 
 	return corev1.Container{
@@ -364,7 +364,7 @@ func GetInitContainerSpec() corev1.Container {
 	}
 }
 
-func generateIptablesCommands() string {
+func generateIptablesCommands(appcfg *appinstaller.ApplicationConfig) string {
 	cmd := fmt.Sprintf(`iptables-restore --noflush <<EOF
 # sidecar interception rules
 *nat
@@ -376,7 +376,16 @@ func generateIptablesCommands() string {
 -A PREROUTING -p tcp -j PROXY_INBOUND
 -A OUTPUT -p tcp -j PROXY_OUTBOUND
 -A PROXY_INBOUND -p tcp --dport %d -j RETURN
--A PROXY_INBOUND -p tcp -j PROXY_IN_REDIRECT
+`, constants.EnvoyAdminPort)
+	if appcfg != nil {
+		for _, port := range appcfg.Ports {
+			if port.Protocol == "tcp" {
+				cmd += fmt.Sprintf("-A PROXY_INBOUND -p tcp --dport %d -j RETURN\n", port.Port)
+			}
+		}
+	}
+
+	cmd += fmt.Sprintf(`-A PROXY_INBOUND -p tcp -j PROXY_IN_REDIRECT
 -A PROXY_IN_REDIRECT -p tcp -j REDIRECT --to-port %d
 
 -A PROXY_OUTBOUND -p tcp --dport 5432 -j RETURN
@@ -397,7 +406,6 @@ func generateIptablesCommands() string {
 COMMIT
 EOF
 `,
-		constants.EnvoyAdminPort,
 		constants.EnvoyInboundListenerPort,
 		constants.EnvoyOutboundListenerPort,
 	)

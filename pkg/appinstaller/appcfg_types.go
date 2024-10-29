@@ -20,13 +20,14 @@ type AppMetaData struct {
 }
 
 type AppConfiguration struct {
-	ConfigVersion string              `yaml:"terminusManifest.version" json:"terminusManifest.version"`
-	Metadata      AppMetaData         `yaml:"metadata" json:"metadata"`
-	Entrances     []v1alpha1.Entrance `yaml:"entrances" json:"entrances"`
-	Spec          AppSpec             `yaml:"spec" json:"spec"`
-	Permission    Permission          `yaml:"permission" json:"permission" description:"app permission request"`
-	Middleware    *tapr.Middleware    `yaml:"middleware" json:"middleware" description:"app middleware request"`
-	Options       Options             `yaml:"options" json:"options" description:"app options"`
+	ConfigVersion string                 `yaml:"terminusManifest.version" json:"terminusManifest.version"`
+	Metadata      AppMetaData            `yaml:"metadata" json:"metadata"`
+	Entrances     []v1alpha1.Entrance    `yaml:"entrances" json:"entrances"`
+	Ports         []v1alpha1.ServicePort `yaml:"ports" json:"ports"`
+	Spec          AppSpec                `yaml:"spec" json:"spec"`
+	Permission    Permission             `yaml:"permission" json:"permission" description:"app permission request"`
+	Middleware    *tapr.Middleware       `yaml:"middleware" json:"middleware" description:"app middleware request"`
+	Options       Options                `yaml:"options" json:"options" description:"app options"`
 }
 
 type AppSpec struct {

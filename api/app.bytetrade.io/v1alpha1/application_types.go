@@ -44,6 +44,8 @@ type ApplicationSpec struct {
 	//Entrances []Entrance `json:"entrances,omitempty"`
 	Entrances []Entrance `json:"entrances,omitempty"`
 
+	Ports []ServicePort `json:"ports,omitempty"`
+
 	// the extend settings of the application
 	Settings map[string]string `json:"settings,omitempty"`
 }
@@ -62,16 +64,35 @@ func (e EntranceState) String() string {
 
 // Entrance contains details for application entrance
 type Entrance struct {
-	Name      string `yaml:"name" json:"name"`
-	Host      string `yaml:"host" json:"host"`
-	Port      int32  `yaml:"port" json:"port"`
-	Icon      string `yaml:"icon,omitempty" json:"icon,omitempty"`
-	Title     string `yaml:"title" json:"title"`
+	Name string `yaml:"name" json:"name"`
+	Host string `yaml:"host" json:"host"`
+	Port int32  `yaml:"port" json:"port"`
+	// Optional. if invisible=true.
+	Icon string `yaml:"icon,omitempty" json:"icon,omitempty"`
+	// Optional. if invisible=true.
+	Title     string `yaml:"title" json:"title,omitempty"`
 	AuthLevel string `yaml:"authLevel,omitempty" json:"authLevel,omitempty"`
 	Invisible bool   `yaml:"invisible,omitempty" json:"invisible,omitempty"`
+
 	// openMethod has three choices default, iframe, window
-	OpenMethod      string `yaml:"openMethod,omitempty" json:"openMethod,omitempty"`
-	WindowPushState bool   `yaml:"windowPushState,omitempty" json:"windowPushState,omitempty"`
+	// Optional. if invisible=true.
+	OpenMethod string `yaml:"openMethod,omitempty" json:"openMethod,omitempty"`
+
+	WindowPushState bool `yaml:"windowPushState,omitempty" json:"windowPushState,omitempty"`
+}
+
+type ServicePort struct {
+	Name string `json:"name" yaml:"name"`
+	Host string `yaml:"host" json:"host"`
+	Port int32  `yaml:"port" json:"port"`
+
+	ExposePort int32 `yaml:"exposePort" json:"exposePort,omitempty"`
+
+	// The protocol for this entrance. Supports "tcp" and "udp".
+	// Default is tcp.
+	// +default="tcp"
+	// +optional
+	Protocol string `yaml:"protocol" json:"protocol,omitempty"`
 }
 
 // ApplicationStatus defines the observed state of Application
