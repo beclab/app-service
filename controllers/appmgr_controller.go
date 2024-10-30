@@ -31,6 +31,7 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/client-go/util/workqueue"
@@ -367,6 +368,11 @@ func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv
 	if err != nil {
 		return err
 	}
+	err = setExposePorts(appconfig)
+	if err != nil {
+		return err
+	}
+
 	ops, err = appinstaller.NewHelmOps(ctx, kubeConfig, appconfig, token, appinstaller.Opt{Source: appMgr.Spec.Source})
 	if err != nil {
 		return err
@@ -1111,4 +1117,65 @@ func (r *ApplicationManagerController) updateImStatus(ctx context.Context, name,
 		return err
 	}
 	return nil
+}
+
+type portKey struct {
+	port     int32
+	protocol string
+}
+
+func setExposePorts(appConfig *appinstaller.ApplicationConfig) error {
+	existPorts := make(map[portKey]struct{})
+	client, err := utils.GetClient()
+	if err != nil {
+		return err
+	}
+	apps, err := client.AppV1alpha1().Applications().List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+
+	for _, app := range apps.Items {
+		for _, p := range app.Spec.Ports {
+			key := portKey{
+				port:     p.ExposePort,
+				protocol: string(p.Protocol),
+			}
+			existPorts[key] = struct{}{}
+		}
+	}
+	klog.Infof("existPorts: %v", existPorts)
+
+	for i := range appConfig.Ports {
+		port := &appConfig.Ports[i]
+		if port.ExposePort == 0 {
+			var exposePort int32
+			for i := 0; i < 5; i++ {
+
+				exposePort, err = genPort(port.Protocol)
+				if err != nil {
+					continue
+				}
+				key := portKey{port: exposePort, protocol: port.Protocol}
+				if _, ok := existPorts[key]; !ok && err == nil {
+					break
+				}
+			}
+			key := portKey{port: exposePort, protocol: port.Protocol}
+			if _, ok := existPorts[key]; ok || err != nil {
+				return fmt.Errorf("%d port is not available", key.port)
+			}
+			existPorts[key] = struct{}{}
+			port.ExposePort = exposePort
+		}
+	}
+	return nil
+}
+
+func genPort(protocol string) (int32, error) {
+	exposePort := int32(rand.IntnRange(33333, 36789))
+	if !utils.IsPortAvailable(protocol, int(exposePort)) {
+		return 0, fmt.Errorf("failed to allocate an available port after 3 attempts")
+	}
+	return exposePort, nil
 }

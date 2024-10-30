@@ -140,15 +140,17 @@ func getAppConfigFromConfigurationFile(app, chart string) (*ApplicationConfig, e
 	}
 
 	return &ApplicationConfig{
-		AppID:      cfg.Metadata.AppID,
-		AppName:    app,
-		Title:      cfg.Metadata.Title,
-		Version:    cfg.Metadata.Version,
-		Target:     cfg.Metadata.Target,
-		ChartsName: chart,
-		Entrances:  cfg.Entrances,
-		Icon:       cfg.Metadata.Icon,
-		Permission: permission,
+		AppID:          cfg.Metadata.AppID,
+		CfgFileVersion: cfg.ConfigVersion,
+		AppName:        app,
+		Title:          cfg.Metadata.Title,
+		Version:        cfg.Metadata.Version,
+		Target:         cfg.Metadata.Target,
+		ChartsName:     chart,
+		Entrances:      cfg.Entrances,
+		Ports:          cfg.Ports,
+		Icon:           cfg.Metadata.Icon,
+		Permission:     permission,
 		Requirement: AppRequirement{
 			Memory: mem,
 			CPU:    cpu,
@@ -205,4 +207,9 @@ func ToEntrances(s string) (entrances []v1alpha1.Entrance, err error) {
 func ToEntrancesLabel(entrances []v1alpha1.Entrance) string {
 	serviceLabel, _ := json.Marshal(entrances)
 	return string(serviceLabel)
+}
+
+func ToAppTCPUDPPorts(ports []v1alpha1.ServicePort) string {
+	portsLabel, _ := json.Marshal(ports)
+	return string(portsLabel)
 }

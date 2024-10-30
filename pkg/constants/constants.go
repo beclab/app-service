@@ -15,6 +15,7 @@ const (
 	ApplicationOwnerLabel         = "applications.app.bytetrade.io/owner"
 	ApplicationIconLabel          = "applications.app.bytetrade.io/icon"
 	ApplicationEntrancesKey       = "applications.app.bytetrade.io/entrances"
+	ApplicationPortsKey           = "applications.app.bytetrade.io/ports"
 	ApplicationSystemServiceLabel = "applications.app.bytetrade.io/system_service"
 	ApplicationTitleLabel         = "applications.app.bytetrade.io/title"
 	ApplicationTargetLabel        = "applications.app.bytetrade.io/target"

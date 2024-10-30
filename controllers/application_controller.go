@@ -326,6 +326,10 @@ func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.
 	if err != nil {
 		ctrl.Log.Error(err, "get entrance error")
 	}
+	servicePortsMap, err := r.getAppPorts(ctx, deployment, isMultiApp)
+	if err != nil {
+		klog.Errorf("failed to get app ports err=%v", err)
+	}
 
 	var appid string
 	var isSysApp bool
@@ -350,6 +354,7 @@ func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.
 			Owner:          owner, // get from deployment
 			DeploymentName: deployment.GetName(),
 			Entrances:      entrancesMap[name],
+			Ports:          servicePortsMap[name],
 			Icon:           icon[name],
 			Settings:       settings,
 		},
@@ -675,6 +680,32 @@ func (r *ApplicationReconciler) clearHelmHistory(appname, namespace string) erro
 	}
 
 	return helm.UninstallCharts(actionConfig, appname)
+}
+
+func (r *ApplicationReconciler) getAppPorts(ctx context.Context, deployment client.Object, isMultiApp bool) (map[string][]appv1alpha1.ServicePort, error) {
+	portsLabel := deployment.GetAnnotations()[constants.ApplicationPortsKey]
+	portsMap := make(map[string][]appv1alpha1.ServicePort)
+	if len(portsLabel) == 0 {
+		return portsMap, errors.New("invalid service port")
+	}
+	var err error
+	if isMultiApp {
+		err = json.Unmarshal([]byte(portsLabel), &portsMap)
+		if err != nil {
+			klog.Errorf("unmarshal portMap errro=%v", err)
+			return nil, err
+		}
+	} else {
+		appName := deployment.GetLabels()[constants.ApplicationNameLabel]
+		ports := make([]appv1alpha1.ServicePort, 0)
+		err = json.Unmarshal([]byte(portsLabel), &ports)
+		if err != nil {
+			klog.Errorf("unmarshal service port error=%v", err)
+			return nil, err
+		}
+		portsMap[appName] = ports
+	}
+	return portsMap, nil
 }
 
 func checkPortOfService(s *corev1.Service, port int32) bool {

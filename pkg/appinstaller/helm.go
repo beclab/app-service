@@ -197,6 +197,7 @@ func (h *HelmOps) addApplicationLabelsToDeployment() error {
 		return err
 	}
 	services := ToEntrancesLabel(h.app.Entrances)
+	ports := ToAppTCPUDPPorts(h.app.Ports)
 
 	patchData := map[string]interface{}{
 		"metadata": map[string]interface{}{
@@ -210,6 +211,7 @@ func (h *HelmOps) addApplicationLabelsToDeployment() error {
 				constants.ApplicationTitleLabel:   h.app.Title,
 				constants.ApplicationVersionLabel: h.app.Version,
 				constants.ApplicationEntrancesKey: services,
+				constants.ApplicationPortsKey:     ports,
 				constants.ApplicationSourceLabel:  h.options.Source,
 			},
 		},

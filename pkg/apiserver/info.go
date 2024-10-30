@@ -15,7 +15,8 @@ const (
 	// AppCfgFileName config file name for application.
 	AppCfgFileName = "TerminusManifest.yaml"
 	// ModelCfgFileName config file name for model.
-	ModelCfgFileName = "modelConfig.yaml"
+	ModelCfgFileName  = "modelConfig.yaml"
+	MinCfgFileVersion = ">= 0.7.2"
 )
 
 /*

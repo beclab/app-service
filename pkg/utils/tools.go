@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"net"
+	"os"
 	"time"
 	"unicode"
 
@@ -101,4 +103,30 @@ func GetRandomCharacters() (r string) {
 	rand := &Cryptographical{}
 
 	return rand.StringCustom(n, charset)
+}
+
+func isUDPPortAvailable(port int) bool {
+	return true
+}
+
+func isTCPPortAvailable(port int) bool {
+	address := fmt.Sprintf("%s:%d", os.Getenv("HOSTIP"), port)
+
+	_, err := net.Dial("tcp", address)
+	if err == nil {
+		return false
+	}
+
+	return true
+}
+
+func IsPortAvailable(protocol string, port int) bool {
+	klog.Infof("isportava: %v", protocol)
+	if protocol == "tcp" {
+		return isTCPPortAvailable(port)
+	}
+	if protocol == "udp" {
+		return isUDPPortAvailable(port)
+	}
+	return false
 }
