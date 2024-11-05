@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
@@ -56,13 +58,21 @@ func GetTerminusReleaseVersion(ctx context.Context, terminus *sysv1alpha1.Termin
 		}
 
 		client := resty.New().SetTimeout(120 * time.Second).SetDebug(true)
+
+		spaceHost := "https://cloud-api.bttcdn.com"
+		spaceHostFromEnv := os.Getenv("OLARES_SPACE_URL")
+		if spaceHostFromEnv != "" {
+			spaceHost = spaceHostFromEnv
+		}
+		spaceURL := fmt.Sprintf("%s/v1/resource/lastVersions", strings.TrimSuffix(spaceHost, "/"))
+
 		resp, err := client.R().
 			SetFormData(map[string]string{
 				"versions": terminus.Spec.Version,
 				"devMode":  strconv.FormatBool(devMode),
 			}).
 			SetResult(&versionResp{}).
-			Post("https://cloud-api.bttcdn.com/v1/resource/lastVersions")
+			Post(spaceURL)
 
 		if err != nil {
 			klog.Errorf("Failed to send request to terminus cloud err=%v", err)
