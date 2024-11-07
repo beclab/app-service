@@ -527,12 +527,13 @@ func (r *ApplicationManagerController) uninstall(ctx context.Context, appMgr *ap
 					for _, n := range nodes.Items {
 						URL := fmt.Sprintf(constants.AppDataDirURL, appMgr.Spec.AppOwner, dir)
 						c.SetHeader("X-Terminus-Node", n.Name)
+						c.SetHeader("x-bfl-user", appMgr.Spec.AppOwner)
 						res, e := c.R().Delete(URL)
 						if e != nil {
 							klog.Errorf("Failed to delete dir err=%v", e)
 						}
-						if res.StatusCode() == http.StatusOK {
-							klog.Info("Success to delete appcache dir=%s", dir)
+						if res.StatusCode() != http.StatusOK {
+							klog.Infof("delete app cache failed with: %v", res.String())
 						}
 					}
 				}
