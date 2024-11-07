@@ -86,7 +86,7 @@ const (
 
 	DependencyTypeSystem = "system"
 	DependencyTypeApp    = "application"
-	AppDataDirURL        = "http://files-service.user-space-%s/api/resources/AppData/%s"
+	AppDataDirURL        = "http://files-service.user-space-%s/api/resources/AppData/%s/"
 
 	UserSpaceDirKey   = "userspace_hostpath"
 	UserAppDataDirKey = "appcache_hostpath"
