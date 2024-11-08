@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -202,8 +203,9 @@ func (wh *Webhook) PatchAdmissionResponse(resp *admissionv1.AdmissionResponse, p
 }
 
 // AdmissionError wraps error as AdmissionResponse
-func (wh *Webhook) AdmissionError(err error) *admissionv1.AdmissionResponse {
+func (wh *Webhook) AdmissionError(uid types.UID, err error) *admissionv1.AdmissionResponse {
 	return &admissionv1.AdmissionResponse{
+		UID: uid,
 		Result: &metav1.Status{
 			Message: err.Error(),
 		},

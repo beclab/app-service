@@ -55,7 +55,7 @@ func (h *Handler) sandboxInject(req *restful.Request, resp *restful.Response) {
 	proxyUUID := uuid.New()
 	if _, _, err := webhook.Deserializer.Decode(admissionRequestBody, nil, &admissionReq); err != nil {
 		klog.Errorf("Failed to decoding admission request body err=%v", err)
-		admissionResp.Response = h.sidecarWebhook.AdmissionError(err)
+		admissionResp.Response = h.sidecarWebhook.AdmissionError("", err)
 	} else {
 		admissionResp.Response = h.mutate(req.Request.Context(), admissionReq.Request, proxyUUID)
 	}
@@ -80,14 +80,14 @@ func (h *Handler) sandboxInject(req *restful.Request, resp *restful.Response) {
 func (h *Handler) mutate(ctx context.Context, req *admissionv1.AdmissionRequest, proxyUUID uuid.UUID) *admissionv1.AdmissionResponse {
 	if req == nil {
 		klog.Errorf("Failed to get admission request, err=admission request is nil")
-		return h.sidecarWebhook.AdmissionError(errNilAdmissionRequest)
+		return h.sidecarWebhook.AdmissionError("", errNilAdmissionRequest)
 	}
 	var err error
 	// Decode the Pod spec from the request
 	var pod corev1.Pod
 	if err = json.Unmarshal(req.Object.Raw, &pod); err != nil {
 		klog.Errorf("Failed to unmarshal admission request object raw to pod with UUID=%s namespace=%s", proxyUUID, req.Namespace)
-		return h.sidecarWebhook.AdmissionError(err)
+		return h.sidecarWebhook.AdmissionError(req.UID, err)
 	}
 
 	// Start building the response
@@ -98,12 +98,12 @@ func (h *Handler) mutate(ctx context.Context, req *admissionv1.AdmissionRequest,
 
 	if pod.Spec.HostNetwork && !strings.HasPrefix(req.Namespace, "user-space-") {
 		klog.Errorf("Pod with uid=%s namespace=%s has HostNetwork enabled, that's DENIED", proxyUUID, req.Namespace)
-		return h.sidecarWebhook.AdmissionError(errors.New("HostNetwork Enabled Unsupported"))
+		return h.sidecarWebhook.AdmissionError(req.UID, errors.New("HostNetwork Enabled Unsupported"))
 	}
 	var injectPolicy, injectWs, injectUpload bool
 	var perms []appinstaller.SysDataPermission
 	if injectPolicy, injectWs, injectUpload, perms, err = h.sidecarWebhook.MustInject(ctx, &pod, req.Namespace); err != nil {
-		return h.sidecarWebhook.AdmissionError(err)
+		return h.sidecarWebhook.AdmissionError(req.UID, err)
 	}
 	klog.Infof("injectPolicy=%v, injectWs=%v, injectUpload=%v, perms=%v", injectPolicy, injectWs, injectUpload, perms)
 	if !injectPolicy && !injectWs && !injectUpload && len(perms) == 0 {
@@ -114,7 +114,7 @@ func (h *Handler) mutate(ctx context.Context, req *admissionv1.AdmissionRequest,
 	patchBytes, err := h.sidecarWebhook.CreatePatch(ctx, &pod, req, proxyUUID, injectPolicy, injectWs, injectUpload, perms)
 	if err != nil {
 		klog.Errorf("Failed to create patch for pod uuid=%s name=%s namespace=%s err=%v", proxyUUID, pod.Name, req.Namespace, err)
-		return h.sidecarWebhook.AdmissionError(err)
+		return h.sidecarWebhook.AdmissionError(req.UID, err)
 	}
 
 	h.sidecarWebhook.PatchAdmissionResponse(resp, patchBytes)
@@ -134,7 +134,7 @@ func (h *Handler) appNamespaceValidate(req *restful.Request, resp *restful.Respo
 	proxyUUID := uuid.New()
 	if _, _, err := webhook.Deserializer.Decode(admissionReqBody, nil, &admissionReq); err != nil {
 		klog.Errorf("Failed to decode admission request body err=%v", err)
-		admissionResp.Response = h.sidecarWebhook.AdmissionError(err)
+		admissionResp.Response = h.sidecarWebhook.AdmissionError("", err)
 	} else {
 		admissionResp.Response = h.validate(req.Request.Context(), admissionReq.Request, proxyUUID)
 	}
@@ -156,7 +156,7 @@ func (h *Handler) appNamespaceValidate(req *restful.Request, resp *restful.Respo
 func (h *Handler) validate(ctx context.Context, req *admissionv1.AdmissionRequest, proxyUUID uuid.UUID) *admissionv1.AdmissionResponse {
 	if req == nil {
 		klog.Error("Failed to get admission request err=admission request is nil")
-		return h.sidecarWebhook.AdmissionError(errNilAdmissionRequest)
+		return h.sidecarWebhook.AdmissionError("", errNilAdmissionRequest)
 	}
 	klog.Infof("Enter validate logic namespace=%s name=%s, kind=%s", req.Namespace, req.Name, req.Kind.Kind)
 	resp := &admissionv1.AdmissionResponse{
@@ -178,7 +178,7 @@ func (h *Handler) validate(ctx context.Context, req *admissionv1.AdmissionReques
 	err := json.Unmarshal(raw, &object)
 	if err != nil {
 		klog.Errorf("Failed to unmarshal request object raw with uuid=%s namespace=%s", proxyUUID, req.Namespace)
-		return h.sidecarWebhook.AdmissionError(err)
+		return h.sidecarWebhook.AdmissionError(req.UID, err)
 	}
 
 	if userspace.IsGeneratedApp(object.GetName()) {
@@ -208,7 +208,7 @@ func (h *Handler) gpuLimitInject(req *restful.Request, resp *restful.Response) {
 	proxyUUID := uuid.New()
 	if _, _, err := webhook.Deserializer.Decode(admissionRequestBody, nil, &admissionReq); err != nil {
 		klog.Errorf("Failed to decode admission request body err=%v", err)
-		admissionResp.Response = h.sidecarWebhook.AdmissionError(err)
+		admissionResp.Response = h.sidecarWebhook.AdmissionError("", err)
 	} else {
 		admissionResp.Response = h.gpuLimitMutate(req.Request.Context(), admissionReq.Request, proxyUUID)
 	}
@@ -230,7 +230,7 @@ func (h *Handler) gpuLimitInject(req *restful.Request, resp *restful.Response) {
 func (h *Handler) gpuLimitMutate(ctx context.Context, req *admissionv1.AdmissionRequest, proxyUUID uuid.UUID) *admissionv1.AdmissionResponse {
 	if req == nil {
 		klog.Error("Failed to get admission Request, err=admission request is nil")
-		return h.sidecarWebhook.AdmissionError(errNilAdmissionRequest)
+		return h.sidecarWebhook.AdmissionError("", errNilAdmissionRequest)
 	}
 	klog.Infof("Enter gpuLimitMutate namespace=%s name=%s kind=%s", req.Namespace, req.Name, req.Kind.Kind)
 
@@ -241,7 +241,7 @@ func (h *Handler) gpuLimitMutate(ctx context.Context, req *admissionv1.Admission
 	err := json.Unmarshal(raw, &object)
 	if err != nil {
 		klog.Errorf("Error unmarshalling request with UUID %s in namespace %s, error %v ", proxyUUID, req.Namespace, err)
-		return h.sidecarWebhook.AdmissionError(err)
+		return h.sidecarWebhook.AdmissionError(req.UID, err)
 	}
 
 	var tpl *corev1.PodTemplateSpec
@@ -251,14 +251,14 @@ func (h *Handler) gpuLimitMutate(ctx context.Context, req *admissionv1.Admission
 		var d *appsv1.Deployment
 		if err = json.Unmarshal(req.Object.Raw, &d); err != nil {
 			klog.Errorf("Error unmarshaling request with UUID %s in namespace %s, %v", proxyUUID, req.Namespace, err)
-			return h.sidecarWebhook.AdmissionError(err)
+			return h.sidecarWebhook.AdmissionError(req.UID, err)
 		}
 		tpl = &d.Spec.Template
 	case "StatefulSet":
 		var s *appsv1.StatefulSet
 		if err = json.Unmarshal(req.Object.Raw, &s); err != nil {
 			klog.Errorf("Error unmarshaling request with UUID %s in namespace %s, %v", proxyUUID, req.Namespace, err)
-			return h.sidecarWebhook.AdmissionError(err)
+			return h.sidecarWebhook.AdmissionError(req.UID, err)
 		}
 		tpl = &s.Spec.Template
 	}
@@ -285,13 +285,13 @@ func (h *Handler) gpuLimitMutate(ctx context.Context, req *admissionv1.Admission
 	}
 	GPUType, err := h.findNvidiaGpuFromNodes(ctx)
 	if err != nil {
-		return h.sidecarWebhook.AdmissionError(err)
+		return h.sidecarWebhook.AdmissionError(req.UID, err)
 	}
 
 	patchBytes, err := webhook.CreatePatchForDeployment(tpl, req.Namespace, gpuRequired, GPUType)
 	if err != nil {
 		klog.Errorf("create patch error %v", err)
-		return h.sidecarWebhook.AdmissionError(err)
+		return h.sidecarWebhook.AdmissionError(req.UID, err)
 	}
 	klog.Info("patchBytes:", string(patchBytes))
 	h.sidecarWebhook.PatchAdmissionResponse(resp, patchBytes)
@@ -324,7 +324,7 @@ func (h *Handler) findNvidiaGpuFromNodes(ctx context.Context) (string, error) {
 		return gtype, nil
 	}
 
-	return "", errors.New("gpu node not found")
+	return "", errors.New("no available gpu node found")
 }
 
 func (h *Handler) providerRegistryValidate(req *restful.Request, resp *restful.Response) {
@@ -337,7 +337,7 @@ func (h *Handler) providerRegistryValidate(req *restful.Request, resp *restful.R
 	proxyUUID := uuid.New()
 	if _, _, err := webhook.Deserializer.Decode(admissionReqBody, nil, &admissionReq); err != nil {
 		klog.Errorf("Failed to decode admission request body err=%v", err)
-		admissionResp.Response = h.sidecarWebhook.AdmissionError(err)
+		admissionResp.Response = h.sidecarWebhook.AdmissionError("", err)
 	} else {
 		admissionResp.Response = h.validateProviderRegistry(req.Request.Context(), admissionReq.Request, proxyUUID)
 	}
@@ -359,7 +359,7 @@ func (h *Handler) providerRegistryValidate(req *restful.Request, resp *restful.R
 func (h *Handler) validateProviderRegistry(ctx context.Context, req *admissionv1.AdmissionRequest, proxyUUID uuid.UUID) *admissionv1.AdmissionResponse {
 	if req == nil {
 		klog.Error("Failed to get admission request err=admission request is nil")
-		return h.sidecarWebhook.AdmissionError(errNilAdmissionRequest)
+		return h.sidecarWebhook.AdmissionError("", errNilAdmissionRequest)
 	}
 	klog.Infof("Enter validate logic namespace=%s name=%s, kind=%s", req.Namespace, req.Name, req.Kind.Kind)
 	resp := &admissionv1.AdmissionResponse{
@@ -373,11 +373,11 @@ func (h *Handler) validateProviderRegistry(ctx context.Context, req *admissionv1
 	err := json.Unmarshal(raw, &obj)
 	if err != nil {
 		klog.Errorf("Failed to unmarshal request object raw to unstructured with uuid=%s namespace=%s", proxyUUID, req.Namespace)
-		return h.sidecarWebhook.AdmissionError(err)
+		return h.sidecarWebhook.AdmissionError(req.UID, err)
 	}
 	if obj.Object == nil {
 		klog.Errorf("Failed to get object")
-		return h.sidecarWebhook.AdmissionError(err)
+		return h.sidecarWebhook.AdmissionError(req.UID, err)
 	}
 
 	dataTypeReq, _, _ := unstructured.NestedString(obj.Object, "spec", "dataType")
@@ -387,12 +387,12 @@ func (h *Handler) validateProviderRegistry(ctx context.Context, req *admissionv1
 
 	dClient, err := dynamic.NewForConfig(h.kubeConfig)
 	if err != nil {
-		return h.sidecarWebhook.AdmissionError(err)
+		return h.sidecarWebhook.AdmissionError(req.UID, err)
 	}
 	prClient := provider.NewRegistryRequest(dClient)
 	prs, err := prClient.List(ctx, req.Namespace, metav1.ListOptions{})
 	if err != nil {
-		return h.sidecarWebhook.AdmissionError(err)
+		return h.sidecarWebhook.AdmissionError(req.UID, err)
 	}
 	for _, pr := range prs.Items {
 		if pr.GetName() == obj.GetName() {
@@ -419,7 +419,7 @@ func (h *Handler) validateProviderRegistry(ctx context.Context, req *admissionv1
 func (h *Handler) eviction2stop(ctx context.Context, req *admissionv1.AdmissionRequest, proxyUUID uuid.UUID) *admissionv1.AdmissionResponse {
 	if req == nil {
 		klog.Error("Failed to get admission request err=admission request is nil")
-		return h.sidecarWebhook.AdmissionError(errNilAdmissionRequest)
+		return h.sidecarWebhook.AdmissionError("", errNilAdmissionRequest)
 	}
 	resp := &admissionv1.AdmissionResponse{
 		Allowed: true,
@@ -546,7 +546,7 @@ func (h *Handler) kubeletPodEviction(req *restful.Request, resp *restful.Respons
 	proxyUUID := uuid.New()
 	if _, _, err := webhook.Deserializer.Decode(admissionRequestBody, nil, &admissionReq); err != nil {
 		klog.Errorf("Failed to decoding admission request body err=%v", err)
-		admissionResp.Response = h.sidecarWebhook.AdmissionError(err)
+		admissionResp.Response = h.sidecarWebhook.AdmissionError("", err)
 	} else {
 		admissionResp.Response = h.eviction2stop(req.Request.Context(), admissionReq.Request, proxyUUID)
 	}
@@ -577,7 +577,7 @@ func (h *Handler) cronWorkflowInject(req *restful.Request, resp *restful.Respons
 	proxyUUID := uuid.New()
 	if _, _, err := webhook.Deserializer.Decode(admissionRequestBody, nil, &admissionReq); err != nil {
 		klog.Errorf("Failed to decoding admission request body err=%v", err)
-		admissionResp.Response = h.sidecarWebhook.AdmissionError(err)
+		admissionResp.Response = h.sidecarWebhook.AdmissionError("", err)
 	} else {
 		admissionResp.Response = h.cronWorkflowMutate(req.Request.Context(), admissionReq.Request, proxyUUID)
 	}
@@ -600,7 +600,7 @@ func (h *Handler) cronWorkflowInject(req *restful.Request, resp *restful.Respons
 func (h *Handler) cronWorkflowMutate(ctx context.Context, req *admissionv1.AdmissionRequest, proxyUUID uuid.UUID) *admissionv1.AdmissionResponse {
 	if req == nil {
 		klog.Error("Failed to get admission request err=admission request is nil")
-		return h.sidecarWebhook.AdmissionError(errNilAdmissionRequest)
+		return h.sidecarWebhook.AdmissionError("", errNilAdmissionRequest)
 	}
 	resp := &admissionv1.AdmissionResponse{
 		Allowed: true,
