@@ -429,7 +429,7 @@ func getWorkflowConfigFromRepo(ctx context.Context, owner, app, repoURL, version
 		return nil, err
 	}
 
-	f, err := os.Open(chartPath + "/TerminusManifest.yaml")
+	f, err := os.Open(chartPath + "/" + AppCfgFileName)
 	if err != nil {
 		return nil, err
 	}
@@ -580,7 +580,7 @@ func getMiddlewareConfigFromRepo(ctx context.Context, owner, app, repoURL, versi
 		return nil, err
 	}
 
-	f, err := os.Open(chartPath + "/TerminusManifest.yaml")
+	f, err := os.Open(chartPath + "/OlaresManifest.yaml")
 	if err != nil {
 		return nil, err
 	}

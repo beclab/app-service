@@ -82,7 +82,7 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 	}
 
 	if !utils.MatchVersion(appConfig.CfgFileVersion, MinCfgFileVersion) {
-		api.HandleBadRequest(resp, req, fmt.Errorf("terminusManifest.version must %s", MinCfgFileVersion))
+		api.HandleBadRequest(resp, req, fmt.Errorf("olaresManifest.version must %s", MinCfgFileVersion))
 		return
 	}
 
