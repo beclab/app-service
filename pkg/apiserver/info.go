@@ -13,16 +13,16 @@ import (
 
 const (
 	// AppCfgFileName config file name for application.
-	AppCfgFileName = "TerminusManifest.yaml"
+	AppCfgFileName = "OlaresManifest.yaml"
 	// ModelCfgFileName config file name for model.
 	ModelCfgFileName  = "modelConfig.yaml"
 	MinCfgFileVersion = ">= 0.7.2"
 )
 
 /*
-TerminusManifest.yaml
+OlaresManifest.yaml
 
-terminusManifest.version: v1
+OlaresManifest.version: v1
 metadata:
   name: <chart name>
   description: <desc>

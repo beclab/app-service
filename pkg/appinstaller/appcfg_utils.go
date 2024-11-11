@@ -52,7 +52,7 @@ func GetAppInstallationConfig(app, owner string) (*ApplicationConfig, error) {
 }
 
 func getAppConfigFromConfigurationFile(app, chart string) (*ApplicationConfig, error) {
-	f, err := os.Open(filepath.Join(chart, "TerminusManifest.yaml"))
+	f, err := os.Open(filepath.Join(chart, "OlaresManifest.yaml"))
 	if err != nil {
 		return nil, err
 	}

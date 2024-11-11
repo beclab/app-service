@@ -101,7 +101,7 @@ func (r *EntranceStatusManagerController) Reconcile(ctx context.Context, req ctr
 
 func (r *EntranceStatusManagerController) preEnqueueCheckForUpdate(old, new client.Object) bool {
 	pod, _ := new.(*corev1.Pod)
-	klog.Infof("Pod.Name=%v, terminus-app=%v", pod.Name, pod.Labels["io.bytetrade.app"])
+	klog.Infof("Pod.Name=%v, olares-app=%v", pod.Name, pod.Labels["io.bytetrade.app"])
 	if _, ok := pod.Labels["io.bytetrade.app"]; ok {
 		return true
 	}

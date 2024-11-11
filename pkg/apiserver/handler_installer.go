@@ -62,7 +62,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 	}
 
 	if !utils.MatchVersion(appConfig.CfgFileVersion, MinCfgFileVersion) {
-		api.HandleBadRequest(resp, req, fmt.Errorf("terminusManifest.version must %s", MinCfgFileVersion))
+		api.HandleBadRequest(resp, req, fmt.Errorf("olaresManifest.version must %s", MinCfgFileVersion))
 		return
 	}
 
@@ -349,7 +349,7 @@ func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, tok
 		}
 	}
 
-	// set appcfg.Namespace to specified namespace by TerminusManifests.Spec
+	// set appcfg.Namespace to specified namespace by OlaresManifests.Spec
 	var namespace string
 	if appcfg.Namespace != "" {
 		namespace, _ = utils.AppNamespace(app, owner, appcfg.Namespace)
