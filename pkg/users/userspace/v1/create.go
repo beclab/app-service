@@ -34,6 +34,8 @@ type Creator struct {
 const (
 	USER_SPACE_ROLE = "admin"
 	MAX_RAND_INT    = 1000000
+	OlaresRootPath  = "OLARES_ROOT_DIR"
+	DefaultRootPath = "/olares"
 )
 
 var (
@@ -197,6 +199,11 @@ func (c *Creator) installSysApps(ctx context.Context, bflPod *corev1.Pod) error 
 			"username": c.user,
 		},
 	}
+	rootPath := DefaultRootPath
+	if os.Getenv(OlaresRootPath) != "" {
+		rootPath = os.Getenv(OlaresRootPath)
+	}
+	vals["rootPath"] = rootPath
 
 	pvcData, err := c.findPVC(ctx, bflPod.Namespace)
 	if err != nil {
@@ -287,7 +294,11 @@ func (c *Creator) installLauncher(ctx context.Context, userspace string) (string
 		"appKey":    k,
 		"appSecret": s,
 	}
-
+	rootPath := DefaultRootPath
+	if os.Getenv(OlaresRootPath) != "" {
+		rootPath = os.Getenv(OlaresRootPath)
+	}
+	vals["rootPath"] = rootPath
 	name := helm.ReleaseName("launcher", c.user)
 	err := helm.InstallCharts(ctx, c.helmCfg.ActionCfg, c.helmCfg.Settings, name, constants.UserChartsPath+"/launcher", "", userspace, vals)
 	if err != nil {
