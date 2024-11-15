@@ -20,6 +20,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/tapr"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
+	userspacev1 "bytetrade.io/web3os/app-service/pkg/users/userspace/v1"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 
 	"github.com/emicklei/go-restful/v3"
@@ -463,6 +464,13 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 		return values, err
 	}
 	values["admin"] = admin
+
+	rootPath := userspacev1.DefaultRootPath
+	if os.Getenv(userspacev1.OlaresRootPath) != "" {
+		rootPath = os.Getenv(userspacev1.OlaresRootPath)
+	}
+	values["rootPath"] = rootPath
+
 	return values, err
 }
 
