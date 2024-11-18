@@ -2,17 +2,22 @@ package appwatchers
 
 import (
 	"context"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/prometheus"
 
 	"golang.org/x/exp/maps"
 	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/klog/v2"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -21,12 +26,17 @@ const suspendCauseAnnotation = "bytetrade.io/suspend-cause"
 
 // SuspendTopApp suspends the top application in cluster level that with high load.
 func SuspendTopApp(ctx context.Context, client client.Client) error {
+	clusterCpuThreshold := getThreshold("CLUSTER_CPU_THRESHOLD")
+	if clusterCpuThreshold == 0 {
+		return nil
+	}
+
 	applications, err := getAllApplications(ctx, client, "")
 	if err != nil {
 		return err
 	}
 
-	toploadAppNamspaces, err := getTopLoadApps(ctx, applications)
+	toploadAppNamspaces, err := getTopLoadApps(ctx, applications, clusterCpuThreshold)
 	if err != nil {
 		return err
 	}
@@ -43,11 +53,16 @@ func SuspendTopApp(ctx context.Context, client client.Client) error {
 
 // SuspendUserTopApp suspends the top application int user level that with high load.
 func SuspendUserTopApp(ctx context.Context, client client.Client, user string) error {
+	userCpuThreshold := getThreshold("USER_CPU_THRESHOLD")
+	if userCpuThreshold == 0 {
+		return nil
+	}
+
 	applications, err := getAllApplications(ctx, client, user)
 	if err != nil {
 		return err
 	}
-	topLoadUserAppNs, err := getUserTopLoadApps(ctx, applications, user)
+	topLoadUserAppNs, err := getUserTopLoadApps(ctx, applications, user, userCpuThreshold)
 	if err != nil {
 		return err
 	}
@@ -79,16 +94,26 @@ func getAllApplications(ctx context.Context, client client.Client, user string) 
 	return res, nil
 }
 
-func getTopLoadApps(ctx context.Context, applications map[string]*v1alpha1.Application) ([]string, error) {
+func getTopLoadApps(ctx context.Context, applications map[string]*v1alpha1.Application, clusterCpuThreshold int64) ([]string, error) {
 	prom, err := prometheus.New(prometheus.Endpoint)
 	if err != nil {
 		klog.Errorf("Failed to connect to prometheus service err=%v", err)
 		return nil, err
 	}
+	metrics := prom.GetNamedMetrics(ctx, []string{"cluster_cpu_utilisation"}, time.Now(), prometheus.QueryOptions{Level: prometheus.LevelCluster})
+	disableCpuMonitor := false
+	for _, m := range metrics {
+		if m.MetricName == "cluster_cpu_utilisation" && prometheus.GetValue(&m) < float64(clusterCpuThreshold)*0.01 {
+			disableCpuMonitor = true
+		}
+	}
 
-	metrics := prom.GetNamedMetrics(ctx, []string{"namespaces_memory_usage", "namespaces_cpu_usage"}, time.Now(), prometheus.QueryOptions{Level: prometheus.LevelCluster})
+	metrics = prom.GetNamedMetrics(ctx, []string{"namespaces_memory_usage", "namespaces_cpu_usage"}, time.Now(), prometheus.QueryOptions{Level: prometheus.LevelCluster})
 	namespaces := make(map[string]bool)
 	for _, m := range metrics {
+		if m.MetricName == "namespaces_cpu_usage" && disableCpuMonitor {
+			continue
+		}
 		sorted := prometheus.GetSortedNamespaceMetrics(&m)
 		// find top 2 non-builtin apps
 		top := 0
@@ -165,7 +190,7 @@ func suspendApp(ctx context.Context, cli client.Client, namespace string) error 
 	return err
 }
 
-func getUserTopLoadApps(ctx context.Context, applications map[string]*v1alpha1.Application, user string) ([]string, error) {
+func getUserTopLoadApps(ctx context.Context, applications map[string]*v1alpha1.Application, user string, userCpuThreshold int64) ([]string, error) {
 	prom, err := prometheus.New(prometheus.Endpoint)
 	if err != nil {
 		klog.Errorf("Failed to connect to prometheus service err=%v", err)
@@ -175,9 +200,22 @@ func getUserTopLoadApps(ctx context.Context, applications map[string]*v1alpha1.A
 		Level:    prometheus.LevelUser,
 		UserName: user,
 	}
+	kubeConfig, err := ctrl.GetConfig()
+	if err != nil {
+		return nil, err
+	}
+	userCpuLimitStr, err := kubesphere.GetUserCPULimit(ctx, kubeConfig, user)
+	if err != nil {
+		return nil, err
+	}
+	c, _ := resource.ParseQuantity(userCpuLimitStr)
+
 	metrics := prom.GetNamedMetrics(ctx, []string{"user_cpu_usage", "user_memory_usage"}, time.Now(), opts)
 	namespaces := make(map[string]bool)
 	for _, m := range metrics {
+		if m.MetricName == "user_cpu_usage" && prometheus.GetValue(&m) < c.AsApproximateFloat64()*float64(userCpuThreshold)*0.01 {
+			continue
+		}
 		sorted := prometheus.GetSortedUserMetrics(&m)
 		// find top 2 non-builtin apps
 		top := 0
@@ -197,4 +235,16 @@ func getUserTopLoadApps(ctx context.Context, applications map[string]*v1alpha1.A
 	} // end of metrics loop
 
 	return maps.Keys(namespaces), nil
+}
+
+func getThreshold(name string) int64 {
+	clusterCpuThresholdStr := os.Getenv(name)
+	if clusterCpuThresholdStr == "0" {
+		return 0
+	}
+	clusterCpuThreshold, err := strconv.ParseInt(clusterCpuThresholdStr, 10, 64)
+	if err != nil || clusterCpuThreshold < 90 {
+		clusterCpuThreshold = 90
+	}
+	return clusterCpuThreshold
 }
