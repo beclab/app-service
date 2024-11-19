@@ -155,12 +155,14 @@ func (p *Point) UnmarshalJSON(b []byte) error {
 }
 
 var promQLTemplates = map[string]string{
-	"namespaces_cpu_usage":    `round(namespace:container_cpu_usage_seconds_total:sum_rate{namespace!=""}, 0.001)`,
-	"namespaces_memory_usage": `namespace:container_memory_usage_bytes:sum{namespace!=""}`,
-	"user_cpu_usage":          `round(sum by (user) (user:container_cpu_usage_seconds_total:sum_rate{namespace!="", $1}), 0.001)`,
-	"user_memory_usage":       `sum by (user) (user:container_memory_usage_bytes:sum{namespace!="", $1})`,
-	"cluster_cpu_total":       `sum(node:node_num_cpu:sum)`,
-	"cluster_memory_total":    `sum(node:node_memory_bytes_total:sum)`,
+	"namespaces_cpu_usage":       `round(namespace:container_cpu_usage_seconds_total:sum_rate{namespace!=""}, 0.001)`,
+	"namespaces_memory_usage":    `namespace:container_memory_usage_bytes:sum{namespace!=""}`,
+	"user_cpu_usage":             `round(sum by (user) (user:container_cpu_usage_seconds_total:sum_rate{namespace!="", $1}), 0.001)`,
+	"user_memory_usage":          `sum by (user) (user:container_memory_usage_bytes:sum{namespace!="", $1})`,
+	"cluster_cpu_total":          `sum(node:node_num_cpu:sum)`,
+	"cluster_memory_total":       `sum(node:node_memory_bytes_total:sum)`,
+	"cluster_cpu_utilisation":    ":node_cpu_utilisation:avg1m",
+	"cluster_memory_utilisation": ":node_memory_utilisation:",
 }
 
 type NamespaceMetricSlice []struct {

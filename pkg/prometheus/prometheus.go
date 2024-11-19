@@ -15,7 +15,6 @@ import (
 	"github.com/prometheus/common/model"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/client-go/rest"
-	"k8s.io/klog/v2"
 )
 
 const MeteringDefaultTimeout = 20 * time.Second
@@ -106,19 +105,16 @@ func parseQueryResp(value model.Value) MetricData {
 func GetSortedNamespaceMetrics(m *Metric) NamespaceMetricSlice {
 	var res NamespaceMetricSlice
 
-	if len(m.MetricData.MetricValues) > 1 {
-		value := m.MetricData.MetricValues[0]
+	for _, v := range m.MetricData.MetricValues {
 		r := struct {
 			Namespace string
 			Value     float64
 		}{
-			Namespace: value.Metadata["namespace"],
-			Value:     value.Sample[1],
+			Namespace: v.Metadata["namespace"],
+			Value:     v.Sample[1],
 		}
-
 		if r.Value > 0 {
 			res = append(res, r)
-			klog.Infof("Metrics namespace=%s value=%v", r.Namespace, r.Value)
 		}
 	}
 
@@ -202,9 +198,9 @@ func GetCurUserResource(ctx context.Context, kubeConfig *rest.Config, username s
 	for _, m := range metrics {
 		switch m.MetricName {
 		case "user_cpu_usage":
-			userMetrics.CPU.Usage = getValue(&m)
+			userMetrics.CPU.Usage = GetValue(&m)
 		case "user_memory_usage":
-			userMetrics.Memory.Usage = getValue(&m)
+			userMetrics.Memory.Usage = GetValue(&m)
 		}
 	}
 	opts = QueryOptions{
@@ -215,11 +211,11 @@ func GetCurUserResource(ctx context.Context, kubeConfig *rest.Config, username s
 		switch m.MetricName {
 		case "cluster_cpu_total":
 			if userMetrics.CPU.Total == 0 {
-				userMetrics.CPU.Total = getValue(&m)
+				userMetrics.CPU.Total = GetValue(&m)
 			}
 		case "cluster_memory_total":
 			if userMetrics.Memory.Total == 0 {
-				userMetrics.Memory.Total = getValue(&m)
+				userMetrics.Memory.Total = GetValue(&m)
 			}
 		}
 	}
@@ -227,6 +223,9 @@ func GetCurUserResource(ctx context.Context, kubeConfig *rest.Config, username s
 	return &userMetrics, nil
 }
 
-func getValue(m *Metric) float64 {
+func GetValue(m *Metric) float64 {
+	if len(m.MetricData.MetricValues) == 0 {
+		return float64(0)
+	}
 	return m.MetricData.MetricValues[0].Sample[1]
 }
