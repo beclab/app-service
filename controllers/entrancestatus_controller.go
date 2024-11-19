@@ -176,6 +176,9 @@ func (r *EntranceStatusManagerController) updateEntranceStatus(pod *corev1.Pod) 
 	filteredApp := make([]appInfo, 0)
 
 	for _, a := range apps.Items {
+		if a.Spec.Namespace != namespace {
+			continue
+		}
 		for _, e := range a.Spec.Entrances {
 			isSelected, err := r.isEntrancePod(pod, e.Host, namespace)
 			if err != nil && !apierrors.IsNotFound(err) {
