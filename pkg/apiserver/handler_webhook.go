@@ -621,7 +621,7 @@ func (h *Handler) cronWorkflowMutate(ctx context.Context, req *admissionv1.Admis
 		if err != nil {
 			continue
 		}
-		newImage := utils.ReplacedImageRef(mirrorsEndpoint, ref.String(), false)
+		newImage, _ := utils.ReplacedImageRef(mirrorsEndpoint, ref.String(), false)
 		wf.Spec.WorkflowSpec.Templates[i].Container.Image = newImage
 	}
 	original := req.Object.Raw

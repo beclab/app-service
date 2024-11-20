@@ -71,9 +71,9 @@ func (is *imageService) PullImage(ctx context.Context, ref appv1alpha1.Ref, opts
 		return ref.Name, err
 	}
 	ref.Name = originNamed.String()
-	config := newFetchConfig()
 	// replaced image ref
-	replacedRef := utils.ReplacedImageRef(mirrorsEndpoint, originNamed.String(), true)
+	replacedRef, plainHTTP := utils.ReplacedImageRef(mirrorsEndpoint, originNamed.String(), true)
+	config := newFetchConfig(plainHTTP)
 
 	ongoing := newJobs(replacedRef, originNamed.String())
 
@@ -104,6 +104,7 @@ func (is *imageService) PullImage(ctx context.Context, ref appv1alpha1.Ref, opts
 	if config.AllMetadata {
 		remoteOpts = append(remoteOpts, containerd.WithAllMetadata())
 	}
+
 	if config.PlatformMatcher != nil {
 		remoteOpts = append(remoteOpts, containerd.WithPlatformMatcher(config.PlatformMatcher))
 	} else {
@@ -233,8 +234,10 @@ func shouldPUllImage(ref appv1alpha1.Ref, imagePresent bool) bool {
 	return false
 }
 
-func newFetchConfig() *content.FetchConfig {
-	options := docker.ResolverOptions{}
+func newFetchConfig(plainHTTP bool) *content.FetchConfig {
+	options := docker.ResolverOptions{
+		PlainHTTP: plainHTTP,
+	}
 	resolver := docker.NewResolver(options)
 	config := &content.FetchConfig{
 		Resolver:        resolver,
