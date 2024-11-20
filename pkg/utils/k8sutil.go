@@ -131,10 +131,12 @@ func GetMirrorsEndpoint() (ep []string) {
 	return ep
 }
 
-func ReplacedImageRef(mirrorsEndpoint []string, oldImageRef string, checkConnection bool) string {
+// ReplacedImageRef return replaced image ref and true if mirror is support http
+func ReplacedImageRef(mirrorsEndpoint []string, oldImageRef string, checkConnection bool) (string, bool) {
 	if len(mirrorsEndpoint) == 0 {
-		return oldImageRef
+		return oldImageRef, false
 	}
+	plainHTTP := false
 	for _, ep := range mirrorsEndpoint {
 		if ep != "" && ep != DefaultRegistry {
 			url, err := url.Parse(ep)
@@ -142,12 +144,16 @@ func ReplacedImageRef(mirrorsEndpoint []string, oldImageRef string, checkConnect
 				continue
 			}
 			if url.Scheme == "http" {
-				continue
+				plainHTTP = true
 			}
 			if checkConnection {
 				host := url.Host
 				if !hasPort(url.Host) {
-					host = net.JoinHostPort(url.Host, "443")
+					if url.Scheme == "https" {
+						host = net.JoinHostPort(url.Host, "443")
+					} else {
+						host = net.JoinHostPort(url.Host, "80")
+					}
 				}
 				conn, err := net.DialTimeout("tcp", host, 2*time.Second)
 				if err != nil {
@@ -162,10 +168,10 @@ func ReplacedImageRef(mirrorsEndpoint []string, oldImageRef string, checkConnect
 			klog.Infof("parts: %s", parts)
 			parts[0] = url.Host
 			klog.Infof("parts2: %s", parts)
-			return strings.Join(parts, "/")
+			return strings.Join(parts, "/"), plainHTTP
 		}
 	}
-	return oldImageRef
+	return oldImageRef, false
 }
 
 func hasPort(s string) bool { return strings.LastIndex(s, ":") > strings.LastIndex(s, "]") }
