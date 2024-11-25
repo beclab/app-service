@@ -9,6 +9,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/upgrade"
+	
 	"github.com/emicklei/go-restful/v3"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -66,7 +67,7 @@ func (h *Handler) nvshareSwitch(req *restful.Request, enable bool) error {
 		shouldUpdate := false
 		for i, c := range d.Spec.Template.Spec.Containers {
 			found := false
-			for k := range c.Resources.Requests {
+			for k := range c.Resources.Limits {
 				if k == constants.NvshareGPU {
 					found = true
 					break
