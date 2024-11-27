@@ -130,7 +130,7 @@ func (h *Handler) upgrade(req *restful.Request, resp *restful.Response) {
 							{
 								Name:            "upgrade",
 								Image:           os.Getenv("JOB_IMAGE"),
-								ImagePullPolicy: corev1.PullAlways,
+								ImagePullPolicy: corev1.PullIfNotPresent,
 								Env: []corev1.EnvVar{
 									{
 										Name:  "dev_mode",
