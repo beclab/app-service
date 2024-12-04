@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/google/go-github/v50/github"
@@ -24,11 +25,21 @@ type GithubRelease struct {
 }
 
 func NewGithubRelease(httpClient *http.Client, owner, repo string) *GithubRelease {
-	return &GithubRelease{
+	g := &GithubRelease{
 		client: github.NewClient(httpClient),
 		owner:  owner,
 		repo:   repo,
 	}
+	spaceHost := os.Getenv("OLARES_SPACE_URL")
+	if !strings.HasSuffix(spaceHost, "/") {
+		spaceHost += "/"
+	}
+	if baseURL, err := url.Parse(spaceHost); err == nil && baseURL.Host != "" {
+		g.client.BaseURL = baseURL
+	} else {
+		klog.Errorf("Failed to parse space url err=%v", err)
+	}
+	return g
 }
 
 func (g *GithubRelease) getRelease(ctx context.Context, tag string) (*github.RepositoryRelease, error) {
