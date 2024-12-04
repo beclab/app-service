@@ -321,6 +321,13 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Returns(http.StatusOK, "pod eviction validated success", nil)).
 		Consumes(restful.MIME_JSON)
 
+	ws.Route(ws.POST("/runasuser/inject").
+		To(handler.handleRunAsUser).
+		Doc("mutating webhook for inject runasuser 1000 for third party app's pod").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Returns(http.StatusOK, "inject runasuser success", nil)).
+		Consumes(restful.MIME_JSON)
+
 	ws.Route(ws.POST("/workflow/inject").
 		To(handler.cronWorkflowInject).
 		Doc("mutating webhook for cron workflow").
