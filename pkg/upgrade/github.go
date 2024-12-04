@@ -31,12 +31,13 @@ func NewGithubRelease(httpClient *http.Client, owner, repo string) *GithubReleas
 		repo:   repo,
 	}
 	spaceHost := os.Getenv("OLARES_SPACE_URL")
-	if spaceHost != "" {
-		if !strings.HasSuffix(spaceHost, "/") {
-			spaceHost += "/"
-		}
-		baseURL, _ := url.Parse(spaceHost)
+	if !strings.HasSuffix(spaceHost, "/") {
+		spaceHost += "/"
+	}
+	if baseURL, err := url.Parse(spaceHost); err == nil && baseURL.Host != "" {
 		g.client.BaseURL = baseURL
+	} else {
+		klog.Errorf("Failed to parse space url err=%v", err)
 	}
 	return g
 }
