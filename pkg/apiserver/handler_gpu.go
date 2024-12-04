@@ -9,7 +9,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/upgrade"
-	
+
 	"github.com/emicklei/go-restful/v3"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
