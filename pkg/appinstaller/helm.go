@@ -630,14 +630,6 @@ func (h *HelmOps) unregisterAppPerm() error {
 
 // Uninstall do a uninstall operation for release.
 func (h *HelmOps) Uninstall() error {
-	err := helm.UninstallCharts(h.actionConfig, h.app.AppName)
-	if err != nil {
-		return err
-	}
-	err = h.unregisterAppPerm()
-	if err != nil {
-		klog.Errorf("Failed to unregister app err=%v", err)
-	}
 	client, err := kubernetes.NewForConfig(h.kubeConfig)
 	if err != nil {
 		return err
@@ -649,10 +641,21 @@ func (h *HelmOps) Uninstall() error {
 		}
 		for _, pvc := range pvcs.Items {
 			err = client.CoreV1().PersistentVolumeClaims(pvc.Namespace).Delete(context.TODO(), pvc.Name, metav1.DeleteOptions{})
-			if err != nil {
+			if err != nil && !apierrors.IsNotFound(err) {
 				return err
 			}
 		}
+	}
+	err = helm.UninstallCharts(h.actionConfig, h.app.AppName)
+	if err != nil {
+		return err
+	}
+	err = h.unregisterAppPerm()
+	if err != nil {
+		klog.Errorf("Failed to unregister app err=%v", err)
+	}
+
+	if !utils.IsProtectedNamespace(h.app.Namespace) {
 		return client.CoreV1().Namespaces().Delete(context.TODO(), h.app.Namespace, metav1.DeleteOptions{})
 	}
 	return nil
