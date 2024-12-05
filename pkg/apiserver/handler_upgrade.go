@@ -136,6 +136,10 @@ func (h *Handler) upgrade(req *restful.Request, resp *restful.Response) {
 										Name:  "dev_mode",
 										Value: mode,
 									},
+									{
+										Name:  "OLARES_SPACE_URL",
+										Value: os.Getenv("OLARES_SPACE_URL"),
+									},
 								},
 							}, // container 1
 						}, // end containers
