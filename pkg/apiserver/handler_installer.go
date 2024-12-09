@@ -530,6 +530,7 @@ func toApplicationConfig(app, chart string, cfg *appinstaller.AppConfiguration) 
 		MobileSupported:    cfg.Options.MobileSupported,
 		OIDC:               cfg.Options.OIDC,
 		ApiTimeout:         cfg.Options.ApiTimeout,
+		RunAsUser:          cfg.Spec.RunAsUser,
 	}, chart, nil
 }
 

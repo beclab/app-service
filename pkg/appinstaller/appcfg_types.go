@@ -45,6 +45,7 @@ type AppSpec struct {
 	SupportClient      SupportClient `yaml:"supportClient" json:"supportClient"`
 	RequiredGPU        string        `yaml:"requiredGpu" json:"requiredGpu"`
 	RequiredCPU        string        `yaml:"requiredCpu" json:"requiredCpu"`
+	RunAsUser          bool          `yaml:"runAsUser" json:"runAsUser"`
 }
 
 type SupportClient struct {
