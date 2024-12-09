@@ -203,9 +203,10 @@ func (h *HelmOps) addApplicationLabelsToDeployment() error {
 	patchData := map[string]interface{}{
 		"metadata": map[string]interface{}{
 			"labels": map[string]string{
-				constants.ApplicationNameLabel:   h.app.AppName,
-				constants.ApplicationOwnerLabel:  h.app.OwnerName,
-				constants.ApplicationTargetLabel: h.app.Target,
+				constants.ApplicationNameLabel:      h.app.AppName,
+				constants.ApplicationOwnerLabel:     h.app.OwnerName,
+				constants.ApplicationTargetLabel:    h.app.Target,
+				constants.ApplicationRunAsUserLabel: strconv.FormatBool(h.app.RunAsUser),
 			},
 			"annotations": map[string]string{
 				constants.ApplicationIconLabel:    h.app.Icon,

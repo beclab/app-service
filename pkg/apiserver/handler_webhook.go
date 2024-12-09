@@ -40,8 +40,9 @@ func init() {
 }
 
 const (
-	deployment  = "Deployment"
-	statefulSet = "StatefulSet"
+	deployment         = "Deployment"
+	statefulSet        = "StatefulSet"
+	applicationNameKey = "applications.app.bytetrade.io/name"
 )
 
 func (h *Handler) sandboxInject(req *restful.Request, resp *restful.Response) {
@@ -638,4 +639,133 @@ func (h *Handler) cronWorkflowMutate(ctx context.Context, req *admissionv1.Admis
 	}
 	h.sidecarWebhook.PatchAdmissionResponse(resp, patchBytes)
 	return resp
+}
+
+func (h *Handler) handleRunAsUser(req *restful.Request, resp *restful.Response) {
+	klog.Infof("Received run as user mutate webhook request: Method=%v, URL=%v", req.Request.Method, req.Request.URL)
+	admissionRequestBody, ok := h.sidecarWebhook.GetAdmissionRequestBody(req, resp)
+	if !ok {
+		klog.Errorf("Failed to get admission request body")
+		return
+	}
+	var admissionReq, admissionResp admissionv1.AdmissionReview
+	proxyUUID := uuid.New()
+	if _, _, err := webhook.Deserializer.Decode(admissionRequestBody, nil, &admissionReq); err != nil {
+		klog.Errorf("Failed to decoding admission request body err=%v", err)
+		admissionResp.Response = h.sidecarWebhook.AdmissionError("", err)
+	} else {
+		admissionResp.Response = h.handleRunAsUserMutate(req.Request.Context(), admissionReq.Request, proxyUUID)
+	}
+	admissionResp.TypeMeta = admissionReq.TypeMeta
+	admissionResp.Kind = admissionReq.Kind
+
+	requestForNamespace := "unknown"
+	if admissionReq.Request != nil {
+		requestForNamespace = admissionReq.Request.Namespace
+	}
+
+	err := resp.WriteAsJson(&admissionResp)
+	if err != nil {
+		klog.Infof("handleRunAsUserMutate: write response failed namespace=%s, err=%v", requestForNamespace, err)
+		return
+	}
+	klog.Infof("Done handleRunAsUserMutate admission request with uuid=%s, namespace=%s", proxyUUID, requestForNamespace)
+}
+
+func (h *Handler) handleRunAsUserMutate(ctx context.Context, req *admissionv1.AdmissionRequest, proxyUUID uuid.UUID) *admissionv1.AdmissionResponse {
+	if req == nil {
+		klog.Error("Failed to get admission request err=admission request is nil")
+		return h.sidecarWebhook.AdmissionError("", errNilAdmissionRequest)
+	}
+	resp := &admissionv1.AdmissionResponse{
+		Allowed: true,
+		UID:     req.UID,
+	}
+	var pod corev1.Pod
+	err := json.Unmarshal(req.Object.Raw, &pod)
+	if err != nil {
+		klog.Errorf("Failed to unmarshal request object raw with uuid=%s namespace=%s", proxyUUID, req.Namespace)
+		return h.sidecarWebhook.AdmissionError(req.UID, err)
+	}
+	curPod, err := h.runAsUserInject(ctx, &pod, req.Namespace)
+	if err != nil {
+		klog.Infof("run runAsUserInject err=%v", err)
+		return h.sidecarWebhook.AdmissionError(req.UID, err)
+	}
+	current, err := json.Marshal(curPod)
+	if err != nil {
+		return h.sidecarWebhook.AdmissionError(req.UID, err)
+	}
+	admissionResp := admission.PatchResponseFromRaw(req.Object.Raw, current)
+	patchBytes, err := json.Marshal(admissionResp.Patches)
+	if err != nil {
+		return h.sidecarWebhook.AdmissionError(req.UID, err)
+	}
+	h.sidecarWebhook.PatchAdmissionResponse(resp, patchBytes)
+	return resp
+}
+
+func (h *Handler) runAsUserInject(ctx context.Context, pod *corev1.Pod, namespace string) (*corev1.Pod, error) {
+	if len(pod.OwnerReferences) == 0 || pod == nil {
+		return pod, nil
+	}
+	var err error
+	var kind, name string
+	ownerRef := pod.OwnerReferences[0]
+	switch ownerRef.Kind {
+	case "ReplicaSet":
+		key := types.NamespacedName{Namespace: namespace, Name: ownerRef.Name}
+		var rs appsv1.ReplicaSet
+		err = h.ctrlClient.Get(ctx, key, &rs)
+		if err != nil {
+			klog.Infof("get replicaset err=%v", err)
+			return nil, err
+		}
+		if len(rs.OwnerReferences) > 0 && rs.OwnerReferences[0].Kind == deployment {
+			kind = deployment
+			name = rs.OwnerReferences[0].Name
+		}
+	case statefulSet:
+		kind = statefulSet
+		name = ownerRef.Name
+	}
+	if kind == "" {
+		return pod, nil
+	}
+	labels := make(map[string]string)
+	switch kind {
+	case deployment:
+		var deploy appsv1.Deployment
+		key := types.NamespacedName{Name: name, Namespace: namespace}
+		err = h.ctrlClient.Get(ctx, key, &deploy)
+		if err != nil {
+			return nil, err
+		}
+		labels = deploy.Labels
+
+	case statefulSet:
+		var sts appsv1.StatefulSet
+		key := types.NamespacedName{Name: name, Namespace: namespace}
+		err = h.ctrlClient.Get(ctx, key, &sts)
+		if err != nil {
+			return nil, err
+		}
+		labels = sts.Labels
+	}
+	userID := int64(1000)
+	if appName, ok := labels[applicationNameKey]; ok && !userspace.IsSysApp(appName) &&
+		labels[constants.ApplicationRunAsUserLabel] == "true" {
+		if pod.Spec.SecurityContext == nil {
+			pod.Spec.SecurityContext = &corev1.PodSecurityContext{
+				RunAsUser: &userID,
+			}
+		} else {
+			if pod.Spec.SecurityContext.RunAsUser == nil || *pod.Spec.SecurityContext.RunAsUser != 1000 {
+				pod.Spec.SecurityContext.RunAsUser = &userID
+			}
+		}
+		return pod, nil
+	}
+
+	return pod, nil
 }

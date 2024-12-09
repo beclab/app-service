@@ -76,4 +76,5 @@ type ApplicationConfig struct {
 	MobileSupported    bool
 	OIDC               OIDC
 	ApiTimeout         *int64
+	RunAsUser          bool
 }

@@ -19,6 +19,7 @@ const (
 	ApplicationSystemServiceLabel = "applications.app.bytetrade.io/system_service"
 	ApplicationTitleLabel         = "applications.app.bytetrade.io/title"
 	ApplicationTargetLabel        = "applications.app.bytetrade.io/target"
+	ApplicationRunAsUserLabel     = "applications.apps.bytetrade.io/runasuser"
 	ApplicationVersionLabel       = "applications.app.bytetrade.io/version"
 	ApplicationSourceLabel        = "applications.app.bytetrade.io/source"
 	ApplicationAnalytics          = "applications.app.bytetrade.io/analytics"
