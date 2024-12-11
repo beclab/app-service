@@ -93,6 +93,7 @@ func (h *Handler) authenticate(req *restful.Request, resp *restful.Response, cha
 		"/app-service/v1/pods/kubelet/eviction",
 		"/app-service/v1/workflow/inject",
 		"/app-service/v1/runasuser/inject",
+		"/app-service/v1/terminus/version",
 	}
 
 	needAuth := true
