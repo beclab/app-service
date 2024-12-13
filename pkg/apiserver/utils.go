@@ -332,6 +332,9 @@ func GetClusterResource(kubeConfig *rest.Config, token string) (*prometheus.Clus
 }
 
 func getValue(m *kubesphere.Metric) float64 {
+	if len(m.MetricData.MetricValues) == 0 {
+		return 0.0
+	}
 	return m.MetricData.MetricValues[0].Sample[1]
 }
 func isInPrivateNamespace(namespace string) bool {
