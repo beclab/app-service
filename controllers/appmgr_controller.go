@@ -778,6 +778,9 @@ func (r *ApplicationManagerController) cancel(appMgr *appv1alpha1.ApplicationMan
 	}
 	imCopy := im.DeepCopy()
 	imCopy.Status.State = "canceled"
+	now := metav1.Now()
+	imCopy.Status.StatusTime = &now
+	imCopy.Status.UpdateTime = &now
 	err = r.Status().Patch(context.TODO(), imCopy, client.MergeFrom(&im))
 	if err != nil {
 		return err
