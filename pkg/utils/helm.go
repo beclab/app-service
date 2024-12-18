@@ -149,6 +149,7 @@ func GetResourceListFromChart(chartPath string) (resources kube.ResourceList, er
 		"subjects": map[string]interface{}{},
 		"refs":     map[string]interface{}{},
 	}
+	values["GPU"] = map[string]interface{}{}
 
 	ret, err := instAction.RunWithContext(context.Background(), chartRequested, values)
 	if err != nil {

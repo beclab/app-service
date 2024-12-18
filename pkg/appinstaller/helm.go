@@ -451,6 +451,11 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 		klog.Errorf("Failed to get gpuType err=%v", err)
 		return values, err
 	}
+	values["GPU"] = map[string]interface{}{
+		"Type": gpuType,
+		"Cuda": os.Getenv("CUDA_VERSION"),
+	}
+
 	values["gpu"] = gpuType
 
 	if h.app.OIDC.Enabled {
