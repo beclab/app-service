@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/provider"
@@ -281,12 +282,19 @@ func (h *Handler) gpuLimitMutate(ctx context.Context, req *admissionv1.Admission
 	}
 
 	gpuRequired := appcfg.Requirement.GPU
-	if gpuRequired == nil || gpuRequired.IsZero() {
+	if gpuRequired == nil {
 		return resp
 	}
 	GPUType, err := h.findNvidiaGpuFromNodes(ctx)
-	if err != nil {
+	if err != nil && !errors.Is(err, api.ErrGPUNodeNotFound) {
 		return h.sidecarWebhook.AdmissionError(req.UID, err)
+	}
+	// no gpu found and gpu required is zero, no need to inject env, just return.
+	if gpuRequired.IsZero() && GPUType == "" {
+		return resp
+	}
+	if !gpuRequired.IsZero() && GPUType == "" {
+		return h.sidecarWebhook.AdmissionError(req.UID, api.ErrGPUNodeNotFound)
 	}
 
 	patchBytes, err := webhook.CreatePatchForDeployment(tpl, req.Namespace, gpuRequired, GPUType)
@@ -325,7 +333,7 @@ func (h *Handler) findNvidiaGpuFromNodes(ctx context.Context) (string, error) {
 		return gtype, nil
 	}
 
-	return "", errors.New("no available gpu node found")
+	return "", api.ErrGPUNodeNotFound
 }
 
 func (h *Handler) providerRegistryValidate(req *restful.Request, resp *restful.Response) {
