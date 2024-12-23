@@ -342,6 +342,13 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Returns(http.StatusOK, "add limit success", nil)).
 		Consumes(restful.MIME_JSON)
 
+	ws.Route(ws.POST("/app-label/inject").
+		To(handler.appLabelInject).
+		Doc("add resources limits for deployment/statefulset").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Returns(http.StatusOK, "add limit success", nil)).
+		Consumes(restful.MIME_JSON)
+
 	ws.Route(ws.POST("/provider-registry/validate").
 		To(handler.providerRegistryValidate).
 		Doc("validating webhook for validate app install namespace").

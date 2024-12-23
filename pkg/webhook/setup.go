@@ -23,9 +23,11 @@ const (
 	providerRegistryValidatingWebhookName = "provider-registry-validating-webhook.bytetrade.io"
 	validatingWebhookName                 = "appns-validating-webhook.bytetrade.io"
 	gpuLimitWebhookName                   = "gpu-limit-webhook"
+	appPodLabelWebhookName                = "app-label-webhook"
 	runAsUserWebhookName                  = "run-as-user-webhook"
 	mutatingWebhookRunAsUserName          = "run-as-user.bytetrade.io"
 	mutatingWebhookGpuLimitName           = "gpu-limit-inject-webhook.bytetrade.io"
+	mutatingWebhookAppLabelName           = "app-label-inject-webhook.bytetrade.io"
 	webhookServiceName                    = "app-service"
 	webhookServiceNamespace               = "os-system"
 	defaultCaPath                         = "/etc/certs/ca.crt"
@@ -659,5 +661,91 @@ func (wh *Webhook) CreateOrUpdateRunAsUserMutatingWebhook() error {
 		}
 	}
 	klog.Infof("Finished creating MutatingWebhookConfiguration %s", runAsUserWebhookName)
+	return nil
+}
+
+// CreateOrUpdateAppLabelMutatingWebhook creates or updates app mutating webhook.
+func (wh *Webhook) CreateOrUpdateAppLabelMutatingWebhook() error {
+	webhookPath := "/app-service/v1/app-label/inject"
+	port, err := strconv.Atoi(strings.Split(constants.WebhookServerListenAddress, ":")[1])
+	if err != nil {
+		return err
+	}
+	webhookPort := int32(port)
+	failurePolicy := admissionregv1.Fail
+	matchPolicy := admissionregv1.Exact
+	webhookTimeout := int32(30)
+
+	mwhLabels := map[string]string{"velero.io/exclude-from-backup": "true"}
+	caBundle, err := ioutil.ReadFile(defaultCaPath)
+	if err != nil {
+		return err
+	}
+	mwh := admissionregv1.MutatingWebhookConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   appPodLabelWebhookName,
+			Labels: mwhLabels,
+		},
+		Webhooks: []admissionregv1.MutatingWebhook{
+			{
+				Name: mutatingWebhookAppLabelName,
+				ClientConfig: admissionregv1.WebhookClientConfig{
+					CABundle: caBundle,
+					Service: &admissionregv1.ServiceReference{
+						Namespace: webhookServiceNamespace,
+						Name:      webhookServiceName,
+						Path:      &webhookPath,
+						Port:      &webhookPort,
+					},
+				},
+				FailurePolicy: &failurePolicy,
+				MatchPolicy:   &matchPolicy,
+				ObjectSelector: &metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "tier",
+							Operator: metav1.LabelSelectorOpNotIn,
+							Values:   []string{"app-service"},
+						},
+					},
+				},
+				Rules: []admissionregv1.RuleWithOperations{
+					{
+						Operations: []admissionregv1.OperationType{admissionregv1.Create},
+						Rule: admissionregv1.Rule{
+							APIGroups:   []string{"*"},
+							APIVersions: []string{"v1"},
+							Resources:   []string{"deployments", "statefulsets"},
+						},
+					},
+				},
+				SideEffects: func() *admissionregv1.SideEffectClass {
+					sideEffect := admissionregv1.SideEffectClassNoneOnDryRun
+					return &sideEffect
+				}(),
+				TimeoutSeconds:          &webhookTimeout,
+				AdmissionReviewVersions: []string{"v1"}}},
+	}
+	if _, err = wh.kubeClient.AdmissionregistrationV1().MutatingWebhookConfigurations().Create(context.Background(), &mwh, metav1.CreateOptions{}); err != nil {
+		// Webhook already exists, update the webhook in this scenario
+		if apierrors.IsAlreadyExists(err) {
+			existing, err := wh.kubeClient.AdmissionregistrationV1().MutatingWebhookConfigurations().Get(context.Background(), mwh.Name, metav1.GetOptions{})
+			if err != nil {
+				klog.Errorf("Failed to get MutatingWebhookConfiguration name=%s err=%v", mwh.Name, err)
+				return err
+			}
+			mwh.ObjectMeta.ResourceVersion = existing.ObjectMeta.ResourceVersion
+			if _, err = wh.kubeClient.AdmissionregistrationV1().MutatingWebhookConfigurations().Update(context.Background(), &mwh, metav1.UpdateOptions{}); err != nil {
+				if !apierrors.IsConflict(err) {
+					klog.Errorf("Failed to update MutatingWebhookConfiguration name=%s err=%v", mwh.Name, err)
+					return err
+				}
+			}
+		} else {
+			klog.Errorf("Failed to create MutatingWebhookConfiguration name=%s err=%v", mwh.Name, err)
+			return err
+		}
+	}
+	klog.Infof("Finished creating MutatingWebhookConfiguration %s", appPodLabelWebhookName)
 	return nil
 }
