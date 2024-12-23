@@ -217,15 +217,6 @@ func (h *HelmOps) addApplicationLabelsToDeployment() error {
 				constants.ApplicationSourceLabel:  h.options.Source,
 			},
 		},
-		"spec": map[string]interface{}{
-			"template": map[string]interface{}{
-				"metadata": map[string]interface{}{
-					"labels": map[string]string{
-						"io.bytetrade.app": "true",
-					},
-				},
-			},
-		},
 	}
 
 	patchByte, err := json.Marshal(patchData)

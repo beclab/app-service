@@ -777,3 +777,125 @@ func (h *Handler) runAsUserInject(ctx context.Context, pod *corev1.Pod, namespac
 
 	return pod, nil
 }
+
+func (h *Handler) appLabelInject(req *restful.Request, resp *restful.Response) {
+	klog.Infof("Received mutating webhook[app-label inject] request: Method=%v, URL=%v", req.Request.Method, req.Request.URL)
+	admissionRequestBody, ok := h.sidecarWebhook.GetAdmissionRequestBody(req, resp)
+	if !ok {
+		return
+	}
+	var admissionReq, admissionResp admissionv1.AdmissionReview
+	proxyUUID := uuid.New()
+	if _, _, err := webhook.Deserializer.Decode(admissionRequestBody, nil, &admissionReq); err != nil {
+		klog.Errorf("Failed to decode admission request body err=%v", err)
+		admissionResp.Response = h.sidecarWebhook.AdmissionError("", err)
+	} else {
+		admissionResp.Response = h.appLabelMutate(req.Request.Context(), admissionReq.Request, proxyUUID)
+	}
+	admissionResp.TypeMeta = admissionReq.TypeMeta
+	admissionResp.Kind = admissionReq.Kind
+
+	requestForNamespace := "unknown"
+	if admissionReq.Request != nil {
+		requestForNamespace = admissionReq.Request.Namespace
+	}
+	err := resp.WriteAsJson(&admissionResp)
+	if err != nil {
+		klog.Error("Failed to write response[app-label inject] admin review in namespace=%s err=%v", requestForNamespace, err)
+		return
+	}
+	klog.Infof("Done[app-label inject] with uuid=%s in namespace=%s", proxyUUID, requestForNamespace)
+}
+
+func (h *Handler) appLabelMutate(ctx context.Context, req *admissionv1.AdmissionRequest, proxyUUID uuid.UUID) *admissionv1.AdmissionResponse {
+	if req == nil {
+		klog.Error("Failed to get admission Request, err=admission request is nil")
+		return h.sidecarWebhook.AdmissionError("", errNilAdmissionRequest)
+	}
+	klog.Infof("Enter appLabelMutate namespace=%s name=%s kind=%s", req.Namespace, req.Name, req.Kind.Kind)
+
+	object := struct {
+		metav1.ObjectMeta `json:"metadata,omitempty"`
+	}{}
+	raw := req.Object.Raw
+	err := json.Unmarshal(raw, &object)
+	if err != nil {
+		klog.Errorf("Error unmarshalling request with UUID %s in namespace %s, error %v ", proxyUUID, req.Namespace, err)
+		return h.sidecarWebhook.AdmissionError(req.UID, err)
+	}
+
+	resp := &admissionv1.AdmissionResponse{
+		Allowed: true,
+		UID:     req.UID,
+	}
+
+	appcfg, _ := h.sidecarWebhook.GetAppConfig(req.Namespace)
+	if appcfg == nil {
+		klog.Error("get appcfg is empty")
+		return resp
+	}
+
+	appName := appcfg.AppName
+	if len(appName) == 0 || appName != object.Name {
+		return resp
+	}
+
+	patchBytes, err := makePatches(req)
+	if err != nil {
+		klog.Errorf("make patches err=%v", patchBytes)
+		return h.sidecarWebhook.AdmissionError(req.UID, err)
+	}
+
+	klog.Info("patchBytes:", string(patchBytes))
+	h.sidecarWebhook.PatchAdmissionResponse(resp, patchBytes)
+	return resp
+}
+
+func makePatches(req *admissionv1.AdmissionRequest) ([]byte, error) {
+	original := req.Object.Raw
+	var patchBytes []byte
+	var tpl *corev1.PodTemplateSpec
+	switch req.Kind.Kind {
+	case "Deployment":
+		var deploy *appsv1.Deployment
+		if err := json.Unmarshal(req.Object.Raw, &deploy); err != nil {
+			klog.Errorf("Error unmarshaling request with UUID %s in namespace %s, %v", req.Namespace, err)
+			return []byte{}, err
+		}
+		tpl = &deploy.Spec.Template
+		if tpl.ObjectMeta.Labels == nil {
+			tpl.ObjectMeta.Labels = make(map[string]string)
+		}
+		tpl.ObjectMeta.Labels["io.bytetrade.app"] = "true"
+		current, err := json.Marshal(deploy)
+		if err != nil {
+			return []byte{}, err
+		}
+		admissionResponse := admission.PatchResponseFromRaw(original, current)
+		patchBytes, err = json.Marshal(admissionResponse.Patches)
+		if err != nil {
+			return []byte{}, err
+		}
+	case "StatefulSet":
+		var sts *appsv1.StatefulSet
+		if err := json.Unmarshal(req.Object.Raw, &sts); err != nil {
+			klog.Errorf("Error unmarshaling request with UUID %s in namespace %s, %v", req.Namespace, err)
+			return []byte{}, err
+		}
+		tpl = &sts.Spec.Template
+		if tpl.ObjectMeta.Labels == nil {
+			tpl.ObjectMeta.Labels = make(map[string]string)
+		}
+		tpl.ObjectMeta.Labels["io.bytetrade.app"] = "true"
+		current, err := json.Marshal(sts)
+		if err != nil {
+			return []byte{}, err
+		}
+		admissionResponse := admission.PatchResponseFromRaw(original, current)
+		patchBytes, err = json.Marshal(admissionResponse.Patches)
+		if err != nil {
+			return []byte{}, err
+		}
+	}
+	return patchBytes, nil
+}
