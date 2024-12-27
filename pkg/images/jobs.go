@@ -258,7 +258,7 @@ func updateProgress(statuses []StatusInfo, ongoing *jobs, seen map[string]int64,
 		}
 		offset += status.Offset
 	}
-	if doneLayer == statusesLen {
+	if doneLayer == statusesLen && doneLayer != 0 {
 		offset = imageSize
 	}
 	if imageSize != 0 {
