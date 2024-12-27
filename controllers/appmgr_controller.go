@@ -970,20 +970,7 @@ func (r *ApplicationManagerController) pollDownloadProgress(ctx context.Context,
 				offset int64
 				total  int64
 			}
-			maxImageSize := int64(0)
-
-			for _, nodeName := range im.Spec.Nodes {
-				for _, ref := range im.Spec.Refs {
-					size := im.Status.Conditions[nodeName][ref.Name]["total"]
-					if size == "" {
-						continue
-					}
-					total, _ := strconv.ParseInt(size, 10, 64)
-					if total > maxImageSize {
-						maxImageSize = total
-					}
-				}
-			}
+			maxImageSize := int64(50173680066)
 
 			nodeMap := make(map[string]*progress)
 			for _, nodeName := range im.Spec.Nodes {
