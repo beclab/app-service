@@ -827,7 +827,8 @@ func suspendOrResumeApp(ctx context.Context, cli client.Client, appMgr *appv1alp
 		}
 		check := func(appName, deployName string) bool {
 			if namespace == fmt.Sprintf("user-space-%s", appMgr.Spec.AppOwner) ||
-				namespace == fmt.Sprintf("user-system-%s", appMgr.Spec.AppOwner) {
+				namespace == fmt.Sprintf("user-system-%s", appMgr.Spec.AppOwner) ||
+				namespace == "os-system" {
 				if appName == deployName {
 					return true
 				}
