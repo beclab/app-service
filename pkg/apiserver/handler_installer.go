@@ -60,6 +60,11 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		api.HandleBadRequest(resp, req, err)
 		return
 	}
+	err = utils.CheckTailScaleACLs(appConfig.TailScaleACLs)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
 
 	if !utils.MatchVersion(appConfig.CfgFileVersion, MinCfgFileVersion) {
 		api.HandleBadRequest(resp, req, fmt.Errorf("olaresManifest.version must %s", MinCfgFileVersion))
@@ -509,6 +514,7 @@ func toApplicationConfig(app, chart string, cfg *appinstaller.AppConfiguration) 
 		ChartsName:     chart,
 		Entrances:      cfg.Entrances,
 		Ports:          cfg.Ports,
+		TailScaleACLs:  cfg.TailScaleACLs,
 		Icon:           cfg.Metadata.Icon,
 		Permission:     permission,
 		Requirement: appinstaller.AppRequirement{

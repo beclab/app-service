@@ -149,6 +149,7 @@ func getAppConfigFromConfigurationFile(app, chart string) (*ApplicationConfig, e
 		ChartsName:     chart,
 		Entrances:      cfg.Entrances,
 		Ports:          cfg.Ports,
+		TailScaleACLs:  cfg.TailScaleACLs,
 		Icon:           cfg.Metadata.Icon,
 		Permission:     permission,
 		Requirement: AppRequirement{
@@ -212,4 +213,9 @@ func ToEntrancesLabel(entrances []v1alpha1.Entrance) string {
 func ToAppTCPUDPPorts(ports []v1alpha1.ServicePort) string {
 	portsLabel, _ := json.Marshal(ports)
 	return string(portsLabel)
+}
+
+func ToTailScaleACL(acls []v1alpha1.ACL) string {
+	aclLabel, _ := json.Marshal(acls)
+	return string(aclLabel)
 }

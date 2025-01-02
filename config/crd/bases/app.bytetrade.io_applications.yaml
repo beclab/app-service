@@ -127,8 +127,8 @@ spec:
                       format: int32
                       type: integer
                     protocol:
-                      description: The protocol for this entrance. Supports "TCP"
-                        and "UDP". Default is TCP.
+                      description: The protocol for this entrance. Supports "tcp"
+                        and "udp". Default is tcp.
                       type: string
                   required:
                   - host
@@ -141,6 +141,26 @@ spec:
                   type: string
                 description: the extend settings of the application
                 type: object
+              tailscaleAcls:
+                items:
+                  properties:
+                    action:
+                      type: string
+                    dst:
+                      items:
+                        type: string
+                      type: array
+                    proto:
+                      type: string
+                    src:
+                      items:
+                        type: string
+                      type: array
+                  required:
+                  - dst
+                  - proto
+                  type: object
+                type: array
             required:
             - appid
             - isSysApp

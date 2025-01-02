@@ -44,10 +44,18 @@ type ApplicationSpec struct {
 	//Entrances []Entrance `json:"entrances,omitempty"`
 	Entrances []Entrance `json:"entrances,omitempty"`
 
-	Ports []ServicePort `json:"ports,omitempty"`
+	Ports         []ServicePort `json:"ports,omitempty"`
+	TailScaleACLs []ACL         `json:"tailscaleAcls,omitempty"`
 
 	// the extend settings of the application
 	Settings map[string]string `json:"settings,omitempty"`
+}
+
+type ACL struct {
+	Action string   `json:"action,omitempty"`
+	Src    []string `json:"src,omitempty"`
+	Proto  string   `json:"proto"`
+	Dst    []string `json:"dst"`
 }
 
 type EntranceState string

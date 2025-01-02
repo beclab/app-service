@@ -24,6 +24,7 @@ type AppConfiguration struct {
 	Metadata      AppMetaData            `yaml:"metadata" json:"metadata"`
 	Entrances     []v1alpha1.Entrance    `yaml:"entrances" json:"entrances"`
 	Ports         []v1alpha1.ServicePort `yaml:"ports" json:"ports"`
+	TailScaleACLs []v1alpha1.ACL         `yaml:"tailscaleAcls" json:"tailscaleAcls"`
 	Spec          AppSpec                `yaml:"spec" json:"spec"`
 	Permission    Permission             `yaml:"permission" json:"permission" description:"app permission request"`
 	Middleware    *tapr.Middleware       `yaml:"middleware" json:"middleware" description:"app middleware request"`

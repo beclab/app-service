@@ -449,9 +449,6 @@ func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv
 		klog.Errorf("Failed to update applicationmanagers status name=%s err=%v", appMgr.Name, err)
 	}
 
-	err = r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, appMgr)
-	var curAppMgr appv1alpha1.ApplicationManager
-	err = r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &curAppMgr)
 	return err
 }
 

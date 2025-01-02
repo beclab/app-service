@@ -200,6 +200,8 @@ func (h *HelmOps) addApplicationLabelsToDeployment() error {
 	services := ToEntrancesLabel(h.app.Entrances)
 	ports := ToAppTCPUDPPorts(h.app.Ports)
 
+	acls := ToTailScaleACL(h.app.TailScaleACLs)
+
 	patchData := map[string]interface{}{
 		"metadata": map[string]interface{}{
 			"labels": map[string]string{
@@ -209,12 +211,13 @@ func (h *HelmOps) addApplicationLabelsToDeployment() error {
 				constants.ApplicationRunAsUserLabel: strconv.FormatBool(h.app.RunAsUser),
 			},
 			"annotations": map[string]string{
-				constants.ApplicationIconLabel:    h.app.Icon,
-				constants.ApplicationTitleLabel:   h.app.Title,
-				constants.ApplicationVersionLabel: h.app.Version,
-				constants.ApplicationEntrancesKey: services,
-				constants.ApplicationPortsKey:     ports,
-				constants.ApplicationSourceLabel:  h.options.Source,
+				constants.ApplicationIconLabel:       h.app.Icon,
+				constants.ApplicationTitleLabel:      h.app.Title,
+				constants.ApplicationVersionLabel:    h.app.Version,
+				constants.ApplicationEntrancesKey:    services,
+				constants.ApplicationPortsKey:        ports,
+				constants.ApplicationSourceLabel:     h.options.Source,
+				constants.ApplicationTailScaleACLKey: acls,
 			},
 		},
 	}
