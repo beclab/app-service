@@ -80,6 +80,11 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
+	err = utils.CheckTailScaleACLs(appConfig.TailScaleACLs)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
 
 	if !utils.MatchVersion(appConfig.CfgFileVersion, MinCfgFileVersion) {
 		api.HandleBadRequest(resp, req, fmt.Errorf("olaresManifest.version must %s", MinCfgFileVersion))

@@ -330,6 +330,10 @@ func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.
 	if err != nil {
 		klog.Errorf("failed to get app ports err=%v", err)
 	}
+	tailScaleACLs, err := r.getAppACLs(deployment)
+	if err != nil {
+		klog.Errorf("failed to get app tailscale acls err=%v", err)
+	}
 
 	var appid string
 	var isSysApp bool
@@ -355,6 +359,7 @@ func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.
 			DeploymentName: deployment.GetName(),
 			Entrances:      entrancesMap[name],
 			Ports:          servicePortsMap[name],
+			TailScaleACLs:  tailScaleACLs,
 			Icon:           icon[name],
 			Settings:       settings,
 		},
@@ -415,6 +420,11 @@ func (r *ApplicationReconciler) updateApplication(ctx context.Context, req ctrl.
 	deployment client.Object, app *appv1alpha1.Application, name string) error {
 	appCopy := app.DeepCopy()
 
+	tailScaleACLs, err := r.getAppACLs(deployment)
+	if err != nil {
+		klog.Errorf("failed to get tailscale err=%v", err)
+	}
+
 	owner := deployment.GetLabels()[constants.ApplicationOwnerLabel]
 	klog.Infof("in updateApplication ....")
 	icons := getAppIcon(deployment)
@@ -427,6 +437,8 @@ func (r *ApplicationReconciler) updateApplication(ctx context.Context, req ctrl.
 	appCopy.Spec.Owner = owner
 	appCopy.Spec.DeploymentName = deployment.GetName()
 	appCopy.Spec.Icon = icon
+
+	appCopy.Spec.TailScaleACLs = tailScaleACLs
 
 	actionConfig, _, err := helm.InitConfig(r.Kubeconfig, appCopy.Spec.Namespace)
 	if err != nil {
@@ -706,6 +718,16 @@ func (r *ApplicationReconciler) getAppPorts(ctx context.Context, deployment clie
 		portsMap[appName] = ports
 	}
 	return portsMap, nil
+}
+
+func (r *ApplicationReconciler) getAppACLs(deployment client.Object) ([]appv1alpha1.ACL, error) {
+	acls := make([]appv1alpha1.ACL, 0)
+	aclsString := deployment.GetAnnotations()[constants.ApplicationTailScaleACLKey]
+	err := json.Unmarshal([]byte(aclsString), &acls)
+	if err != nil {
+		return nil, err
+	}
+	return acls, nil
 }
 
 func checkPortOfService(s *corev1.Service, port int32) bool {

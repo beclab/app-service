@@ -61,6 +61,7 @@ type ApplicationConfig struct {
 	OwnerName          string // name of owner who installed application
 	Entrances          []v1alpha1.Entrance
 	Ports              []v1alpha1.ServicePort
+	TailScaleACLs      []v1alpha1.ACL
 	Icon               string          // base64 icon data
 	Permission         []AppPermission // app permission requests
 	Requirement        AppRequirement

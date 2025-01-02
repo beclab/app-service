@@ -2,8 +2,10 @@ package utils
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -15,11 +17,18 @@ import (
 	"helm.sh/helm/v3/pkg/action"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
+const expectedTokenItems = 2
+
+var (
+	ErrInvalidAction     = errors.New("invalid action")
+	ErrInvalidPortFormat = errors.New("invalid port format")
+)
 var protectedNamespace = []string{
 	"default",
 	"kube-node-lease",
@@ -408,4 +417,88 @@ func IsForbidNamespace(namespace string) bool {
 		}
 	}
 	return false
+}
+
+// ACLProto If the ACL proto field is empty, it allows ICMPv4, ICMPv6, TCP, and UDP as per Tailscale behaviour
+var ACLProto = sets.NewString("", "igmp", "ipv4", "ip-in-ip", "tcp", "egp", "igp", "udp", "gre", "esp", "ah", "sctp", "icmp")
+
+func CheckTailScaleACLs(acls []v1alpha1.ACL) error {
+	if len(acls) == 0 {
+		return nil
+	}
+	var err error
+	// fill default value fro ACL
+	for i := range acls {
+		acls[i].Action = "accept"
+		acls[i].Src = []string{"*"}
+	}
+	for _, acl := range acls {
+		err = parseProtocol(acl.Proto)
+		if err != nil {
+			return err
+		}
+		for _, dest := range acl.Dst {
+			_, _, err = parseDestination(dest)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func parseProtocol(protocol string) error {
+	if ACLProto.Has(protocol) {
+		return nil
+	}
+	return fmt.Errorf("unsupported protocol: %v", protocol)
+}
+
+// parseDestination from
+// https://github.com/juanfont/headscale/blob/770f3dcb9334adac650276dcec90cd980af53c6e/hscontrol/policy/acls.go#L475
+func parseDestination(dest string) (string, string, error) {
+	var tokens []string
+
+	// Check if there is a IPv4/6:Port combination, IPv6 has more than
+	// three ":".
+	tokens = strings.Split(dest, ":")
+	if len(tokens) < expectedTokenItems || len(tokens) > 3 {
+		port := tokens[len(tokens)-1]
+
+		maybeIPv6Str := strings.TrimSuffix(dest, ":"+port)
+
+		filteredMaybeIPv6Str := maybeIPv6Str
+		if strings.Contains(maybeIPv6Str, "/") {
+			networkParts := strings.Split(maybeIPv6Str, "/")
+			filteredMaybeIPv6Str = networkParts[0]
+		}
+
+		if maybeIPv6, err := netip.ParseAddr(filteredMaybeIPv6Str); err != nil && !maybeIPv6.Is6() {
+
+			return "", "", fmt.Errorf(
+				"failed to parse destination, tokens %v: %w",
+				tokens,
+				ErrInvalidPortFormat,
+			)
+		} else {
+			tokens = []string{maybeIPv6Str, port}
+		}
+	}
+
+	var alias string
+	// We can have here stuff like:
+	// git-server:*
+	// 192.168.1.0/24:22
+	// fd7a:115c:a1e0::2:22
+	// fd7a:115c:a1e0::2/128:22
+	// tag:montreal-webserver:80,443
+	// tag:api-server:443
+	// example-host-1:*
+	if len(tokens) == expectedTokenItems {
+		alias = tokens[0]
+	} else {
+		alias = fmt.Sprintf("%s:%s", tokens[0], tokens[1])
+	}
+
+	return alias, tokens[len(tokens)-1], nil
 }
