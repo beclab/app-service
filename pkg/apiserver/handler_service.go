@@ -146,7 +146,7 @@ func (h *Handler) listBackend(req *restful.Request, resp *restful.Response) {
 		if am.Spec.Type != appv1alpha1.App {
 			continue
 		}
-		if am.Spec.AppOwner == owner && (am.Status.State == appv1alpha1.Downloading || am.Status.State == appv1alpha1.Installing) {
+		if am.Spec.AppOwner == owner && (am.Status.State == appv1alpha1.Pending || am.Status.State == appv1alpha1.Downloading || am.Status.State == appv1alpha1.Installing) {
 			var appConfig appinstaller.ApplicationConfig
 			err = json.Unmarshal([]byte(am.Spec.Config), &appConfig)
 			if err != nil {
@@ -164,13 +164,14 @@ func (h *Handler) listBackend(req *restful.Request, resp *restful.Response) {
 				Spec: appv1alpha1.ApplicationSpec{
 					Name:      am.Spec.AppName,
 					Appid:     utils.GetAppID(am.Spec.AppName),
+					IsSysApp:  userspace.IsSysApp(am.Spec.AppName),
 					Namespace: am.Spec.AppNamespace,
 					Owner:     owner,
 					Entrances: appConfig.Entrances,
 					Icon:      appConfig.Icon,
 				},
 				Status: appv1alpha1.ApplicationStatus{
-					State:      appv1alpha1.Installing.String(),
+					State:      am.Status.State.String(),
 					StatusTime: &now,
 					UpdateTime: &now,
 				},
