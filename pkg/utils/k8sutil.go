@@ -166,7 +166,9 @@ func ReplacedImageRef(mirrorsEndpoint []string, oldImageRef string, checkConnect
 
 			parts := strings.Split(oldImageRef, "/")
 			klog.Infof("parts: %s", parts)
-			parts[0] = url.Host
+			if parts[0] == "docker.io" {
+				parts[0] = url.Host
+			}
 			klog.Infof("parts2: %s", parts)
 			return strings.Join(parts, "/"), plainHTTP
 		}
