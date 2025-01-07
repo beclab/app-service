@@ -72,7 +72,7 @@ func (is *imageService) PullImage(ctx context.Context, ref appv1alpha1.Ref, opts
 	}
 	ref.Name = originNamed.String()
 	// replaced image ref
-	replacedRef, plainHTTP := utils.ReplacedImageRef(mirrorsEndpoint, originNamed.String(), true)
+	replacedRef, plainHTTP := utils.ReplacedImageRef(mirrorsEndpoint, originNamed.String(), false)
 	config := newFetchConfig(plainHTTP)
 
 	ongoing := newJobs(replacedRef, originNamed.String())
