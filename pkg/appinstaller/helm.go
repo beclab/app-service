@@ -13,12 +13,14 @@ import (
 	"time"
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
 	"bytetrade.io/web3os/app-service/pkg/helm"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/tapr"
+	"bytetrade.io/web3os/app-service/pkg/task"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	userspacev1 "bytetrade.io/web3os/app-service/pkg/users/userspace/v1"
 	"bytetrade.io/web3os/app-service/pkg/utils"
@@ -39,6 +41,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 var (
@@ -146,13 +149,13 @@ func (h *HelmOps) Install() error {
 			return err
 		}
 	}
-	ok := h.waitForLaunch()
+	ok, err := h.waitForLaunch()
 
 	if !ok {
 		// install operation has been canceled, so to uninstall it.
 		h.Uninstall()
 		//return context.Canceled
-		return errors.New("canceled")
+		return err
 	}
 	klog.Infof("app: %s launched success", h.app.AppName)
 
@@ -827,11 +830,11 @@ func (h *HelmOps) upgrade() error {
 		return err
 	}
 
-	ok := h.waitForLaunch()
+	ok, err := h.waitForLaunch()
 	if !ok {
 		// canceled
 		h.rollBack()
-
+		return err
 	}
 
 	return nil
@@ -938,11 +941,19 @@ func (h *HelmOps) createOIDCClient(values map[string]interface{}, userZone, name
 	return nil
 }
 
-func (h *HelmOps) waitForLaunch() bool {
+func (h *HelmOps) waitForLaunch() (bool, error) {
 	ok := h.waitForStartUp()
 	if !ok {
-		return false
+		return false, api.ErrStartUpFailed
 	}
+
+	req := reconcile.Request{NamespacedName: types.NamespacedName{
+		Namespace: h.app.OwnerName,
+	}}
+	task.WQueue.(*task.Type).SetCompleted(req)
+
+	klog.Infof("dequeue username:%s,appname:%s", h.app.OwnerName, h.app.AppName)
+
 	timer := time.NewTicker(2 * time.Second)
 	entrances := h.app.Entrances
 	entranceCount := len(entrances)
@@ -958,12 +969,12 @@ func (h *HelmOps) waitForLaunch() bool {
 				}
 			}
 			if entranceCount == count {
-				return true
+				return true, nil
 			}
 
 		case <-h.ctx.Done():
 			klog.Infof("Waiting for launch canceled appName=%s", h.app.AppName)
-			return false
+			return false, api.ErrLaunchFailed
 		}
 	}
 }

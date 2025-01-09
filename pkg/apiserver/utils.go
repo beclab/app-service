@@ -129,13 +129,13 @@ func CheckDependencies(ctx context.Context, deps []appinstaller.Dependency, ctrl
 			}
 		}
 		if dep.Type == constants.DependencyTypeApp {
-			if !set.Has(dep.Name) {
+			if !set.Has(dep.Name) && dep.Mandatory {
 				unSatisfiedDeps = append(unSatisfiedDeps, dep)
 				if !checkAll {
 					return unSatisfiedDeps, fmt.Errorf("dependency application %s not existed", dep.Name)
 				}
 			}
-			if !utils.MatchVersion(appToVersion[dep.Name], dep.Version) {
+			if !utils.MatchVersion(appToVersion[dep.Name], dep.Version) && dep.Mandatory {
 				unSatisfiedDeps = append(unSatisfiedDeps, dep)
 				if !checkAll {
 					return unSatisfiedDeps, fmt.Errorf("%s version: %s not match dependency %s", dep.Name, appToVersion[dep.Name], dep.Version)
@@ -639,4 +639,38 @@ func CheckMiddlewareRequirement(ctx context.Context, kubeConfig *rest.Config, mi
 		return false, nil
 	}
 	return true, nil
+}
+
+func FormatDependencyError(deps []appinstaller.Dependency) error {
+	var systemDeps, appDeps []string
+
+	for _, dep := range deps {
+		depInfo := fmt.Sprintf("%s version=%s",
+			dep.Name, dep.Version)
+
+		if dep.Type == "system" {
+			systemDeps = append(systemDeps, depInfo)
+		} else if dep.Type == "application" {
+			appDeps = append(appDeps, depInfo)
+		}
+	}
+
+	var errMsg strings.Builder
+	errMsg.WriteString("Missing dependencies:\n")
+
+	if len(systemDeps) > 0 {
+		errMsg.WriteString("\nSystem Dependencies:\n")
+		for _, dep := range systemDeps {
+			errMsg.WriteString(fmt.Sprintf("- %s\n", dep))
+		}
+	}
+
+	if len(appDeps) > 0 {
+		errMsg.WriteString("\nApplication Dependencies:\n")
+		for _, dep := range appDeps {
+			errMsg.WriteString(fmt.Sprintf("- %s\n", dep))
+		}
+	}
+
+	return fmt.Errorf(errMsg.String())
 }
