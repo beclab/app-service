@@ -146,9 +146,10 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			if err != nil {
 				if apierrors.IsNotFound(err) {
 					// check if a new deployment created or not
-					ctrl.Log.Info("create app from deployment watching", "name", validAppObject.GetName(), "namespace", validAppObject.GetNamespace())
+					ctrl.Log.Info("create app from deployment watching", "name", validAppObject.GetName(), "namespace", validAppObject.GetNamespace(), "appname", name)
 					err = r.createApplication(ctx, req, validAppObject, name)
 					if err != nil {
+						ctrl.Log.Info("create app failed", "appname", name, "err", err)
 						return ctrl.Result{}, err
 					}
 					continue
@@ -328,11 +329,11 @@ func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.
 	}
 	servicePortsMap, err := r.getAppPorts(ctx, deployment, isMultiApp)
 	if err != nil {
-		klog.Errorf("failed to get app ports err=%v", err)
+		klog.Warningf("get app ports err=%v", err)
 	}
 	tailScaleACLs, err := r.getAppACLs(deployment)
 	if err != nil {
-		klog.Errorf("failed to get app tailscale acls err=%v", err)
+		klog.Warningf("get app tailscale acls err=%v", err)
 	}
 
 	var appid string
@@ -392,7 +393,7 @@ func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.
 	app.Status.UpdateTime = &now
 
 	// set startedTime when app first become running
-	klog.Infof("createApplication: appState: %v", app.Status.State)
+	klog.Infof("createApplication:name: %s, appState: %v", app.Spec.Name, app.Status.State)
 	klog.Infof("createApplication,startedTime: %v", appCopy.Status.StartedTime.IsZero())
 	if app.Status.State == appv1alpha1.AppRunning.String() && appCopy.Status.StartedTime.IsZero() {
 		app.Status.StartedTime = &now
