@@ -60,6 +60,12 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		api.HandleBadRequest(resp, req, err)
 		return
 	}
+	unSatisfiedDeps, _ := CheckDependencies(req.Request.Context(), appConfig.Dependencies, h.ctrlClient, owner, true)
+	if len(unSatisfiedDeps) > 0 {
+		api.HandleBadRequest(resp, req, FormatDependencyError(unSatisfiedDeps))
+		return
+	}
+
 	err = utils.CheckTailScaleACLs(appConfig.TailScaleACLs)
 	if err != nil {
 		api.HandleError(resp, req, err)

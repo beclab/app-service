@@ -14,6 +14,7 @@ import (
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver"
+	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
@@ -136,15 +137,18 @@ func (r *ApplicationManagerController) Reconcile(ctx context.Context, req ctrl.R
 func (r *ApplicationManagerController) reconcile(instance *appv1alpha1.ApplicationManager) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	var err error
 
 	defer func() {
 		delete(manager, instance.Name)
-		req := reconcile.Request{NamespacedName: types.NamespacedName{
-			Namespace: instance.Spec.AppOwner,
-		}}
-		task.WQueue.(*task.Type).SetCompleted(req)
+		if !errors.Is(err, api.ErrLaunchFailed) {
+			req := reconcile.Request{NamespacedName: types.NamespacedName{
+				Namespace: instance.Spec.AppOwner,
+			}}
+			task.WQueue.(*task.Type).SetCompleted(req)
+		}
+
 	}()
-	var err error
 	klog.Infof("Start to perform operate=%s appName=%s", instance.Status.OpType, instance.Spec.AppName)
 
 	var curAppMgr appv1alpha1.ApplicationManager
@@ -312,7 +316,8 @@ func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv
 	var ops *appinstaller.HelmOps
 	defer func() {
 		if err != nil {
-			if err.Error() == "canceled" {
+			if errors.Is(err, api.ErrStartUpFailed) || errors.Is(err, api.ErrLaunchFailed) {
+				klog.Infof("app=%s installation is canceled", appMgr.Spec.AppName)
 				return
 			}
 			state := appv1alpha1.Failed
