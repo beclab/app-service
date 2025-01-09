@@ -151,7 +151,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 					if err != nil {
 						return ctrl.Result{}, err
 					}
-
+					continue
 				}
 				return ctrl.Result{}, err
 			} // end if error
