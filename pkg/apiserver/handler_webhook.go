@@ -11,6 +11,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/provider"
+	"bytetrade.io/web3os/app-service/pkg/upgrade"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 	"bytetrade.io/web3os/app-service/pkg/webhook"
@@ -296,8 +297,21 @@ func (h *Handler) gpuLimitMutate(ctx context.Context, req *admissionv1.Admission
 	if !gpuRequired.IsZero() && GPUType == "" {
 		return h.sidecarWebhook.AdmissionError(req.UID, api.ErrGPUNodeNotFound)
 	}
+	terminus, err := upgrade.GetTerminusVersion(ctx, h.ctrlClient)
+	if err != nil {
+		return h.sidecarWebhook.AdmissionError(req.UID, err)
+	}
+	nvshareManagedMemory := ""
+	if terminus.Spec.Settings != nil {
+		nvshareManagedMemory = terminus.Spec.Settings[constants.EnvNvshareManagedMemory]
+	}
 
-	patchBytes, err := webhook.CreatePatchForDeployment(tpl, req.Namespace, gpuRequired, GPUType)
+	envs := []webhook.EnvKeyValue{{
+		Key:   constants.EnvNvshareManagedMemory,
+		Value: nvshareManagedMemory,
+	}}
+
+	patchBytes, err := webhook.CreatePatchForDeployment(tpl, req.Namespace, gpuRequired, GPUType, envs)
 	if err != nil {
 		klog.Errorf("create patch error %v", err)
 		return h.sidecarWebhook.AdmissionError(req.UID, err)

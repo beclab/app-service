@@ -420,16 +420,21 @@ var resourcePath = "/spec/template/spec/containers/%d/resources/limits"
 var envPath = "/spec/template/spec/containers/%d/env/%s"
 var runtimeClassPath = "/spec/template/spec/runtimeClassName"
 
+type EnvKeyValue struct {
+	Key   string
+	Value string
+}
+
 // CreatePatchForDeployment add gpu env for deployment and returns patch bytes.
-func CreatePatchForDeployment(tpl *corev1.PodTemplateSpec, namespace string, gpuRequired *resource.Quantity, typeKey string) ([]byte, error) {
-	patches, err := addResourceLimits(tpl, namespace, gpuRequired, typeKey)
+func CreatePatchForDeployment(tpl *corev1.PodTemplateSpec, namespace string, gpuRequired *resource.Quantity, typeKey string, envKeyValues []EnvKeyValue) ([]byte, error) {
+	patches, err := addResourceLimits(tpl, namespace, gpuRequired, typeKey, envKeyValues)
 	if err != nil {
 		return []byte{}, err
 	}
 	return json.Marshal(patches)
 }
 
-func addResourceLimits(tpl *corev1.PodTemplateSpec, namespace string, gpuRequired *resource.Quantity, typeKey string) (patch []patchOp, err error) {
+func addResourceLimits(tpl *corev1.PodTemplateSpec, namespace string, gpuRequired *resource.Quantity, typeKey string, envKeyValues []EnvKeyValue) (patch []patchOp, err error) {
 	if typeKey == constants.NvidiaGPU || typeKey == constants.NvshareGPU {
 		if tpl.Spec.RuntimeClassName != nil {
 			patch = append(patch, patchOp{
@@ -523,8 +528,25 @@ func addResourceLimits(tpl *corev1.PodTemplateSpec, namespace string, gpuRequire
 					}
 				}
 			}
-
 		}
+		envNames := make([]string, 0)
+		for envIdx, env := range container.Env {
+			for _, e := range envKeyValues {
+				if e.Value == "" {
+					continue
+				}
+				if env.Name == e.Key {
+					envNames = append(envNames, env.Name)
+					patch = append(patch, genPatchesForEnv(constants.PatchOpReplace, i, envIdx, e.Key, e.Value)...)
+				}
+			}
+		}
+		for _, env := range envKeyValues {
+			if !funk.Contains(envNames, env.Key) {
+				patch = append(patch, genPatchesForEnv(constants.PatchOpAdd, i, -1, env.Key, env.Value)...)
+			}
+		}
+
 	}
 
 	return patch, nil
