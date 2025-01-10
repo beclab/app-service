@@ -443,7 +443,7 @@ func (h *Handler) eviction2stop(ctx context.Context, req *admissionv1.AdmissionR
 	}
 	podName := pod.GetName()
 	namespace := pod.GetNamespace()
-	klog.Infof("pod.Name=%s, pod.Namespace=%s,pod.Status.Reason=%s", podName, namespace, pod.Status.Reason)
+	klog.Infof("pod.Name=%s, pod.Namespace=%s,pod.Status.Reason=%s,message=%s", podName, namespace, pod.Status.Reason, pod.Status.Message)
 
 	if pod.Status.Reason != "Evicted" {
 		klog.Infof("skip pod admission request pod=%s, namespace=%s", podName, namespace)
