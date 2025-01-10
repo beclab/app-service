@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"net/http"
-	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -17,14 +15,11 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/constants"
-	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
 	"bytetrade.io/web3os/app-service/pkg/helm"
-	"bytetrade.io/web3os/app-service/pkg/tapr"
 	"bytetrade.io/web3os/app-service/pkg/task"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 
-	"github.com/go-resty/resty/v2"
 	"helm.sh/helm/v3/pkg/action"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -33,7 +28,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/rand"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
@@ -55,8 +49,6 @@ const suspendCauseAnnotation = "bytetrade.io/suspend-cause"
 type ApplicationManagerController struct {
 	client.Client
 }
-
-var middlewareTypes = []string{tapr.TypePostgreSQL.String(), tapr.TypeMongoDB.String(), tapr.TypeRedis.String(), tapr.TypeNats.String()}
 
 // SetupWithManager sets up the ApplicationManagerController with the provided controller manager
 func (r *ApplicationManagerController) SetupWithManager(mgr ctrl.Manager) error {
@@ -488,10 +480,6 @@ func (r *ApplicationManagerController) uninstall(ctx context.Context, appMgr *ap
 	if err != nil {
 		return err
 	}
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return err
-	}
 
 	token := appMgr.Status.Payload["token"]
 	version = appMgr.Status.Payload["version"]
@@ -502,124 +490,13 @@ func (r *ApplicationManagerController) uninstall(ctx context.Context, appMgr *ap
 	}
 	ops, err := appinstaller.NewHelmOps(ctx, config, appConfig, token, appinstaller.Opt{})
 
-	appCacheDirs, _ := tryToGetAppdataDirFromDeployment(ctx, appConfig, appMgr.Spec.AppOwner)
 	err = ops.Uninstall()
 	if err != nil {
 		return err
 	}
 
-	// delete middleware requests crd
-	namespace := fmt.Sprintf("%s-%s", "user-system", appConfig.OwnerName)
-	for _, mt := range middlewareTypes {
-		name := fmt.Sprintf("%s-%s", appConfig.AppName, mt)
-		err = tapr.DeleteMiddlewareRequest(ctx, config, namespace, name)
-		if err != nil && !apierrors.IsNotFound(err) {
-			klog.Errorf("Failed to delete middleware request namespace=%s name=%s err=%v", namespace, name, err)
-		}
-	}
-
-	if len(appCacheDirs) > 0 {
-		terminusNonce, e := utils.GenTerminusNonce()
-		if e != nil {
-			klog.Errorf("Failed to generate terminus nonce err=%v", e)
-		} else {
-			c := resty.New().SetTimeout(2*time.Second).
-				SetHeader(constants.AuthorizationTokenKey, token).
-				SetHeader("Terminus-Nonce", terminusNonce)
-			nodes, e := clientset.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
-			if e == nil {
-				for _, dir := range appCacheDirs {
-					for _, n := range nodes.Items {
-						URL := fmt.Sprintf(constants.AppDataDirURL, appMgr.Spec.AppOwner, dir)
-						c.SetHeader("X-Terminus-Node", n.Name)
-						c.SetHeader("x-bfl-user", appMgr.Spec.AppOwner)
-						res, e := c.R().Delete(URL)
-						if e != nil {
-							klog.Errorf("Failed to delete dir err=%v", e)
-						}
-						if res.StatusCode() != http.StatusOK {
-							klog.Infof("delete app cache failed with: %v", res.String())
-						}
-					}
-				}
-			} else {
-				klog.Error("Failed to get nodes err=%v", e)
-			}
-		}
-	}
 	return nil
 
-}
-
-func tryToGetAppdataDirFromDeployment(ctx context.Context, appconfig *appinstaller.ApplicationConfig, owner string) (dirs []string, err error) {
-	userspaceNs := utils.UserspaceName(owner)
-	config, err := ctrl.GetConfig()
-	if err != nil {
-		return dirs, err
-	}
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return dirs, err
-	}
-	sts, err := clientset.AppsV1().StatefulSets(userspaceNs).Get(ctx, "bfl", metav1.GetOptions{})
-	if err != nil {
-		return dirs, err
-	}
-	appName := fmt.Sprintf("%s-%s", appconfig.Namespace, appconfig.AppName)
-	appCachePath := sts.GetAnnotations()["appcache_hostpath"]
-	if len(appCachePath) == 0 {
-		return dirs, errors.New("empty appcache_hostpath")
-	}
-	if !strings.HasSuffix(appCachePath, "/") {
-		appCachePath += "/"
-	}
-	dClient, err := versioned.NewForConfig(config)
-	if err != nil {
-		return dirs, err
-	}
-	appCRD, err := dClient.AppV1alpha1().Applications().Get(ctx, appName, metav1.GetOptions{})
-	if err != nil {
-		return dirs, err
-	}
-	deploymentName := appCRD.Spec.DeploymentName
-	deployment, err := clientset.AppsV1().Deployments(appconfig.Namespace).
-		Get(context.Background(), deploymentName, metav1.GetOptions{})
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			return tryToGetAppdataDirFromSts(ctx, appconfig.Namespace, deploymentName, appCachePath)
-		}
-		return dirs, err
-	}
-
-	for _, v := range deployment.Spec.Template.Spec.Volumes {
-		if v.HostPath != nil && strings.HasPrefix(v.HostPath.Path, appCachePath) && len(v.HostPath.Path) > len(appCachePath) {
-			dirs = append(dirs, filepath.Base(v.HostPath.Path))
-		}
-	}
-	return dirs, nil
-}
-
-func tryToGetAppdataDirFromSts(ctx context.Context, namespace, stsName, baseDir string) (dirs []string, err error) {
-	config, err := ctrl.GetConfig()
-	if err != nil {
-		return dirs, err
-	}
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return dirs, err
-	}
-
-	sts, err := clientset.AppsV1().StatefulSets(namespace).
-		Get(ctx, stsName, metav1.GetOptions{})
-	if err != nil {
-		return dirs, err
-	}
-	for _, v := range sts.Spec.Template.Spec.Volumes {
-		if v.HostPath != nil && strings.HasPrefix(v.HostPath.Path, baseDir) && len(v.HostPath.Path) > len(baseDir) {
-			dirs = append(dirs, filepath.Base(v.HostPath.Path))
-		}
-	}
-	return dirs, nil
 }
 
 func (r *ApplicationManagerController) upgrade(ctx context.Context, appMgr *appv1alpha1.ApplicationManager) (err error) {

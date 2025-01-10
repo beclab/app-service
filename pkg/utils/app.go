@@ -2,8 +2,11 @@ package utils
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"k8s.io/client-go/kubernetes"
 	"net"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -408,4 +411,75 @@ func IsForbidNamespace(namespace string) bool {
 		}
 	}
 	return false
+}
+
+func TryToGetAppdataDirFromDeployment(ctx context.Context, namespace, name, owner string) (dirs []string, err error) {
+	userspaceNs := UserspaceName(owner)
+	config, err := ctrl.GetConfig()
+	if err != nil {
+		return dirs, err
+	}
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return dirs, err
+	}
+	sts, err := clientset.AppsV1().StatefulSets(userspaceNs).Get(ctx, "bfl", metav1.GetOptions{})
+	if err != nil {
+		return dirs, err
+	}
+	appName := fmt.Sprintf("%s-%s", namespace, name)
+	appCachePath := sts.GetAnnotations()["appcache_hostpath"]
+	if len(appCachePath) == 0 {
+		return dirs, errors.New("empty appcache_hostpath")
+	}
+	if !strings.HasSuffix(appCachePath, "/") {
+		appCachePath += "/"
+	}
+	dClient, err := versioned.NewForConfig(config)
+	if err != nil {
+		return dirs, err
+	}
+	appCRD, err := dClient.AppV1alpha1().Applications().Get(ctx, appName, metav1.GetOptions{})
+	if err != nil {
+		return dirs, err
+	}
+	deploymentName := appCRD.Spec.DeploymentName
+	deployment, err := clientset.AppsV1().Deployments(namespace).
+		Get(context.Background(), deploymentName, metav1.GetOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return tryToGetAppdataDirFromSts(ctx, namespace, deploymentName, appCachePath)
+		}
+		return dirs, err
+	}
+
+	for _, v := range deployment.Spec.Template.Spec.Volumes {
+		if v.HostPath != nil && strings.HasPrefix(v.HostPath.Path, appCachePath) && len(v.HostPath.Path) > len(appCachePath) {
+			dirs = append(dirs, filepath.Base(v.HostPath.Path))
+		}
+	}
+	return dirs, nil
+}
+
+func tryToGetAppdataDirFromSts(ctx context.Context, namespace, stsName, baseDir string) (dirs []string, err error) {
+	config, err := ctrl.GetConfig()
+	if err != nil {
+		return dirs, err
+	}
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return dirs, err
+	}
+
+	sts, err := clientset.AppsV1().StatefulSets(namespace).
+		Get(ctx, stsName, metav1.GetOptions{})
+	if err != nil {
+		return dirs, err
+	}
+	for _, v := range sts.Spec.Template.Spec.Volumes {
+		if v.HostPath != nil && strings.HasPrefix(v.HostPath.Path, baseDir) && len(v.HostPath.Path) > len(baseDir) {
+			dirs = append(dirs, filepath.Base(v.HostPath.Path))
+		}
+	}
+	return dirs, nil
 }
