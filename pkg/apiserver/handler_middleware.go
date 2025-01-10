@@ -211,6 +211,7 @@ func (h *Handler) installMiddleware(req *restful.Request, resp *restful.Response
 					if e != nil {
 						klog.Error(e)
 					}
+					delete(middlewareManager, name)
 					return
 				}
 			case <-ctx.Done():
@@ -314,21 +315,7 @@ func (h *Handler) cancelMiddleware(req *restful.Request, resp *restful.Response)
 	if cancelType == "" {
 		cancelType = "operate"
 	}
-	now := metav1.Now()
-	status := v1alpha1.ApplicationManagerStatus{
-		OpType:     v1alpha1.CancelOp,
-		Progress:   "0.00",
-		Message:    cancelType,
-		StatusTime: &now,
-		UpdateTime: &now,
-	}
 	name, err := utils.FmtAppMgrName(app, owner, "")
-	if err != nil {
-		api.HandleError(resp, req, err)
-		return
-	}
-	_, err = utils.UpdateAppMgrStatus(name, status)
-
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -339,6 +326,22 @@ func (h *Handler) cancelMiddleware(req *restful.Request, resp *restful.Response)
 		return
 	}
 	cancel()
+	now := metav1.Now()
+	status := v1alpha1.ApplicationManagerStatus{
+		OpType:     v1alpha1.CancelOp,
+		Progress:   "0.00",
+		Message:    cancelType,
+		StatusTime: &now,
+		UpdateTime: &now,
+	}
+
+	_, err = utils.UpdateAppMgrStatus(name, status)
+
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+
 	resp.WriteAsJson(api.InstallationResponse{
 		Response: api.Response{Code: 200},
 		Data:     api.InstallationResponseData{UID: app},
