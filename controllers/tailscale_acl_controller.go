@@ -28,7 +28,7 @@ const tailScaleACLPolicyMd5Key = "tailscale-acl-md5"
 var defaultHTTPSACL = v1alpha1.ACL{
 	Action: "accept",
 	Src:    []string{"*"},
-	Proto:  "",
+	Proto:  "tcp",
 	Dst:    []string{"*:443"},
 }
 
@@ -111,16 +111,24 @@ func (r *TailScaleACLController) Reconcile(ctx context.Context, req ctrl.Request
 	for _, app := range filteredApps {
 		acls = append(acls, app.Spec.TailScaleACLs...)
 	}
-	aclPolicyByte, err := makeACLPolicy(acls)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	klog.Infof("aclPolicyByte:string: %s", string(aclPolicyByte))
+
 	configMap := &corev1.ConfigMap{}
 	err = r.Get(ctx, types.NamespacedName{Name: tailScaleACLConfig, Namespace: headScaleNamespace}, configMap)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+
+	// If no ACLs need to be applied and the ConfigMap tailscale-acl has not been updated by the Tailscale ACL controller,
+	// there is no need to update.
+	if len(acls) == 0 && (configMap.Annotations == nil || (configMap.Annotations != nil && configMap.Annotations[tailScaleACLPolicyMd5Key] == "")) {
+		return ctrl.Result{}, nil
+	}
+
+	aclPolicyByte, err := makeACLPolicy(acls)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	klog.Infof("aclPolicyByte:string: %s", string(aclPolicyByte))
 	oldTailScaleACLPolicyMd5Sum := ""
 	if configMap.Annotations != nil {
 		oldTailScaleACLPolicyMd5Sum = configMap.Annotations[tailScaleACLPolicyMd5Key]
