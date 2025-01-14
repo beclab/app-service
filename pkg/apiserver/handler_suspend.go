@@ -65,6 +65,20 @@ func (h *Handler) resume(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
+
+	isSuspendByController := false
+	for _, e := range application.Status.EntranceStatuses {
+		if e.Name == app && e.State == "suspend" {
+			isSuspendByController = true
+			break
+		}
+	}
+
+	if application.Status.State != v1alpha1.AppSuspend.String() && !isSuspendByController {
+		api.HandleBadRequest(resp, req, api.ErrNotSupportOperation)
+		return
+	}
+
 	now := metav1.Now()
 	status := v1alpha1.ApplicationManagerStatus{
 		OpType:     v1alpha1.ResumeOp,

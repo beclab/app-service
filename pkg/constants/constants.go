@@ -100,7 +100,7 @@ var (
 	empty = sets.Empty{}
 	// States represents the state for whole application lifecycle.
 	States = sets.String{"pending": empty, "downloading": empty, "installing": empty, "initializing": empty, "running": empty,
-		"uninstalling": empty, "upgrading": empty, "suspend": empty}
+		"uninstalling": empty, "upgrading": empty, "suspend": empty, "resuming": empty}
 	// Sources represents the source of the application.
 	Sources = sets.String{"market": empty, "custom": empty, "devbox": empty, "system": empty, "unknown": empty}
 	// ResourceTypes represents the type of application system supported.

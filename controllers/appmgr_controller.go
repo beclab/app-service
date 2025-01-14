@@ -775,7 +775,7 @@ func (r *ApplicationManagerController) resumeAppAndWaitForLaunch(appMgr *appv1al
 			}
 		}
 	}()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
 	err = suspendOrResumeApp(ctx, r.Client, appMgr, int32(1))
 	if err != nil {
@@ -823,6 +823,14 @@ func (r *ApplicationManagerController) resumeAppAndWaitForLaunch(appMgr *appv1al
 
 		case <-ctx.Done():
 			err = errors.New("wait for resume app to running failed: context canceled")
+			e := suspendOrResumeApp(context.TODO(), r.Client, appMgr, 0)
+			if e != nil {
+				klog.Errorf("rollback to suspend err=%v", err)
+			}
+			e = r.updateStatus(appMgr, appv1alpha1.Completed, nil, appv1alpha1.AppSuspend, "resume failed rollback")
+			if e != nil {
+				klog.Errorf("rollback to suspend, update status err=%v", err)
+			}
 			return err
 		}
 	}
