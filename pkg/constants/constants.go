@@ -71,11 +71,6 @@ const (
 	SidecarInitContainerName   = "terminus-sidecar-init"
 
 	ByteTradeAuthor         = "bytetrade.io"
-	EnvOrionVGPU            = "ORION_VGPU"
-	EnvOrionClientID        = "ORION_CLIENT_ID"
-	EnvOrionTaskName        = "ORION_TASK_NAME"
-	EnvOrionGMEM            = "ORION_GMEM"
-	EnvOrionReserved        = "ORION_RESERVED"
 	NvshareGPU              = "nvshare.com/gpu"
 	NvidiaGPU               = "nvidia.com/gpu"
 	VirtAiTechVGPU          = "virtaitech.com/gpu"

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"math"
 	"net/http"
 	"sort"
 	"strconv"
@@ -478,66 +477,35 @@ func addResourceLimits(tpl *corev1.PodTemplateSpec, namespace string, gpuRequire
 				Value: t["limits"],
 			})
 		}
-		if typeKey == constants.VirtAiTechVGPU {
-			gmem := int(math.Ceil(gpuRequired.AsApproximateFloat64() / 1024 / 1024))
-			envNames := make([]string, 0)
-			for envIdx, env := range container.Env {
-				if env.Name == constants.EnvOrionVGPU {
-					envNames = append(envNames, env.Name)
-					patch = append(patch, genPatchesForEnv(constants.PatchOpReplace, i, envIdx, constants.EnvOrionVGPU, "1")...)
-				}
-				if env.Name == constants.EnvOrionClientID {
-					envNames = append(envNames, env.Name)
-					patch = append(patch, genPatchesForEnv(constants.PatchOpReplace, i, envIdx, constants.EnvOrionClientID, namespace)...)
-				}
-				if env.Name == constants.EnvOrionTaskName {
-					envNames = append(envNames, env.Name)
-					patch = append(patch, genPatchesForEnv(constants.PatchOpReplace, i, envIdx, constants.EnvOrionTaskName,
-						fmt.Sprintf("%s-%s", namespace, container.Name))...)
-				}
-				if env.Name == constants.EnvOrionGMEM {
-					envNames = append(envNames, env.Name)
-					patch = append(patch, genPatchesForEnv(constants.PatchOpReplace, i, envIdx, constants.EnvOrionGMEM, strconv.Itoa(gmem))...)
-				}
-				if env.Name == constants.EnvOrionReserved {
-					envNames = append(envNames, env.Name)
-					patch = append(patch, genPatchesForEnv(constants.PatchOpReplace, i, envIdx, constants.EnvOrionReserved, "0")...)
-				}
-			}
-
-			envs := []string{constants.EnvOrionVGPU, constants.EnvOrionClientID, constants.EnvOrionTaskName,
-				constants.EnvOrionGMEM, constants.EnvOrionReserved}
-
-			for _, name := range envs {
-				if !funk.Contains(envNames, name) {
-					if name == constants.EnvOrionVGPU {
-						patch = append(patch, genPatchesForEnv(constants.PatchOpAdd, i, -1, name, "1")...)
-					}
-					if name == constants.EnvOrionClientID {
-						patch = append(patch, genPatchesForEnv(constants.PatchOpAdd, i, -1, name, namespace)...)
-					}
-					if name == constants.EnvOrionTaskName {
-						patch = append(patch, genPatchesForEnv(constants.PatchOpAdd, i, -1, name,
-							fmt.Sprintf("%s-%s", namespace, container.Name))...)
-					}
-					if name == constants.EnvOrionGMEM {
-						patch = append(patch, genPatchesForEnv(constants.PatchOpAdd, i, -1, name, strconv.Itoa(gmem))...)
-					}
-					if name == constants.EnvOrionReserved {
-						patch = append(patch, genPatchesForEnv(constants.PatchOpAdd, i, -1, name, "0")...)
-					}
-				}
-			}
-		}
 		envNames := make([]string, 0)
-		for envIdx, env := range container.Env {
+		if len(container.Env) == 0 {
+			value := make([]map[string]string, 0)
 			for _, e := range envKeyValues {
 				if e.Value == "" {
 					continue
 				}
-				if env.Name == e.Key {
-					envNames = append(envNames, env.Name)
-					patch = append(patch, genPatchesForEnv(constants.PatchOpReplace, i, envIdx, e.Key, e.Value)...)
+				envNames = append(envNames, e.Key)
+				value = append(value, map[string]string{
+					"name":  e.Key,
+					"value": e.Value,
+				})
+			}
+			op := patchOp{
+				Op:    "add",
+				Path:  fmt.Sprintf("/spec/template/spec/containers/%d/env", i),
+				Value: value,
+			}
+			patch = append(patch, op)
+		} else {
+			for envIdx, env := range container.Env {
+				for _, e := range envKeyValues {
+					if e.Value == "" {
+						continue
+					}
+					if env.Name == e.Key {
+						envNames = append(envNames, env.Name)
+						patch = append(patch, genPatchesForEnv(constants.PatchOpReplace, i, envIdx, e.Key, e.Value)...)
+					}
 				}
 			}
 		}
