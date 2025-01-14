@@ -234,6 +234,18 @@ func (h *Handler) uninstall(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
+	var application v1alpha1.Application
+	err = h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: name}, &application)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	if !(application.Status.State == v1alpha1.AppSuspend.String() ||
+		application.Status.State == v1alpha1.AppResuming.String() ||
+		application.Status.State == v1alpha1.AppRunning.String()) {
+		api.HandleBadRequest(resp, req, api.ErrNotSupportOperation)
+		return
+	}
 
 	now := metav1.Now()
 	status := v1alpha1.ApplicationManagerStatus{
