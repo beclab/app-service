@@ -465,7 +465,7 @@ func GetIndexAndDownloadChart(ctx context.Context, app, repoURL, version, token 
 	if err != nil {
 		return "", err
 	}
-	client := resty.New().SetTimeout(2*time.Second).
+	client := resty.New().SetTimeout(10*time.Second).
 		SetHeader(constants.AuthorizationTokenKey, token).
 		SetHeader("Terminus-Nonce", terminusNonce)
 	indexFileURL := repoURL

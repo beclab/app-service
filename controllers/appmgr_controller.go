@@ -363,6 +363,7 @@ func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv
 
 	appconfig, chartPath, err = apiserver.GetAppConfig(ctx, appMgr.Spec.AppName, appMgr.Spec.AppOwner, cfgURL, repoURL, "", token)
 	if err != nil {
+		klog.Infof("get appconfig err=%v", err)
 		return err
 	}
 	err = setExposePorts(appconfig)
