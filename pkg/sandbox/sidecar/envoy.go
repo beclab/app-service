@@ -376,6 +376,7 @@ func generateIptablesCommands(appcfg *appinstaller.ApplicationConfig) string {
 -A PREROUTING -p tcp -j PROXY_INBOUND
 -A OUTPUT -p tcp -j PROXY_OUTBOUND
 -A PROXY_INBOUND -p tcp --dport %d -j RETURN
+-A PROXY_INBOUND -s 20.20.20.21 -j RETURN
 `, constants.EnvoyAdminPort)
 	if appcfg != nil {
 		for _, port := range appcfg.Ports {
