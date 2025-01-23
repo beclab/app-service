@@ -652,7 +652,10 @@ func (h *HelmOps) Uninstall() error {
 		}
 	}
 
-	_, appCacheHostDirs, _ := utils.TryToGetAppdataDirFromDeployment(context.TODO(), h.app.Namespace, h.app.AppName, h.app.OwnerName)
+	_, appCacheHostDirs, err := utils.TryToGetAppdataDirFromDeployment(context.TODO(), h.app.Namespace, h.app.AppName, h.app.OwnerName)
+	if err != nil {
+		klog.Warning("get app cache error, ", err, ", ", h.app.AppName)
+	}
 
 	err = helm.UninstallCharts(h.actionConfig, h.app.AppName)
 	if err != nil {
@@ -674,6 +677,7 @@ func (h *HelmOps) Uninstall() error {
 	}
 
 	if len(appCacheHostDirs) > 0 {
+		klog.Info("clear app cache dirs, ", appCacheHostDirs)
 		// FIXME: multi node version
 		// terminusNonce, e := utils.GenTerminusNonce()
 		// if e != nil {
@@ -708,6 +712,7 @@ func (h *HelmOps) Uninstall() error {
 		for _, dir := range appCacheHostDirs {
 			deleteDir := strings.TrimPrefix(dir, baseDir)
 			if strings.HasPrefix(deleteDir, "/Cache") {
+				klog.Info("remove dir in container, ", deleteDir)
 				err := os.RemoveAll(deleteDir)
 				if err != nil {
 					klog.Warning("delete app cache error, ", err, ", ", dir)
