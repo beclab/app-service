@@ -505,35 +505,36 @@ func parseDestination(dest string) (string, string, error) {
 	return alias, tokens[len(tokens)-1], nil
 }
 
-func TryToGetAppdataDirFromDeployment(ctx context.Context, namespace, name, owner string) (dirs []string, err error) {
+func TryToGetAppdataDirFromDeployment(ctx context.Context, namespace, name, owner string) (appdirs, hostdirs []string, err error) {
 	userspaceNs := UserspaceName(owner)
 	config, err := ctrl.GetConfig()
 	if err != nil {
-		return dirs, err
+		return
 	}
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		return dirs, err
+		return
 	}
 	sts, err := clientset.AppsV1().StatefulSets(userspaceNs).Get(ctx, "bfl", metav1.GetOptions{})
 	if err != nil {
-		return dirs, err
+		return
 	}
 	appName := fmt.Sprintf("%s-%s", namespace, name)
 	appCachePath := sts.GetAnnotations()["appcache_hostpath"]
 	if len(appCachePath) == 0 {
-		return dirs, errors.New("empty appcache_hostpath")
+		err = errors.New("empty appcache_hostpath")
+		return
 	}
 	if !strings.HasSuffix(appCachePath, "/") {
 		appCachePath += "/"
 	}
 	dClient, err := versioned.NewForConfig(config)
 	if err != nil {
-		return dirs, err
+		return
 	}
 	appCRD, err := dClient.AppV1alpha1().Applications().Get(ctx, appName, metav1.GetOptions{})
 	if err != nil {
-		return dirs, err
+		return
 	}
 	deploymentName := appCRD.Spec.DeploymentName
 	deployment, err := clientset.AppsV1().Deployments(namespace).
@@ -542,36 +543,38 @@ func TryToGetAppdataDirFromDeployment(ctx context.Context, namespace, name, owne
 		if apierrors.IsNotFound(err) {
 			return tryToGetAppdataDirFromSts(ctx, namespace, deploymentName, appCachePath)
 		}
-		return dirs, err
+		return
 	}
 
 	for _, v := range deployment.Spec.Template.Spec.Volumes {
 		if v.HostPath != nil && strings.HasPrefix(v.HostPath.Path, appCachePath) && len(v.HostPath.Path) > len(appCachePath) {
-			dirs = append(dirs, filepath.Base(v.HostPath.Path))
+			appdirs = append(appdirs, filepath.Base(v.HostPath.Path))
+			hostdirs = append(hostdirs, v.HostPath.Path)
 		}
 	}
-	return dirs, nil
+	return appdirs, hostdirs, nil
 }
 
-func tryToGetAppdataDirFromSts(ctx context.Context, namespace, stsName, baseDir string) (dirs []string, err error) {
+func tryToGetAppdataDirFromSts(ctx context.Context, namespace, stsName, baseDir string) (appdirs, hostdirs []string, err error) {
 	config, err := ctrl.GetConfig()
 	if err != nil {
-		return dirs, err
+		return
 	}
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		return dirs, err
+		return
 	}
 
 	sts, err := clientset.AppsV1().StatefulSets(namespace).
 		Get(ctx, stsName, metav1.GetOptions{})
 	if err != nil {
-		return dirs, err
+		return
 	}
 	for _, v := range sts.Spec.Template.Spec.Volumes {
 		if v.HostPath != nil && strings.HasPrefix(v.HostPath.Path, baseDir) && len(v.HostPath.Path) > len(baseDir) {
-			dirs = append(dirs, filepath.Base(v.HostPath.Path))
+			appdirs = append(appdirs, filepath.Base(v.HostPath.Path))
+			hostdirs = append(hostdirs, v.HostPath.Path)
 		}
 	}
-	return dirs, nil
+	return appdirs, hostdirs, nil
 }
