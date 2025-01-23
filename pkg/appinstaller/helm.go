@@ -6,11 +6,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net/http"
 	"net/http/httputil"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
@@ -652,7 +652,7 @@ func (h *HelmOps) Uninstall() error {
 		}
 	}
 
-	appCacheDirs, _ := utils.TryToGetAppdataDirFromDeployment(context.TODO(), h.app.Namespace, h.app.AppName, h.app.OwnerName)
+	_, appCacheHostDirs, _ := utils.TryToGetAppdataDirFromDeployment(context.TODO(), h.app.Namespace, h.app.AppName, h.app.OwnerName)
 
 	err = helm.UninstallCharts(h.actionConfig, h.app.AppName)
 	if err != nil {
@@ -673,34 +673,50 @@ func (h *HelmOps) Uninstall() error {
 		}
 	}
 
-	if len(appCacheDirs) > 0 {
-		terminusNonce, e := utils.GenTerminusNonce()
-		if e != nil {
-			klog.Errorf("Failed to generate terminus nonce err=%v", e)
-		} else {
-			c := resty.New().SetTimeout(2*time.Second).
-				SetHeader(constants.AuthorizationTokenKey, h.token).
-				SetHeader("Terminus-Nonce", terminusNonce)
-			nodes, e := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
-			if e == nil {
-				for _, dir := range appCacheDirs {
-					for _, n := range nodes.Items {
-						URL := fmt.Sprintf(constants.AppDataDirURL, h.app.OwnerName, dir)
-						c.SetHeader("X-Terminus-Node", n.Name)
-						c.SetHeader("x-bfl-user", h.app.OwnerName)
-						res, e := c.R().Delete(URL)
-						if e != nil {
-							klog.Errorf("Failed to delete dir err=%v", e)
-						}
-						if res.StatusCode() != http.StatusOK {
-							klog.Infof("delete app cache failed with: %v", res.String())
-						}
-					}
+	if len(appCacheHostDirs) > 0 {
+		// FIXME: multi node version
+		// terminusNonce, e := utils.GenTerminusNonce()
+		// if e != nil {
+		// 	klog.Errorf("Failed to generate terminus nonce err=%v", e)
+		// } else {
+		// 	c := resty.New().SetTimeout(2*time.Second).
+		// 		SetHeader(constants.AuthorizationTokenKey, h.token).
+		// 		SetHeader("Terminus-Nonce", terminusNonce)
+		// 	nodes, e := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
+		// 	if e == nil {
+		// 		for _, dir := range appCacheDirs {
+		// 			for _, n := range nodes.Items {
+		// 				URL := fmt.Sprintf(constants.AppDataDirURL, h.app.OwnerName, dir)
+		// 				c.SetHeader("X-Terminus-Node", n.Name)
+		// 				c.SetHeader("x-bfl-user", h.app.OwnerName)
+		// 				res, e := c.R().Delete(URL)
+		// 				if e != nil {
+		// 					klog.Errorf("Failed to delete dir err=%v", e)
+		// 				}
+		// 				if res.StatusCode() != http.StatusOK {
+		// 					klog.Infof("delete app cache failed with: %v", res.String())
+		// 				}
+		// 			}
+		// 		}
+		// 	} else {
+		// 		klog.Error("Failed to get nodes err=%v", e)
+		// 	}
+		// }
+
+		// mount the /olares/userdata/Cache/ to /Cache of app-service container
+		baseDir := "/olares/userdata"
+		for _, dir := range appCacheHostDirs {
+			deleteDir := strings.TrimPrefix(baseDir)
+			if strings.HasPrefix(deleteDir, "/Cache") {
+				err := os.RemoveAll(deleteDir)
+				if err != nil {
+					klog.Warning("delete app cache error, ", err, ", ", dir)
 				}
 			} else {
-				klog.Error("Failed to get nodes err=%v", e)
+				klog.Warning("invalidate path, ", dir)
 			}
 		}
+
 	}
 
 	if !utils.IsProtectedNamespace(h.app.Namespace) {
