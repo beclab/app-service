@@ -306,10 +306,14 @@ func (h *Handler) gpuLimitMutate(ctx context.Context, req *admissionv1.Admission
 		nvshareManagedMemory = terminus.Spec.Settings[constants.EnvNvshareManagedMemory]
 	}
 
-	envs := []webhook.EnvKeyValue{{
-		Key:   constants.EnvNvshareManagedMemory,
-		Value: nvshareManagedMemory,
-	}}
+	envs := []webhook.EnvKeyValue{}
+	if nvshareManagedMemory != "" {
+		envs = append(envs, webhook.EnvKeyValue{
+			Key:   constants.EnvNvshareManagedMemory,
+			Value: nvshareManagedMemory,
+		})
+	}
+
 	envs = append(envs, webhook.EnvKeyValue{Key: "NVSHARE_DEBUG", Value: "1"})
 
 	patchBytes, err := webhook.CreatePatchForDeployment(tpl, req.Namespace, gpuRequired, GPUType, envs)
