@@ -706,7 +706,7 @@ func (h *HelmOps) Uninstall() error {
 		// mount the /olares/userdata/Cache/ to /Cache of app-service container
 		baseDir := "/olares/userdata"
 		for _, dir := range appCacheHostDirs {
-			deleteDir := strings.TrimPrefix(baseDir)
+			deleteDir := strings.TrimPrefix(dir, baseDir)
 			if strings.HasPrefix(deleteDir, "/Cache") {
 				err := os.RemoveAll(deleteDir)
 				if err != nil {
