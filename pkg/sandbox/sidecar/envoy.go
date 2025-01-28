@@ -26,6 +26,7 @@ import (
 	envoy_router "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/router/v3"
 	originaldst "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/listener/original_dst/v3"
 	http_connection_manager "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/http_connection_manager/v3"
+	tcp_proxyv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/network/tcp_proxy/v3"
 	matcherv3 "github.com/envoyproxy/go-control-plane/envoy/type/matcher/v3"
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/golang/protobuf/ptypes/duration"
@@ -238,49 +239,12 @@ func getEnvoyConfigOnlyForOutBound(appcfg *appinstaller.ApplicationConfig, perms
 						{
 							Filters: []*envoy_listener.Filter{
 								{
-									Name: "envoy.filters.network.http_connection_manager",
+									Name: "envoy.filters.network.tcp_proxy",
 									ConfigType: &envoy_listener.Filter_TypedConfig{
-										TypedConfig: utils.MessageToAny(&http_connection_manager.HttpConnectionManager{
-											HttpFilters: []*http_connection_manager.HttpFilter{
-												{
-													Name: "envoy.filters.http.router",
-													ConfigType: &http_connection_manager.HttpFilter_TypedConfig{
-														TypedConfig: utils.MessageToAny(&envoy_router.Router{}),
-													},
-												},
-											},
-											StatPrefix:    "orig_http",
-											SkipXffAppend: false,
-											CodecType:     http_connection_manager.HttpConnectionManager_AUTO,
-											RouteSpecifier: &http_connection_manager.HttpConnectionManager_RouteConfig{
-												RouteConfig: &routev3.RouteConfiguration{
-													Name: "local_route",
-													VirtualHosts: []*routev3.VirtualHost{
-														{
-															Name:    "service",
-															Domains: []string{"*"},
-															Routes: []*routev3.Route{
-																{
-																	Match: &routev3.RouteMatch{
-																		PathSpecifier: &routev3.RouteMatch_Prefix{
-																			Prefix: "/",
-																		},
-																	},
-																	Action: &routev3.Route_Route{
-																		Route: &routev3.RouteAction{
-																			ClusterSpecifier: &routev3.RouteAction_Cluster{
-																				Cluster: "original_dst",
-																			},
-																			Timeout: &duration.Duration{
-																				Seconds: *ec.opts.timeout,
-																			},
-																		},
-																	},
-																},
-															},
-														},
-													},
-												},
+										TypedConfig: utils.MessageToAny(&tcp_proxyv3.TcpProxy{
+											StatPrefix: "tcp_proxy_stats",
+											ClusterSpecifier: &tcp_proxyv3.TcpProxy_Cluster{
+												Cluster: "original_dst",
 											},
 										}),
 									},
