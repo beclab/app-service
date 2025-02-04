@@ -241,7 +241,15 @@ func (r *ApplicationManagerController) preEnqueueCheckForCreate(obj client.Objec
 	opType := cur.Status.OpType
 
 	// if applicationmanager state is in (completed, canceled, failed, "") skip
-	if state == "" || state == appv1alpha1.Completed || state == appv1alpha1.Canceled || state == appv1alpha1.Failed {
+	if state == "" || state == appv1alpha1.Completed || state == appv1alpha1.Canceled {
+		return false
+	}
+
+	if state == appv1alpha1.Failed && opType == appv1alpha1.ResumeOp {
+		go r.reconcile2(cur)
+		return false
+	}
+	if state == appv1alpha1.Failed {
 		return false
 	}
 
