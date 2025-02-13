@@ -156,7 +156,7 @@ var (
 							// allow external traffic via nodeport
 							IPBlock: &netv1.IPBlock{
 								CIDR:   "0.0.0.0/0",
-								Except: []string{"10.233.0.0/18"},
+								Except: []string{"10.233.0.0/16"},
 							},
 						},
 					},
