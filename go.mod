@@ -1,6 +1,6 @@
 module bytetrade.io/web3os/app-service
 
-go 1.18
+go 1.22.6
 
 replace github.com/imdario/mergo => github.com/imdario/mergo v0.3.5
 
