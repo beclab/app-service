@@ -5,10 +5,8 @@ import (
 	"fmt"
 
 	v1alpha1client "bytetrade.io/web3os/app-service/pkg/client/clientset/v1alpha1"
-	"bytetrade.io/web3os/app-service/pkg/constants"
 
 	"github.com/dgrijalva/jwt-go"
-	"gopkg.in/yaml.v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -64,29 +62,25 @@ type Claims struct {
 	PreferredUsername string `json:"preferred_username,omitempty"`
 }
 
-func getKubeSphereConfig(ctx context.Context, kubeConfig *rest.Config) (*Config, error) {
+func getLLdapJwtKey(ctx context.Context, kubeConfig *rest.Config) ([]byte, error) {
 	kubeClientInService, err := v1alpha1client.NewKubeClient("", kubeConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	ksConfig, err := kubeClientInService.Kubernetes().
-		CoreV1().ConfigMaps(constants.KubeSphereNamespace).
-		Get(ctx, constants.KubeSphereConfigName, metav1.GetOptions{})
+	secret, err := kubeClientInService.Kubernetes().
+		CoreV1().Secrets("os-system").
+		Get(ctx, "lldap-credentials", metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
 
-	c := &Config{}
-	value, ok := ksConfig.Data[constants.KubeSphereConfigMapDataKey]
+	jwtSecretKey, ok := secret.Data["lldap-jwt-secret"]
 	if !ok {
-		return nil, fmt.Errorf("failed to get configmap kubesphere.yaml value")
+		return nil, fmt.Errorf("failed to get lldap jwt secret")
 	}
 
-	if err := yaml.Unmarshal([]byte(value), c); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal value from configmap. err: %s", err)
-	}
-	return c, nil
+	return jwtSecretKey, nil
 }
 
 // ValidateToken validates a token by performing an authentication check.
@@ -96,16 +90,11 @@ func ValidateToken(ctx context.Context, kubeConfig *rest.Config, tokenString str
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
 
-		// get jwt secret from kubesphere's config
-		config, err := getKubeSphereConfig(ctx, kubeConfig)
+		jwtSecretKey, err := getLLdapJwtKey(ctx, kubeConfig)
 		if err != nil {
 			return nil, err
 		}
-
-		if config.AuthenticationOptions == nil || config.AuthenticationOptions.JwtSecret == "" {
-			return nil, fmt.Errorf("jwt secret not found")
-		}
-		return []byte(config.AuthenticationOptions.JwtSecret), nil
+		return jwtSecretKey, nil
 	})
 
 	if err != nil {
