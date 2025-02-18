@@ -25,11 +25,19 @@ import (
 
 const tailScaleACLPolicyMd5Key = "tailscale-acl-md5"
 
-var defaultHTTPSACL = v1alpha1.ACL{
-	Action: "accept",
-	Src:    []string{"*"},
-	Proto:  "tcp",
-	Dst:    []string{"*:443"},
+var defaultACLs = []v1alpha1.ACL{
+	{
+		Action: "accept",
+		Src:    []string{"*"},
+		Proto:  "tcp",
+		Dst:    []string{"*:443"},
+	},
+	{
+		Action: "accept",
+		Src:    []string{"*"},
+		Proto:  "tcp",
+		Dst:    []string{"*:18088"},
+	},
 }
 
 type ACLPolicy struct {
@@ -178,7 +186,7 @@ func (r *TailScaleACLController) Reconcile(ctx context.Context, req ctrl.Request
 }
 
 func makeACLPolicy(acls []v1alpha1.ACL) ([]byte, error) {
-	acls = append(acls, defaultHTTPSACL)
+	acls = append(acls, defaultACLs...)
 	for i := range acls {
 		acls[i].Action = "accept"
 		acls[i].Src = []string{"*"}
