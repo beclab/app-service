@@ -140,6 +140,10 @@ func (h *Handler) upgrade(req *restful.Request, resp *restful.Response) {
 										Name:  "OLARES_SPACE_URL",
 										Value: os.Getenv("OLARES_SPACE_URL"),
 									},
+									{
+										Name:  "DOWNLOAD_CDN_URL",
+										Value: os.Getenv("DOWNLOAD_CDN_URL"),
+									},
 								},
 							}, // container 1
 						}, // end containers

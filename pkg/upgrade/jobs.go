@@ -17,7 +17,7 @@ type DownloadRelease struct {
 	devMode   bool
 }
 
-const CDN = "https://dc3p1870nn3cj.cloudfront.net"
+var CDN = "https://dc3p1870nn3cj.cloudfront.net"
 
 func (d *DownloadRelease) Run(ctx *PipelineContext) error {
 	d.jobCtx, d.jobCancel = context.WithCancel(ctx.InstallCtx)
@@ -43,6 +43,10 @@ func (d *DownloadRelease) Run(ctx *PipelineContext) error {
 		ctx.InstallPackgePath, err = github.downloadAndUnpack(d.jobCtx, installTgz)
 		if err != nil {
 			klog.Error(err)
+			cdn := os.Getenv("DOWNLOAD_CDN_URL")
+			if cdn != "" {
+				CDN = cdn
+			}
 			urlStrTokens := strings.Split(installTgz.String(), "/")
 			cdnUrlStr := strings.Join([]string{CDN, urlStrTokens[len(urlStrTokens)-1]}, "/")
 			cdnUrl, err := url.Parse(cdnUrlStr)
