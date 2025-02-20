@@ -3,9 +3,11 @@ on:
   push:
     branches:
       - "main"
+      - "release-*"
   pull_request:
     branches:
       - "main"
+      - "release-*"
 jobs:
   build0-main:
     runs-on: ubuntu-latest
