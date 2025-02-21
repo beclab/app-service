@@ -112,6 +112,11 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 			klog.Errorf("Failed to unmarshal middleware request response err=%v", err)
 			return nil, err
 		}
+
+		if middlewareRequestResp.Code != 200 {
+			return nil, errors.New(resp.String())
+		}
+
 		return middlewareRequestResp.Data, nil
 	}
 
