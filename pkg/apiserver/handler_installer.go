@@ -17,7 +17,6 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
-	"bytetrade.io/web3os/app-service/pkg/tapr"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 	"bytetrade.io/web3os/app-service/pkg/workflowinstaller"
@@ -131,7 +130,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	satisfied, err := CheckMiddlewareRequirement(req.Request.Context(), h.kubeConfig, appConfig.Middleware.(*tapr.Middleware))
+	satisfied, err := CheckMiddlewareRequirement(req.Request.Context(), h.kubeConfig, appConfig.Middleware)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return

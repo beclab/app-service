@@ -104,9 +104,8 @@ func (h *HelmOps) Install() error {
 	if err != nil {
 		return err
 	}
-	middleware, _ := h.app.Middleware.(*tapr.Middleware)
 	namespace := fmt.Sprintf("%s-%s", "user-system", h.app.OwnerName)
-	if err := tapr.Apply(middleware, h.kubeConfig, h.app.AppName, h.app.Namespace,
+	if err := tapr.Apply(h.app.Middleware, h.kubeConfig, h.app.AppName, h.app.Namespace,
 		namespace, h.token, h.app.ChartsName, h.app.OwnerName, values); err != nil {
 		klog.Errorf("Failed to apply middleware err=%v", err)
 		return err
@@ -325,6 +324,7 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 
 	values["domain"] = entries
 	userspace := make(map[string]interface{})
+	h.app.Permission = parseAppPermission(h.app.Permission)
 	for _, p := range h.app.Permission {
 		switch perm := p.(type) {
 		case AppDataPermission, AppCachePermission, UserDataPermission:
@@ -747,9 +747,8 @@ func (h *HelmOps) upgrade() error {
 	if err != nil {
 		return err
 	}
-	middleware, _ := h.app.Middleware.(*tapr.Middleware)
 	namespace := fmt.Sprintf("%s-%s", "user-system", h.app.OwnerName)
-	if err := tapr.Apply(middleware, h.kubeConfig, h.app.AppName, h.app.Namespace,
+	if err := tapr.Apply(h.app.Middleware, h.kubeConfig, h.app.AppName, h.app.Namespace,
 		namespace, h.token, h.app.ChartsName, h.app.OwnerName, values); err != nil {
 		klog.Errorf("Failed to apply middleware err=%v", err)
 		return err
@@ -1064,7 +1063,7 @@ func (h *HelmOps) waitForStartUp() bool {
 						AppOwner: h.app.OwnerName,
 					},
 				}
-				err := utils.UpdateAppState(appMgr, appv1alpha1.AppInitializing)
+				err := utils.UpdateAppState(h.ctx, appMgr, appv1alpha1.AppInitializing)
 				if err != nil {
 					klog.Errorf("update app state err=%v", err)
 				}
@@ -1083,7 +1082,7 @@ func (h *HelmOps) waitForStartUp() bool {
 func (h *HelmOps) isStartUp() bool {
 	var labelSelector string
 	deployment, err := h.client.KubeClient.Kubernetes().AppsV1().Deployments(h.app.Namespace).
-		Get(context.TODO(), h.app.AppName, metav1.GetOptions{})
+		Get(h.ctx, h.app.AppName, metav1.GetOptions{})
 
 	if err == nil {
 		labelSelector = metav1.FormatLabelSelector(deployment.Spec.Selector)
@@ -1091,14 +1090,14 @@ func (h *HelmOps) isStartUp() bool {
 
 	if apierrors.IsNotFound(err) {
 		sts, err := h.client.KubeClient.Kubernetes().AppsV1().StatefulSets(h.app.Namespace).
-			Get(context.TODO(), h.app.AppName, metav1.GetOptions{})
+			Get(h.ctx, h.app.AppName, metav1.GetOptions{})
 		if err != nil {
 			return false
 		}
 		labelSelector = metav1.FormatLabelSelector(sts.Spec.Selector)
 	}
 	pods, err := h.client.KubeClient.Kubernetes().CoreV1().Pods(h.app.Namespace).
-		List(context.TODO(), metav1.ListOptions{LabelSelector: labelSelector})
+		List(h.ctx, metav1.ListOptions{LabelSelector: labelSelector})
 	if len(pods.Items) == 0 {
 		return false
 	}
@@ -1165,4 +1164,62 @@ func getApplicationPolicy(policies []AppPolicy, entrances []appv1alpha1.Entrance
 		return "", err
 	}
 	return string(policyStr), nil
+}
+
+func parseAppPermission(data []AppPermission) []AppPermission {
+	permissions := make([]AppPermission, 0)
+	for _, p := range data {
+		switch perm := p.(type) {
+		case string:
+			if perm == "appdata-perm" {
+				permissions = append(permissions, AppDataRW)
+			}
+			if perm == "appcache-perm" {
+				permissions = append(permissions, AppCacheRW)
+			}
+			if perm == "userdata-perm" {
+				permissions = append(permissions, UserDataRW)
+			}
+		case []interface{}:
+			var sps []SysDataPermission
+			for _, item := range perm {
+				if m, ok := item.(map[string]interface{}); ok {
+					var sp SysDataPermission
+					if appName, ok := m["appName"].(string); ok {
+						sp.AppName = appName
+					}
+					if port, ok := m["port"].(string); ok {
+						sp.Port = port
+					}
+					if svc, ok := m["svc"].(string); ok {
+						sp.Svc = svc
+					}
+					if ns, ok := m["namespace"].(string); ok {
+						sp.Namespace = ns
+					}
+					if group, ok := m["group"].(string); ok {
+						sp.Group = group
+					}
+					if dataType, ok := m["dataType"].(string); ok {
+						sp.DataType = dataType
+					}
+					if version, ok := m["version"].(string); ok {
+						sp.Version = version
+					}
+
+					if ops, okk := m["ops"].([]interface{}); okk {
+						sp.Ops = make([]string, len(ops))
+						for i, op := range ops {
+							sp.Ops[i] = op.(string)
+						}
+					} else {
+						sp.Ops = []string{}
+					}
+					sps = append(sps, sp)
+				}
+			}
+			permissions = append(permissions, sps)
+		}
+	}
+	return permissions
 }
