@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/tapr"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -66,7 +67,7 @@ type ApplicationConfig struct {
 	Permission         []AppPermission // app permission requests
 	Requirement        AppRequirement
 	Policies           []AppPolicy
-	Middleware         Middleware
+	Middleware         *tapr.Middleware
 	AnalyticsEnabled   bool
 	ResetCookieEnabled bool
 	Dependencies       []Dependency
