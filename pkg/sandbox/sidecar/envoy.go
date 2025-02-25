@@ -358,6 +358,8 @@ func generateIptablesCommands(appcfg *appinstaller.ApplicationConfig) string {
 -A PROXY_OUTBOUND -p tcp --dport 3306 -j RETURN
 -A PROXY_OUTBOUND -p tcp --dport 27017 -j RETURN
 -A PROXY_OUTBOUND -p tcp --dport 443 -j RETURN
+-A PROXY_OUTBOUND -p tcp --dport 587 -j RETURN
+-A PROXY_OUTBOUND -p tcp --dport 465 -j RETURN
 -A PROXY_OUTBOUND -p tcp --dport 4222 -j RETURN
 -A PROXY_OUTBOUND -d ${POD_IP}/32 -j RETURN
 -A PROXY_OUTBOUND -o lo ! -d 127.0.0.1/32 -m owner --uid-owner 1555 -j PROXY_IN_REDIRECT
