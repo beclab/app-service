@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -161,7 +162,7 @@ func (r *ApplicationManagerController) reconcile(instance *appv1alpha1.Applicati
 			Status:     appv1alpha1.Failed,
 			StatusTime: &now,
 		}
-		e := r.updateStatus(instance, appv1alpha1.Failed, &opRecord, "", message)
+		e := r.updateStatus(ctx, instance, appv1alpha1.Failed, &opRecord, "", message)
 		if e != nil {
 			klog.Errorf("Failed to update applicationmanagers status name=%s err=%v", instance.Name, e)
 		}
@@ -210,7 +211,7 @@ func (r *ApplicationManagerController) reconcile2(cur *appv1alpha1.ApplicationMa
 			err = r.cancel(cur)
 		}
 		if cur.Status.State == appv1alpha1.Pending {
-			err = r.updateStatus(cur, appv1alpha1.Canceled, nil, "", constants.OperationCanceledByUserTpl)
+			err = r.updateStatus(ctx, cur, appv1alpha1.Canceled, nil, "", constants.OperationCanceledByUserTpl)
 			if err != nil {
 				klog.Info("Failed to update applicationmanagers status name=%s err=%v", cur.Name, err)
 			}
@@ -283,7 +284,7 @@ func (r *ApplicationManagerController) preEnqueueCheckForUpdate(old, new client.
 	return true
 }
 
-func (r *ApplicationManagerController) updateStatus(appMgr *appv1alpha1.ApplicationManager, state appv1alpha1.ApplicationManagerState,
+func (r *ApplicationManagerController) updateStatus(ctx context.Context, appMgr *appv1alpha1.ApplicationManager, state appv1alpha1.ApplicationManagerState,
 	opRecord *appv1alpha1.OpRecord, appState appv1alpha1.ApplicationState, message string) error {
 	var err error
 	now := metav1.Now()
@@ -298,12 +299,12 @@ func (r *ApplicationManagerController) updateStatus(appMgr *appv1alpha1.Applicat
 	if len(appMgr.Status.OpRecords) > 20 {
 		appMgr.Status.OpRecords = appMgr.Status.OpRecords[:20:20]
 	}
-	err = r.Status().Patch(context.TODO(), appMgr, client.MergeFrom(appMgrCopy))
+	err = r.Status().Patch(ctx, appMgr, client.MergeFrom(appMgrCopy))
 	if err != nil {
 		return err
 	}
 	if len(appState) > 0 {
-		err = utils.UpdateAppState(appMgr, appState)
+		err = utils.UpdateAppState(ctx, appMgr, appState)
 		if err != nil {
 			return err
 		}
@@ -324,7 +325,7 @@ func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv
 			now := metav1.Now()
 			message := err.Error()
 			var appMgrCur appv1alpha1.ApplicationManager
-			e := r.Get(ctx, types.NamespacedName{Name: appMgr.Name}, &appMgrCur)
+			e := r.Get(context.TODO(), types.NamespacedName{Name: appMgr.Name}, &appMgrCur)
 			if e != nil {
 				klog.Errorf("Failed to get applicationmanagers name=%s err=%v", appMgr.Name, e)
 			}
@@ -349,7 +350,7 @@ func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv
 				opRecord.OpType = appv1alpha1.CancelOp
 				opRecord.Message = constants.OperationCanceledByUserTpl
 			}
-			e = r.updateStatus(appMgr, opRecord.Status, &opRecord, "", opRecord.Message)
+			e = r.updateStatus(context.TODO(), appMgr, opRecord.Status, &opRecord, "", opRecord.Message)
 			if e != nil {
 				klog.Errorf("Failed to update applicationmanagers status name=%s err=%v", appMgr.Name, e)
 			}
@@ -359,22 +360,14 @@ func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv
 	payload := appMgr.Status.Payload
 	version = payload["version"]
 	token := payload["token"]
-	cfgURL := payload["cfgURL"]
-	repoURL := payload["repoURL"]
 
 	var appconfig *appinstaller.ApplicationConfig
-	var chartPath string
 	kubeConfig, err := ctrl.GetConfig()
 	if err != nil {
 		return err
 	}
 
-	appconfig, chartPath, err = apiserver.GetAppConfig(ctx, appMgr.Spec.AppName, appMgr.Spec.AppOwner, cfgURL, repoURL, "", token)
-	if err != nil {
-		klog.Infof("get appconfig err=%v", err)
-		return err
-	}
-	err = setExposePorts(appconfig)
+	err = json.Unmarshal([]byte(appMgr.Spec.Config), &appconfig)
 	if err != nil {
 		return err
 	}
@@ -383,8 +376,13 @@ func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv
 	if err != nil {
 		return err
 	}
+
+	err = setExposePorts(ctx, appconfig)
+	if err != nil {
+		return err
+	}
 	// get images that need to download
-	refs, err := utils.GetRefFromResourceList(chartPath)
+	refs, err := utils.GetRefFromResourceList(appconfig.ChartsName)
 	if err != nil {
 		klog.Infof("get ref err=%v", err)
 		return err
@@ -396,7 +394,7 @@ func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv
 	}
 
 	// wait image to be downloaded
-	err = r.updateStatus(appMgr, appv1alpha1.Downloading, nil, "", "downloading")
+	err = r.updateStatus(ctx, appMgr, appv1alpha1.Downloading, nil, "", "downloading")
 	if err != nil {
 		return err
 	}
@@ -421,7 +419,7 @@ func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv
 
 	// this time app has not been created, so do not update app status
 	message := fmt.Sprintf("Start to install %s: %s", appMgr.Spec.Type.String(), appMgr.Spec.AppName)
-	err = r.updateStatus(appMgr, appv1alpha1.Installing, nil, "", message)
+	err = r.updateStatus(ctx, appMgr, appv1alpha1.Installing, nil, "", message)
 	if err != nil {
 		return err
 	}
@@ -450,7 +448,7 @@ func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv
 		Status:     appv1alpha1.Completed,
 		StatusTime: &now,
 	}
-	err = r.updateStatus(appMgr, appv1alpha1.Completed, &opRecord, appv1alpha1.AppRunning, message)
+	err = r.updateStatus(ctx, appMgr, appv1alpha1.Completed, &opRecord, appv1alpha1.AppRunning, message)
 	if err != nil {
 		klog.Errorf("Failed to update applicationmanagers status name=%s err=%v", appMgr.Name, err)
 	}
@@ -472,13 +470,13 @@ func (r *ApplicationManagerController) uninstall(ctx context.Context, appMgr *ap
 				Status:     appv1alpha1.Failed,
 				StatusTime: &now,
 			}
-			e := r.updateStatus(appMgr, appv1alpha1.Failed, &opRecord, "", message)
+			e := r.updateStatus(context.TODO(), appMgr, appv1alpha1.Failed, &opRecord, "", message)
 			if e != nil {
 				klog.Errorf("Failed to update applicationmanagers status name=%s err=%v", appMgr.Name, e)
 			}
 		}
 	}()
-	err = r.updateStatus(appMgr, appv1alpha1.Uninstalling, nil, appv1alpha1.AppUninstalling, appv1alpha1.AppUninstalling.String())
+	err = r.updateStatus(ctx, appMgr, appv1alpha1.Uninstalling, nil, appv1alpha1.AppUninstalling, appv1alpha1.AppUninstalling.String())
 	if err != nil {
 		return err
 	}
@@ -525,7 +523,7 @@ func (r *ApplicationManagerController) upgrade(ctx context.Context, appMgr *appv
 				r.rollback(appMgr)
 			}
 
-			utils.UpdateAppState(appMgr, appv1alpha1.AppRunning)
+			utils.UpdateAppState(context.TODO(), appMgr, appv1alpha1.AppRunning)
 
 			now := metav1.Now()
 			message := fmt.Sprintf(constants.OperationFailedTpl, appMgr.Status.OpType, err.Error())
@@ -537,7 +535,7 @@ func (r *ApplicationManagerController) upgrade(ctx context.Context, appMgr *appv
 				Status:     appv1alpha1.Failed,
 				StatusTime: &now,
 			}
-			e := r.updateStatus(appMgr, appv1alpha1.Failed, &opRecord, "", message)
+			e := r.updateStatus(context.TODO(), appMgr, appv1alpha1.Failed, &opRecord, "", message)
 			if e != nil {
 				klog.Errorf("Failed to update applicationmanagers status name=%s err=%v", appMgr.Name, e)
 			}
@@ -545,7 +543,7 @@ func (r *ApplicationManagerController) upgrade(ctx context.Context, appMgr *appv
 
 	}()
 
-	err = r.updateStatus(appMgr, appv1alpha1.Upgrading, nil, appv1alpha1.AppUpgrading, appv1alpha1.Upgrading.String())
+	err = r.updateStatus(ctx, appMgr, appv1alpha1.Upgrading, nil, appv1alpha1.AppUpgrading, appv1alpha1.Upgrading.String())
 
 	if err != nil {
 		return err
@@ -625,7 +623,7 @@ func (r *ApplicationManagerController) upgrade(ctx context.Context, appMgr *appv
 		Status:     appv1alpha1.Completed,
 		StatusTime: &now,
 	}
-	e := r.updateStatus(appMgr, appv1alpha1.Completed, &opRecord, appv1alpha1.AppRunning, message)
+	e := r.updateStatus(ctx, appMgr, appv1alpha1.Completed, &opRecord, appv1alpha1.AppRunning, message)
 	if e != nil {
 		klog.Errorf("Failed to update applicationmanagers status name=%s err=%v", appMgr.Name, e)
 	}
@@ -678,14 +676,14 @@ func (r *ApplicationManagerController) cancel(appMgr *appv1alpha1.ApplicationMan
 		state = appv1alpha1.Canceled
 	}
 
-	return r.updateStatus(appMgr, state, nil, "", appMgr.Status.Message)
+	return r.updateStatus(context.TODO(), appMgr, state, nil, "", appMgr.Status.Message)
 }
 
 func (r *ApplicationManagerController) suspend(appMgr *appv1alpha1.ApplicationManager, namespace string) (err error) {
 	defer func() {
 		if err != nil {
 			message := fmt.Sprintf(constants.OperationFailedTpl, appMgr.Status.OpType, err.Error())
-			e := r.updateStatus(appMgr, appv1alpha1.Failed, nil, "", message)
+			e := r.updateStatus(context.TODO(), appMgr, appv1alpha1.Failed, nil, "", message)
 			if e != nil {
 				klog.Errorf("Failed to update applicationmanagers status name=%s err=%v", appMgr.Name, e)
 			}
@@ -696,7 +694,7 @@ func (r *ApplicationManagerController) suspend(appMgr *appv1alpha1.ApplicationMa
 		return err
 	}
 	message := fmt.Sprintf(constants.SuspendOperationCompletedTpl, appMgr.Spec.AppName)
-	return r.updateStatus(appMgr, appv1alpha1.Completed, nil, appv1alpha1.AppSuspend, message)
+	return r.updateStatus(context.TODO(), appMgr, appv1alpha1.Completed, nil, appv1alpha1.AppSuspend, message)
 }
 
 func suspendOrResumeApp(ctx context.Context, cli client.Client, appMgr *appv1alpha1.ApplicationManager, replicas int32) error {
@@ -778,7 +776,7 @@ func (r *ApplicationManagerController) resumeAppAndWaitForLaunch(appMgr *appv1al
 	defer func() {
 		if err != nil {
 			message := fmt.Sprintf(constants.OperationFailedTpl, appMgr.Status.OpType, err.Error())
-			e := r.updateStatus(appMgr, appv1alpha1.Failed, nil, "", message)
+			e := r.updateStatus(context.TODO(), appMgr, appv1alpha1.Failed, nil, "", message)
 			if e != nil {
 				klog.Errorf("Failed to update applicationmanagers status name=%s err=%v", appMgr.Name, e)
 			}
@@ -790,7 +788,7 @@ func (r *ApplicationManagerController) resumeAppAndWaitForLaunch(appMgr *appv1al
 	if err != nil {
 		return err
 	}
-	err = r.updateStatus(appMgr, appv1alpha1.Resuming, nil, appv1alpha1.AppResuming, appv1alpha1.AppResuming.String())
+	err = r.updateStatus(ctx, appMgr, appv1alpha1.Resuming, nil, appv1alpha1.AppResuming, appv1alpha1.AppResuming.String())
 	if err != nil {
 		klog.Errorf("Failed to update applicationmanagers status name=%s err=%v", appMgr.Name, err)
 		return err
@@ -826,7 +824,7 @@ func (r *ApplicationManagerController) resumeAppAndWaitForLaunch(appMgr *appv1al
 			}
 			if entranceCount == count {
 				message := fmt.Sprintf(constants.ResumeOperationCompletedTpl, appMgr.Spec.AppName)
-				e := r.updateStatus(appMgr, appv1alpha1.Completed, nil, appv1alpha1.AppRunning, message)
+				e := r.updateStatus(ctx, appMgr, appv1alpha1.Completed, nil, appv1alpha1.AppRunning, message)
 				return e
 			}
 
@@ -836,7 +834,7 @@ func (r *ApplicationManagerController) resumeAppAndWaitForLaunch(appMgr *appv1al
 			if e != nil {
 				klog.Errorf("rollback to suspend err=%v", err)
 			}
-			e = r.updateStatus(appMgr, appv1alpha1.Completed, nil, appv1alpha1.AppSuspend, "resume failed rollback")
+			e = r.updateStatus(context.TODO(), appMgr, appv1alpha1.Completed, nil, appv1alpha1.AppSuspend, "resume failed rollback")
 			if e != nil {
 				klog.Errorf("rollback to suspend, update status err=%v", err)
 			}
@@ -1012,7 +1010,7 @@ type portKey struct {
 	protocol string
 }
 
-func setExposePorts(appConfig *appinstaller.ApplicationConfig) error {
+func setExposePorts(ctx context.Context, appConfig *appinstaller.ApplicationConfig) error {
 	existPorts := make(map[portKey]struct{})
 	client, err := utils.GetClient()
 	if err != nil {
