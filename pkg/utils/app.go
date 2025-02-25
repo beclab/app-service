@@ -72,17 +72,17 @@ func GetClient() (*versioned.Clientset, error) {
 }
 
 // UpdateAppState update application status state.
-func UpdateAppState(appmgr *v1alpha1.ApplicationManager, state v1alpha1.ApplicationState) error {
+func UpdateAppState(ctx context.Context, appmgr *v1alpha1.ApplicationManager, state v1alpha1.ApplicationState) error {
 	client, err := GetClient()
 	if err != nil {
 		return err
 	}
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		app, err := client.AppV1alpha1().Applications().Get(context.TODO(), appmgr.Name, metav1.GetOptions{})
+		app, err := client.AppV1alpha1().Applications().Get(ctx, appmgr.Name, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				// dev mode, try to find app in user-space
-				apps, err := client.AppV1alpha1().Applications().List(context.TODO(), metav1.ListOptions{})
+				apps, err := client.AppV1alpha1().Applications().List(ctx, metav1.ListOptions{})
 				if err != nil {
 					return err
 				}
@@ -126,12 +126,12 @@ func UpdateAppState(appmgr *v1alpha1.ApplicationManager, state v1alpha1.Applicat
 			return nil
 		}
 
-		_, err = client.AppV1alpha1().Applications().Get(context.TODO(), appCopy.Name, metav1.GetOptions{})
+		_, err = client.AppV1alpha1().Applications().Get(ctx, appCopy.Name, metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
 			return nil
 		}
 
-		_, err = client.AppV1alpha1().Applications().UpdateStatus(context.TODO(), appCopy, metav1.UpdateOptions{})
+		_, err = client.AppV1alpha1().Applications().UpdateStatus(ctx, appCopy, metav1.UpdateOptions{})
 
 		return err
 	})
@@ -394,7 +394,7 @@ func UpdateStatus(appMgr *v1alpha1.ApplicationManager, state v1alpha1.Applicatio
 			return err
 		}
 		if len(appState) > 0 {
-			err = UpdateAppState(appMgr, appState)
+			err = UpdateAppState(context.TODO(), appMgr, appState)
 			if err != nil {
 				return err
 			}
