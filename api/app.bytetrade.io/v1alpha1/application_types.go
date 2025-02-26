@@ -96,11 +96,12 @@ type ServicePort struct {
 
 	ExposePort int32 `yaml:"exposePort" json:"exposePort,omitempty"`
 
-	// The protocol for this entrance. Supports "tcp" and "udp".
-	// Default is tcp.
-	// +default="tcp"
+	// The protocol for this entrance. Supports "tcp" and "udp","".
+	// Default is tcp/udp, "" mean tcp and udp.
+	// +default="tcp/udp"
 	// +optional
-	Protocol string `yaml:"protocol" json:"protocol,omitempty"`
+	Protocol          string `yaml:"protocol" json:"protocol,omitempty"`
+	AddToTailscaleAcl bool   `yaml:"addToTailscaleAcl" json:"addToTailscaleAcl"`
 }
 
 // ApplicationStatus defines the observed state of Application

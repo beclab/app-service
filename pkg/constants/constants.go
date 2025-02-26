@@ -48,7 +48,7 @@ const (
 	UserChartsPath = "./userapps"
 
 	EnvoyUID                        int64 = 1555
-	DefaultEnvoyLogLevel                  = "info"
+	DefaultEnvoyLogLevel                  = "debug"
 	EnvoyImageVersion                     = "bytetrade/envoy:v1.25.11.1"
 	EnvoyContainerName                    = "terminus-envoy-sidecar"
 	EnvoyAdminPort                        = 15000

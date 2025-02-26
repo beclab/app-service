@@ -1016,18 +1016,24 @@ func setExposePorts(ctx context.Context, appConfig *appinstaller.ApplicationConf
 	if err != nil {
 		return err
 	}
-	apps, err := client.AppV1alpha1().Applications().List(context.TODO(), metav1.ListOptions{})
+	apps, err := client.AppV1alpha1().Applications().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return err
 	}
 
 	for _, app := range apps.Items {
 		for _, p := range app.Spec.Ports {
-			key := portKey{
-				port:     p.ExposePort,
-				protocol: string(p.Protocol),
+			protos := []string{p.Protocol}
+			if p.Protocol == "" {
+				protos = []string{"tcp", "udp"}
 			}
-			existPorts[key] = struct{}{}
+			for _, proto := range protos {
+				key := portKey{
+					port:     p.ExposePort,
+					protocol: proto,
+				}
+				existPorts[key] = struct{}{}
+			}
 		}
 	}
 	klog.Infof("existPorts: %v", existPorts)
@@ -1036,32 +1042,52 @@ func setExposePorts(ctx context.Context, appConfig *appinstaller.ApplicationConf
 		port := &appConfig.Ports[i]
 		if port.ExposePort == 0 {
 			var exposePort int32
-			for i := 0; i < 5; i++ {
+			protos := []string{port.Protocol}
+			if port.Protocol == "" {
+				protos = []string{"tcp", "udp"}
+			}
 
-				exposePort, err = genPort(port.Protocol)
+			for i := 0; i < 5; i++ {
+				exposePort, err = genPort(protos)
 				if err != nil {
 					continue
 				}
-				key := portKey{port: exposePort, protocol: port.Protocol}
-				if _, ok := existPorts[key]; !ok && err == nil {
-					break
+				for _, proto := range protos {
+					key := portKey{port: exposePort, protocol: proto}
+					if _, ok := existPorts[key]; !ok && err == nil {
+						break
+					}
 				}
 			}
-			key := portKey{port: exposePort, protocol: port.Protocol}
-			if _, ok := existPorts[key]; ok || err != nil {
-				return fmt.Errorf("%d port is not available", key.port)
+			for _, proto := range protos {
+				key := portKey{port: exposePort, protocol: proto}
+				if _, ok := existPorts[key]; ok || err != nil {
+					return fmt.Errorf("%d port is not available", key.port)
+				}
+				existPorts[key] = struct{}{}
+				port.ExposePort = exposePort
 			}
-			existPorts[key] = struct{}{}
-			port.ExposePort = exposePort
+		}
+	}
+
+	// add exposePort to tailscale acls
+	for i := range appConfig.Ports {
+		if appConfig.Ports[i].AddToTailscaleAcl {
+			appConfig.TailScaleACLs = append(appConfig.TailScaleACLs, appv1alpha1.ACL{
+				Proto: appConfig.Ports[i].Protocol,
+				Dst:   []string{fmt.Sprintf("*:%d", appConfig.Ports[i].ExposePort)},
+			})
 		}
 	}
 	return nil
 }
 
-func genPort(protocol string) (int32, error) {
+func genPort(protos []string) (int32, error) {
 	exposePort := int32(rand.IntnRange(33333, 36789))
-	if !utils.IsPortAvailable(protocol, int(exposePort)) {
-		return 0, fmt.Errorf("failed to allocate an available port after 3 attempts")
+	for _, proto := range protos {
+		if !utils.IsPortAvailable(proto, int(exposePort)) {
+			return 0, fmt.Errorf("failed to allocate an available port after 5 attempts")
+		}
 	}
 	return exposePort, nil
 }
