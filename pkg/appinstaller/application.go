@@ -50,33 +50,34 @@ const (
 )
 
 type ApplicationConfig struct {
-	AppID              string
-	CfgFileVersion     string
-	Namespace          string
-	ChartsName         string
-	RepoURL            string
-	Title              string
-	Version            string
-	Target             string
-	AppName            string // name of application displayed on shortcut
-	OwnerName          string // name of owner who installed application
-	Entrances          []v1alpha1.Entrance
-	Ports              []v1alpha1.ServicePort
-	TailScaleACLs      []v1alpha1.ACL
-	Icon               string          // base64 icon data
-	Permission         []AppPermission // app permission requests
-	Requirement        AppRequirement
-	Policies           []AppPolicy
-	Middleware         *tapr.Middleware
-	AnalyticsEnabled   bool
-	ResetCookieEnabled bool
-	Dependencies       []Dependency
-	AppScope           AppScope
-	WsConfig           WsConfig
-	Upload             Upload
-	OnlyAdmin          bool
-	MobileSupported    bool
-	OIDC               OIDC
-	ApiTimeout         *int64
-	RunAsUser          bool
+	AppID                string
+	CfgFileVersion       string
+	Namespace            string
+	ChartsName           string
+	RepoURL              string
+	Title                string
+	Version              string
+	Target               string
+	AppName              string // name of application displayed on shortcut
+	OwnerName            string // name of owner who installed application
+	Entrances            []v1alpha1.Entrance
+	Ports                []v1alpha1.ServicePort
+	TailScaleACLs        []v1alpha1.ACL
+	Icon                 string          // base64 icon data
+	Permission           []AppPermission // app permission requests
+	Requirement          AppRequirement
+	Policies             []AppPolicy
+	Middleware           *tapr.Middleware
+	AnalyticsEnabled     bool
+	ResetCookieEnabled   bool
+	Dependencies         []Dependency
+	AppScope             AppScope
+	WsConfig             WsConfig
+	Upload               Upload
+	OnlyAdmin            bool
+	MobileSupported      bool
+	OIDC                 OIDC
+	ApiTimeout           *int64
+	RunAsUser            bool
+	AllowedOutboundPorts []int
 }
