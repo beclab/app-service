@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -352,8 +353,19 @@ func generateIptablesCommands(appcfg *appinstaller.ApplicationConfig) string {
 
 	cmd += fmt.Sprintf(`-A PROXY_INBOUND -p tcp -j PROXY_IN_REDIRECT
 -A PROXY_IN_REDIRECT -p tcp -j REDIRECT --to-port %d
+`, constants.EnvoyInboundListenerPort)
+	allowedPortSet := sets.NewInt(5432, 6379, 3306, 27017, 443, 4222)
+	if appcfg != nil {
+		for _, port := range appcfg.AllowedOutboundPorts {
+			if allowedPortSet.Has(port) {
+				continue
+			}
+			cmd += fmt.Sprintf("-A PROXY_OUTBOUND -p tcp --dport %d -j RETURN\n", port)
+			allowedPortSet.Insert(port)
+		}
+	}
 
--A PROXY_OUTBOUND -p tcp --dport 5432 -j RETURN
+	cmd += fmt.Sprintf(`-A PROXY_OUTBOUND -p tcp --dport 5432 -j RETURN
 -A PROXY_OUTBOUND -p tcp --dport 6379 -j RETURN
 -A PROXY_OUTBOUND -p tcp --dport 3306 -j RETURN
 -A PROXY_OUTBOUND -p tcp --dport 27017 -j RETURN
@@ -371,7 +383,6 @@ func generateIptablesCommands(appcfg *appinstaller.ApplicationConfig) string {
 COMMIT
 EOF
 `,
-		constants.EnvoyInboundListenerPort,
 		constants.EnvoyOutboundListenerPort,
 	)
 
