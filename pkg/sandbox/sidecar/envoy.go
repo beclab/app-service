@@ -352,8 +352,14 @@ func generateIptablesCommands(appcfg *appinstaller.ApplicationConfig) string {
 
 	cmd += fmt.Sprintf(`-A PROXY_INBOUND -p tcp -j PROXY_IN_REDIRECT
 -A PROXY_IN_REDIRECT -p tcp -j REDIRECT --to-port %d
+`, constants.EnvoyInboundListenerPort)
+	if appcfg != nil {
+		for _, port := range appcfg.AllowedOutboundPorts {
+			cmd += fmt.Sprintf("-A PROXY_OUTBOUND -p tcp --dport %d -j RETURN\n", port)
+		}
+	}
 
--A PROXY_OUTBOUND -p tcp --dport 5432 -j RETURN
+	cmd += fmt.Sprintf(`-A PROXY_OUTBOUND -p tcp --dport 5432 -j RETURN
 -A PROXY_OUTBOUND -p tcp --dport 6379 -j RETURN
 -A PROXY_OUTBOUND -p tcp --dport 3306 -j RETURN
 -A PROXY_OUTBOUND -p tcp --dport 27017 -j RETURN
@@ -371,7 +377,6 @@ func generateIptablesCommands(appcfg *appinstaller.ApplicationConfig) string {
 COMMIT
 EOF
 `,
-		constants.EnvoyInboundListenerPort,
 		constants.EnvoyOutboundListenerPort,
 	)
 
