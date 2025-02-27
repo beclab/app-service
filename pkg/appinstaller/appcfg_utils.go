@@ -212,7 +212,24 @@ func ToEntrancesLabel(entrances []v1alpha1.Entrance) string {
 }
 
 func ToAppTCPUDPPorts(ports []v1alpha1.ServicePort) string {
-	portsLabel, _ := json.Marshal(ports)
+	ret := make([]v1alpha1.ServicePort, 0)
+	for _, port := range ports {
+		protos := []string{port.Protocol}
+		if port.Protocol == "" {
+			protos = []string{"tcp", "udp"}
+		}
+		for _, proto := range protos {
+			ret = append(ret, v1alpha1.ServicePort{
+				Name:              port.Name,
+				Host:              port.Host,
+				Port:              port.Port,
+				ExposePort:        port.ExposePort,
+				Protocol:          proto,
+				AddToTailscaleAcl: port.AddToTailscaleAcl,
+			})
+		}
+	}
+	portsLabel, _ := json.Marshal(ret)
 	return string(portsLabel)
 }
 
