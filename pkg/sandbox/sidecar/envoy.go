@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"k8s.io/apimachinery/pkg/util/sets"
 
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/constants"
@@ -259,12 +260,17 @@ func getEnvoyConfigOnlyForOutBound(appcfg *appinstaller.ApplicationConfig, perms
 				{
 					Name: "original_dst",
 					ConnectTimeout: &duration.Duration{
-						Seconds: 5000,
+						Seconds: 120,
 					},
 					ClusterDiscoveryType: &clusterv3.Cluster_Type{
 						Type: clusterv3.Cluster_ORIGINAL_DST,
 					},
 					LbPolicy: clusterv3.Cluster_CLUSTER_PROVIDED,
+					CommonHttpProtocolOptions: &envoy_core.HttpProtocolOptions{
+						IdleTimeout: &duration.Duration{
+							Seconds: 10,
+						},
+					},
 				},
 			},
 		},
@@ -686,6 +692,11 @@ func New(username string, inlineCode []byte, probesPath []string, opts options) 
 						Type: clusterv3.Cluster_ORIGINAL_DST,
 					},
 					LbPolicy: clusterv3.Cluster_CLUSTER_PROVIDED,
+					CommonHttpProtocolOptions: &envoy_core.HttpProtocolOptions{
+						IdleTimeout: &duration.Duration{
+							Seconds: 10,
+						},
+					},
 				},
 
 				{
@@ -738,8 +749,7 @@ func (ec *envoyConfig) WithPolicy() *envoyConfig {
 								Cluster: "authelia",
 							},
 							Timeout: &duration.Duration{
-								Seconds: 0,
-								Nanos:   250000000,
+								Seconds: 2,
 							},
 						},
 						AuthorizationRequest: &envoy_authz.AuthorizationRequest{
