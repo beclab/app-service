@@ -351,7 +351,7 @@ func generateIptablesCommands(appcfg *appinstaller.ApplicationConfig) string {
 `, constants.EnvoyAdminPort)
 	if appcfg != nil {
 		for _, port := range appcfg.Ports {
-			if port.Protocol == "tcp" {
+			if port.Protocol == "tcp" || port.Protocol == "" {
 				cmd += fmt.Sprintf("-A PROXY_INBOUND -p tcp --dport %d -j RETURN\n", port.Port)
 			}
 		}
