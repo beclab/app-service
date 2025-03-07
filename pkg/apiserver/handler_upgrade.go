@@ -189,10 +189,10 @@ func jobStatus(item *batchv1.Job) string {
 	status := StatusFailed
 	if item.Status.Active > 0 {
 		status = StatusRunning
-	} else if item.Status.Failed > 0 {
-		status = StatusFailed
 	} else if item.Status.Succeeded > 0 {
 		status = StatusComplete
+	} else if item.Status.Failed > 0 {
+		status = StatusFailed
 	}
 	return status
 }
