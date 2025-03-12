@@ -314,11 +314,6 @@ func FmtAppMgrName(app, owner, ns string) (string, error) {
 	return fmt.Sprintf("%s-%s", namespace, app), nil
 }
 
-// FmtModelMgrName returns applicationmanager name for model.
-func FmtModelMgrName(modelID string) string {
-	return modelID
-}
-
 // TryConnect try to connect to a service with specified host and port.
 func TryConnect(host string, port string) bool {
 	timeout := time.Second

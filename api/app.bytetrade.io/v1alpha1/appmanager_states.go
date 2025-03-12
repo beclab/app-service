@@ -64,14 +64,9 @@ const (
 	App Type = "app"
 	// Recommend means argo cronworkflows.
 	Recommend Type = "recommend"
-	// Model means llm model.
-	Model Type = "model"
 
 	// Middleware means middleware like mongodb
 	Middleware Type = "middleware"
-
-	// Agent means llm agent. Not support yet.
-	Agent Type = "agent"
 )
 
 func (t Type) String() string {
@@ -112,40 +107,4 @@ func (t Type) String() string {
                                                             |                         |
                                                             |                         |
                                                             +-------------------------+
-*/
-
-// ApplicationManagerState change for model
-/*
-
-                +----------------------------------------------------------------------------+
-                |                                                                            v
-    install   +------------+         +-------------------+  uninstall +--------------+     +--------+
-   ---------> | installing | ------> |                   | -------->  | uninstalling | --> | failed |
-              +------------+         |                   |            +--------------+     +--------+
-                                     |                   |             |                     ^
-                +------------------> |     completed     | <-----------+                     |
-                |                    |                   |                                   |
-              +------------+  suspend|                   |                                   |
-              |  stopping   | <------|                   |                                   |
-              +------------+         +-------------------+                                   |
-                                       |               ^                                     |
-                                       | resume        |                                     |
-                                       v               |                                     |
-                                     +---------+       |                                     |
-                                     | resuming | ------+------------------------------------+
-                                     +---------+       |
-                                       |               |
-                                       +---------------+
-*/
-
-// model status change
-/*
-                  cancel                                      suspend
-  +---------------------------+                  +---------------------+
-  v                           |                  v                     |
-+--------------+  install   +------------+     +-----------+  resume   +---------+
-| no_installed | ---------> | installing | --> | installed | ------> | running |
-+--------------+            +------------+     +-----------+         +---------+
-  ^              uninstall                          |           uninstall   |
-  +-------------------------------------------------+----------------------+
 */

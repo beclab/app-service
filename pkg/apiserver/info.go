@@ -14,8 +14,7 @@ import (
 const (
 	// AppCfgFileName config file name for application.
 	AppCfgFileName = "OlaresManifest.yaml"
-	// ModelCfgFileName config file name for model.
-	ModelCfgFileName  = "modelConfig.yaml"
+
 	MinCfgFileVersion = ">= 0.7.2"
 )
 

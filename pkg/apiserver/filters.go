@@ -44,23 +44,25 @@ func logRequestAndResponse(req *restful.Request, resp *restful.Response, chain *
 	chain.ProcessFilter(req, resp)
 
 	// Always log error response
+	if resp.StatusCode() != http.StatusOK {
+		ctrl.Log.Info("request",
+			"IP",
+			utils.RemoteIP(req.Request),
+			"method",
+			req.Request.Method,
+			"URL",
+			req.Request.URL,
+			"proto",
+			req.Request.Proto,
+			"code",
+			resp.StatusCode(),
+			"length",
+			resp.ContentLength(),
+			"timestamp",
+			time.Since(start)/time.Millisecond,
+		)
+	}
 
-	ctrl.Log.Info("request",
-		"IP",
-		utils.RemoteIP(req.Request),
-		"method",
-		req.Request.Method,
-		"URL",
-		req.Request.URL,
-		"proto",
-		req.Request.Proto,
-		"code",
-		resp.StatusCode(),
-		"length",
-		resp.ContentLength(),
-		"timestamp",
-		time.Since(start)/time.Millisecond,
-	)
 }
 
 func (h *Handler) createClientSet(req *restful.Request, resp *restful.Response, chain *restful.FilterChain) {
