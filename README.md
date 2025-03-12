@@ -3,7 +3,7 @@
 
 ## Description
 **app-service** is a component of **Terminus OS**, principally tasked with managing the installation, upgrade, and uninstallation of Application, Model, and Recommend among other related operations. 
-Additionally, **app-service** offers a seamless interface for the convenient management of Application, Model, and Recommend.
+Additionally, **app-service** offers a seamless interface for the convenient management of Application and Recommend.
 
 The **Application** is a Custom Resource (CR) defined by k8s Custom Resource Definition (CRD). When a user initiates an installation, it is automatically created by the Application Controller.
 
