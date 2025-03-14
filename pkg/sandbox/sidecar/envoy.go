@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"k8s.io/apimachinery/pkg/util/sets"
 
@@ -1361,44 +1360,5 @@ func GetInitContainerSpecForWaitFor(username string) corev1.Container {
 			"-it",
 			"authelia-backend.user-system-" + username + ":9091",
 		},
-	}
-}
-
-func GetInitContainerSpecForChown(pod *corev1.Pod) *corev1.Container {
-	volumes := sets.NewString()
-	for _, volume := range pod.Spec.Volumes {
-		if volume.HostPath != nil && volume.HostPath.Type != nil &&
-			*volume.HostPath.Type == corev1.HostPathDirectoryOrCreate {
-			volumes.Insert(volume.Name)
-		}
-	}
-	volumeMounts := make([]corev1.VolumeMount, 0)
-	for _, container := range pod.Spec.Containers {
-		for _, vm := range container.VolumeMounts {
-			if volumes.Has(vm.Name) {
-				volumeMounts = append(volumeMounts, vm)
-			}
-		}
-	}
-	command := []string{"/bin/sh"}
-	args := make([]string, 0)
-	for _, vm := range volumeMounts {
-		args = append(args, fmt.Sprintf("chown -R 1000:1000 %s", vm.MountPath))
-	}
-	chownCmd := strings.Join(args, "\n")
-
-	return &corev1.Container{
-		Name:            fmt.Sprintf("init-inject-chownfs-%d", time.Now().Unix()),
-		Image:           "aboveos/busybox:1.28",
-		ImagePullPolicy: corev1.PullIfNotPresent,
-		Command:         command,
-		Args:            []string{"-c", chownCmd},
-		SecurityContext: &corev1.SecurityContext{
-			RunAsUser: func() *int64 {
-				runAsUser := int64(0)
-				return &runAsUser
-			}(),
-		},
-		VolumeMounts: volumeMounts,
 	}
 }
