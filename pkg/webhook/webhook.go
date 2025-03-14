@@ -132,7 +132,7 @@ func (wh *Webhook) CreatePatch(
 	ctx context.Context,
 	pod *corev1.Pod,
 	req *admissionv1.AdmissionRequest,
-	proxyUUID uuid.UUID, injectPolicy, injectWs, injectUpload bool, perms []appinstaller.SysDataPermission, injectChown bool) ([]byte, error) {
+	proxyUUID uuid.UUID, injectPolicy, injectWs, injectUpload bool, perms []appinstaller.SysDataPermission) ([]byte, error) {
 	isInjected, prevUUID := isInjectedPod(pod)
 
 	if isInjected {
@@ -184,13 +184,6 @@ func (wh *Webhook) CreatePatch(
 		uploadSidecar := sidecar.GetUploadSideCarContainerSpec(pod, &appcfg.Upload)
 		if uploadSidecar != nil {
 			pod.Spec.Containers = append(pod.Spec.Containers, *uploadSidecar)
-		}
-	}
-
-	if injectChown {
-		chownSidecar := sidecar.GetInitContainerSpecForChown(pod)
-		if chownSidecar != nil {
-			pod.Spec.InitContainers = append(pod.Spec.InitContainers, *chownSidecar)
 		}
 	}
 
@@ -570,17 +563,4 @@ func (wh *Webhook) getAppKeySecret(namespace string) (string, string, error) {
 		return appKey, appSecret, nil
 	}
 	return "", "", errors.New("nil applicationpermission object")
-}
-
-func (wh *Webhook) MustInjectChown(pod *corev1.Pod, namespace string) bool {
-	if !isNamespaceInjectable(namespace) {
-		return false
-	}
-	for _, volume := range pod.Spec.Volumes {
-		if volume.HostPath != nil && volume.HostPath.Type != nil &&
-			*volume.HostPath.Type == corev1.HostPathDirectoryOrCreate {
-			return true
-		}
-	}
-	return false
 }
