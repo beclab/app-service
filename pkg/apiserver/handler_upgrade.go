@@ -111,7 +111,7 @@ func (h *Handler) upgrade(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	ttl := int32(time.Duration(5 * time.Minute).Seconds())
+	ttl := int32(30 * 24 * 60 * time.Minute.Seconds())
 
 	if apierrors.IsNotFound(err) {
 		job = batchv1.Job{
