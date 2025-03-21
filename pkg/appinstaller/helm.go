@@ -476,6 +476,8 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 	}
 	values["rootPath"] = rootPath
 
+	values["downloadCdnURL"] = os.Getenv("DOWNLOAD_CDN_URL")
+
 	return values, err
 }
 
