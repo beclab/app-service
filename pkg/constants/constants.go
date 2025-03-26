@@ -22,7 +22,7 @@ const (
 	ApplicationRunAsUserLabel     = "applications.apps.bytetrade.io/runasuser"
 	ApplicationVersionLabel       = "applications.app.bytetrade.io/version"
 	ApplicationSourceLabel        = "applications.app.bytetrade.io/source"
-	ApplicationTailScaleACLKey    = "applications.app.bytetrade.io/tailscal-acls"
+	ApplicationTailScaleKey       = "applications.app.bytetrade.io/tailscale"
 	ApplicationAnalytics          = "applications.app.bytetrade.io/analytics"
 	ApplicationPolicies           = "applications.app.bytetrade.io/policies"
 	ApplicationMobileSupported    = "applications.app.bytetrade.io/mobile_supported"

@@ -331,7 +331,7 @@ func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.
 	if err != nil {
 		klog.Warningf("get app ports err=%v", err)
 	}
-	tailScaleACLs, err := r.getAppACLs(deployment)
+	tailScale, err := r.getAppTailScale(deployment)
 	if err != nil {
 		klog.Warningf("get app tailscale acls err=%v", err)
 	}
@@ -360,10 +360,12 @@ func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.
 			DeploymentName: deployment.GetName(),
 			Entrances:      entrancesMap[name],
 			Ports:          servicePortsMap[name],
-			TailScaleACLs:  tailScaleACLs,
 			Icon:           icon[name],
 			Settings:       settings,
 		},
+	}
+	if tailScale != nil {
+		newapp.Spec.TailScale = *tailScale
 	}
 	app, err := r.AppClientset.AppV1alpha1().Applications().Create(ctx, newapp, metav1.CreateOptions{})
 	if err != nil {
@@ -421,7 +423,7 @@ func (r *ApplicationReconciler) updateApplication(ctx context.Context, req ctrl.
 	deployment client.Object, app *appv1alpha1.Application, name string) error {
 	appCopy := app.DeepCopy()
 
-	tailScaleACLs, err := r.getAppACLs(deployment)
+	tailScale, err := r.getAppTailScale(deployment)
 	if err != nil {
 		klog.Errorf("failed to get tailscale err=%v", err)
 	}
@@ -439,7 +441,7 @@ func (r *ApplicationReconciler) updateApplication(ctx context.Context, req ctrl.
 	appCopy.Spec.DeploymentName = deployment.GetName()
 	appCopy.Spec.Icon = icon
 
-	appCopy.Spec.TailScaleACLs = tailScaleACLs
+	appCopy.Spec.TailScale = *tailScale
 
 	actionConfig, _, err := helm.InitConfig(r.Kubeconfig, appCopy.Spec.Namespace)
 	if err != nil {
@@ -721,14 +723,14 @@ func (r *ApplicationReconciler) getAppPorts(ctx context.Context, deployment clie
 	return portsMap, nil
 }
 
-func (r *ApplicationReconciler) getAppACLs(deployment client.Object) ([]appv1alpha1.ACL, error) {
-	acls := make([]appv1alpha1.ACL, 0)
-	aclsString := deployment.GetAnnotations()[constants.ApplicationTailScaleACLKey]
-	err := json.Unmarshal([]byte(aclsString), &acls)
+func (r *ApplicationReconciler) getAppTailScale(deployment client.Object) (*appv1alpha1.TailScale, error) {
+	tailScale := appv1alpha1.TailScale{}
+	tailScaleString := deployment.GetAnnotations()[constants.ApplicationTailScaleKey]
+	err := json.Unmarshal([]byte(tailScaleString), &tailScale)
 	if err != nil {
 		return nil, err
 	}
-	return acls, nil
+	return &tailScale, nil
 }
 
 func checkPortOfService(s *corev1.Service, port int32) bool {
