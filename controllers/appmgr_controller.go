@@ -1073,7 +1073,7 @@ func setExposePorts(ctx context.Context, appConfig *appinstaller.ApplicationConf
 	// add exposePort to tailscale acls
 	for i := range appConfig.Ports {
 		if appConfig.Ports[i].AddToTailscaleAcl {
-			appConfig.TailScaleACLs = append(appConfig.TailScaleACLs, appv1alpha1.ACL{
+			appConfig.TailScale.ACLs = append(appConfig.TailScale.ACLs, appv1alpha1.ACL{
 				Proto: appConfig.Ports[i].Protocol,
 				Dst:   []string{fmt.Sprintf("*:%d", appConfig.Ports[i].ExposePort)},
 			})
