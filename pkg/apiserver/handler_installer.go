@@ -65,7 +65,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	err = utils.CheckTailScaleACLs(appConfig.TailScaleACLs)
+	err = utils.CheckTailScaleACLs(appConfig.TailScale.ACLs)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -531,7 +531,7 @@ func toApplicationConfig(app, chart string, cfg *appinstaller.AppConfiguration) 
 		ChartsName:     chart,
 		Entrances:      cfg.Entrances,
 		Ports:          cfg.Ports,
-		TailScaleACLs:  cfg.TailScaleACLs,
+		TailScale:      cfg.TailScale,
 		Icon:           cfg.Metadata.Icon,
 		Permission:     permission,
 		Requirement: appinstaller.AppRequirement{

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strings"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/utils"
@@ -11,6 +13,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -23,7 +26,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-const tailScaleACLPolicyMd5Key = "tailscale-acl-md5"
+const (
+	tailScaleACLPolicyMd5Key       = "tailscale-acl-md5"
+	tailScaleDeployOrContainerName = "tailscale"
+	subnetRoutesEnv                = "TS_ROUTES"
+)
 
 var defaultACLs = []v1alpha1.ACL{
 	{
@@ -39,6 +46,7 @@ var defaultACLs = []v1alpha1.ACL{
 		Dst:    []string{"*:18088"},
 	},
 }
+var defaultSubRoutes = []string{"$(NODE_IP)/32"}
 
 type ACLPolicy struct {
 	ACLs          []v1alpha1.ACL `json:"acls"`
@@ -94,7 +102,7 @@ func (r *TailScaleACLController) SetUpWithManager(mgr ctrl.Manager) error {
 
 func (r *TailScaleACLController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = log.FromContext(ctx)
-	klog.Infof("reconcile tailscale acls request name=%v, owner=%v", req.Name, req.Namespace)
+	klog.Infof("reconcile tailscale acls subroutes request name=%v, owner=%v", req.Name, req.Namespace)
 
 	// for this request req.Namespace is owner
 	// list all apps by owner and generate acls by owner
@@ -116,8 +124,62 @@ func (r *TailScaleACLController) Reconcile(ctx context.Context, req ctrl.Request
 
 	// calculate acls
 	acls := make([]v1alpha1.ACL, 0)
+	subRoutes := make([]string, 0)
+	routeSet := sets.NewString()
+
+	subRoutes = append(subRoutes, defaultSubRoutes...)
 	for _, app := range filteredApps {
+		acls = append(acls, app.Spec.TailScale.ACLs...)
+		// just to maintain compatibility with existing application
 		acls = append(acls, app.Spec.TailScaleACLs...)
+		for _, subRoute := range app.Spec.TailScale.SubRoutes {
+			if routeSet.Has(subRoute) {
+				continue
+			}
+			subRoutes = append(subRoutes, subRoute)
+			routeSet.Insert(subRoute)
+		}
+	}
+
+	tailScaleDeploy := &appsv1.Deployment{}
+	err = r.Get(ctx, types.NamespacedName{Name: tailScaleDeployOrContainerName, Namespace: headScaleNamespace}, tailScaleDeploy)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	tailScaleRouteEnv := ""
+	for _, container := range tailScaleDeploy.Spec.Template.Spec.Containers {
+		if container.Name != tailScaleDeployOrContainerName {
+			continue
+		}
+		for _, env := range container.Env {
+			if env.Name == subnetRoutesEnv {
+				tailScaleRouteEnv = env.Value
+			}
+		}
+	}
+
+	oldTailScaleRoutes := strings.Split(tailScaleRouteEnv, ",")
+	klog.Infof("oldTailScaleRoutes: %v", oldTailScaleRoutes)
+	klog.Infof("new sub Routes: %v", subRoutes)
+
+	if !isTsRoutesEqual(oldTailScaleRoutes, subRoutes) {
+		newTailScaleRoutesEnv := strings.Join(subRoutes, ",")
+		containers := tailScaleDeploy.Spec.Template.Spec.Containers
+		for i := range containers {
+			if containers[i].Name != tailScaleDeployOrContainerName {
+				continue
+			}
+			for j := range containers[i].Env {
+				if containers[i].Env[j].Name == subnetRoutesEnv {
+					containers[i].Env[j].Value = newTailScaleRoutesEnv
+				}
+			}
+		}
+		err = r.Update(ctx, tailScaleDeploy)
+		if err != nil {
+			klog.Errorf("update tailscale deploy failed %v", err)
+			return ctrl.Result{}, err
+		}
 	}
 
 	configMap := &corev1.ConfigMap{}
@@ -207,4 +269,18 @@ func makeACLPolicy(acls []v1alpha1.ACL) ([]byte, error) {
 		return nil, err
 	}
 	return aclPolicyByte, nil
+}
+
+func isTsRoutesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	sort.Strings(a)
+	sort.Strings(b)
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
