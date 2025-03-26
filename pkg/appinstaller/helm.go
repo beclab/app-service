@@ -1182,6 +1182,14 @@ func parseAppPermission(data []AppPermission) []AppPermission {
 			if perm == "userdata-perm" {
 				permissions = append(permissions, UserDataRW)
 			}
+		case AppDataPermission:
+			permissions = append(permissions, AppDataRW)
+		case AppCachePermission:
+			permissions = append(permissions, AppCacheRW)
+		case UserDataPermission:
+			permissions = append(permissions, UserDataRW)
+		case []SysDataPermission:
+			permissions = append(permissions, p)
 		case []interface{}:
 			var sps []SysDataPermission
 			for _, item := range perm {
