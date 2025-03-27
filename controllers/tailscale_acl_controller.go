@@ -45,8 +45,14 @@ var defaultACLs = []v1alpha1.ACL{
 		Proto:  "tcp",
 		Dst:    []string{"*:18088"},
 	},
+	{
+		Action: "accept",
+		Src:    []string{"*"},
+		Proto:  "",
+		Dst:    []string{"*:53"},
+	},
 }
-var defaultSubRoutes = []string{"$(NODE_IP)/32"}
+var defaultSubRoutes = []string{"$(NODE_IP)/32", "$(COREDNS_SVC)/32"}
 
 type ACLPolicy struct {
 	ACLs          []v1alpha1.ACL `json:"acls"`
