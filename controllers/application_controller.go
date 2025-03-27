@@ -440,8 +440,9 @@ func (r *ApplicationReconciler) updateApplication(ctx context.Context, req ctrl.
 	appCopy.Spec.Owner = owner
 	appCopy.Spec.DeploymentName = deployment.GetName()
 	appCopy.Spec.Icon = icon
-
-	appCopy.Spec.TailScale = *tailScale
+	if tailScale != nil {
+		appCopy.Spec.TailScale = *tailScale
+	}
 
 	actionConfig, _, err := helm.InitConfig(r.Kubeconfig, appCopy.Spec.Namespace)
 	if err != nil {
