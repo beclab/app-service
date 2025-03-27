@@ -782,6 +782,11 @@ func (ec *envoyConfig) WithPolicy() *envoyConfig {
 									},
 									{
 										MatchPattern: &matcherv3.StringMatcher_Exact{
+											Exact: "x-real-ip",
+										},
+									},
+									{
+										MatchPattern: &matcherv3.StringMatcher_Exact{
 											Exact: "x-bfl-user",
 										},
 									},
