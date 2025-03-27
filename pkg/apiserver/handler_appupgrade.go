@@ -80,7 +80,7 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
-	err = utils.CheckTailScaleACLs(appConfig.TailScaleACLs)
+	err = utils.CheckTailScaleACLs(appConfig.TailScale.ACLs)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
