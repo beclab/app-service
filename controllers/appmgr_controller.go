@@ -17,6 +17,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/helm"
+	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/task"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/utils"
@@ -381,8 +382,19 @@ func (r *ApplicationManagerController) install(ctx context.Context, appMgr *appv
 	if err != nil {
 		return err
 	}
+
+	admin, err := kubesphere.GetAdminUsername(context.TODO(), kubeConfig)
+	if err != nil {
+		return err
+	}
+	values := map[string]interface{}{
+		"admin": admin,
+		"bfl": map[string]string{
+			"username": appMgr.Spec.AppOwner,
+		},
+	}
 	// get images that need to download
-	refs, err := utils.GetRefFromResourceList(appconfig.ChartsName)
+	refs, err := utils.GetRefFromResourceList(appconfig.ChartsName, values)
 	if err != nil {
 		klog.Infof("get ref err=%v", err)
 		return err
@@ -565,8 +577,13 @@ func (r *ApplicationManagerController) upgrade(ctx context.Context, appMgr *appv
 	token := appMgr.Status.Payload["token"]
 	var chartPath string
 
+	admin, err := kubesphere.GetAdminUsername(ctx, config)
+	if err != nil {
+		return err
+	}
+
 	if !userspace.IsSysApp(appMgr.Spec.AppName) {
-		appconfig, chartPath, err = apiserver.GetAppConfig(ctx, appMgr.Spec.AppName, appMgr.Spec.AppOwner, cfgURL, repoURL, version, token)
+		appconfig, chartPath, err = apiserver.GetAppConfig(ctx, appMgr.Spec.AppName, appMgr.Spec.AppOwner, cfgURL, repoURL, version, token, admin)
 		if err != nil {
 			return err
 		}
@@ -592,8 +609,14 @@ func (r *ApplicationManagerController) upgrade(ctx context.Context, appMgr *appv
 	if err != nil {
 		return err
 	}
+	values := map[string]interface{}{
+		"admin": admin,
+		"bfl": map[string]string{
+			"username": appMgr.Spec.AppOwner,
+		},
+	}
 
-	refs, err := utils.GetRefFromResourceList(chartPath)
+	refs, err := utils.GetRefFromResourceList(chartPath, values)
 	if err != nil {
 		return err
 	}
