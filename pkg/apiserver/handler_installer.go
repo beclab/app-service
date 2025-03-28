@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/http"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -51,9 +49,14 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		api.HandleBadRequest(resp, req, fmt.Errorf("unsupported chart source: %s", insReq.Source))
 		return
 	}
+	admin, err := kubesphere.GetAdminUsername(req.Request.Context(), h.kubeConfig)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
 
 	appConfig, _, err := GetAppConfig(req.Request.Context(), app, owner,
-		insReq.CfgURL, insReq.RepoURL, "", token)
+		insReq.CfgURL, insReq.RepoURL, "", token, admin)
 	if err != nil {
 		klog.Errorf("Failed to get appconfig err=%v", err)
 		api.HandleBadRequest(resp, req, err)
@@ -65,9 +68,20 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	err = utils.CheckTailScaleACLs(appConfig.TailScale.ACLs)
+	installedConflictApp, err := CheckConflicts(req.Request.Context(), appConfig.Conflicts, owner)
 	if err != nil {
 		api.HandleError(resp, req, err)
+		return
+	}
+
+	if len(installedConflictApp) > 0 {
+		api.HandleBadRequest(resp, req, fmt.Errorf("this app conflict with those installed app: %v", installedConflictApp))
+		return
+	}
+
+	err = utils.CheckTailScaleACLs(appConfig.TailScale.ACLs)
+	if err != nil {
+		api.HandleBadRequest(resp, req, err)
 		return
 	}
 
@@ -348,7 +362,7 @@ func (h *Handler) checkDependencies(req *restful.Request, resp *restful.Response
 }
 
 // GetAppConfig get app installation configuration from app store
-func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, token string) (*appinstaller.ApplicationConfig, string, error) {
+func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, token, admin string) (*appinstaller.ApplicationConfig, string, error) {
 	if repoURL == "" {
 		return nil, "", fmt.Errorf("url info is empty, cfg [%s], repo [%s]", cfgURL, repoURL)
 	}
@@ -365,7 +379,7 @@ func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, tok
 			return nil, "", err
 		}
 	} else {
-		appcfg, chartPath, err = getAppConfigFromRepo(ctx, app, repoURL, version, token)
+		appcfg, chartPath, err = getAppConfigFromRepo(ctx, app, repoURL, version, token, owner, admin)
 		if err != nil {
 			return nil, chartPath, err
 		}
@@ -385,20 +399,14 @@ func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, tok
 	return appcfg, chartPath, nil
 }
 
-func getAppConfigFromConfigurationFile(app, chart string) (*appinstaller.ApplicationConfig, string, error) {
-	f, err := os.Open(filepath.Join(chart, AppCfgFileName))
-	if err != nil {
-		return nil, chart, err
-	}
-	defer f.Close()
-
-	data, err := ioutil.ReadAll(f)
+func getAppConfigFromConfigurationFile(app, chart, owner, admin string) (*appinstaller.ApplicationConfig, string, error) {
+	data, err := utils.RenderManifest(filepath.Join(chart, AppCfgFileName), owner, admin)
 	if err != nil {
 		return nil, chart, err
 	}
 
 	var cfg appinstaller.AppConfiguration
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	if err := yaml.Unmarshal([]byte(data), &cfg); err != nil {
 		return nil, chart, err
 	}
 
@@ -424,12 +432,12 @@ func getAppConfigFromURL(ctx context.Context, app, url string) (*appinstaller.Ap
 	return toApplicationConfig(app, app, &cfg)
 }
 
-func getAppConfigFromRepo(ctx context.Context, app, repoURL, version, token string) (*appinstaller.ApplicationConfig, string, error) {
+func getAppConfigFromRepo(ctx context.Context, app, repoURL, version, token, owner, admin string) (*appinstaller.ApplicationConfig, string, error) {
 	chartPath, err := GetIndexAndDownloadChart(ctx, app, repoURL, version, token)
 	if err != nil {
 		return nil, chartPath, err
 	}
-	return getAppConfigFromConfigurationFile(app, chartPath)
+	return getAppConfigFromConfigurationFile(app, chartPath, owner, admin)
 }
 
 func toApplicationConfig(app, chart string, cfg *appinstaller.AppConfiguration) (*appinstaller.ApplicationConfig, string, error) {
@@ -545,6 +553,7 @@ func toApplicationConfig(app, chart string, cfg *appinstaller.AppConfiguration) 
 		AnalyticsEnabled:     cfg.Options.Analytics.Enabled,
 		ResetCookieEnabled:   cfg.Options.ResetCookie.Enabled,
 		Dependencies:         cfg.Options.Dependencies,
+		Conflicts:            cfg.Options.Conflicts,
 		AppScope:             cfg.Options.AppScope,
 		WsConfig:             cfg.Options.WsConfig,
 		Upload:               cfg.Options.Upload,

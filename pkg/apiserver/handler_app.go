@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/dynamic"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -861,4 +862,47 @@ func (h *Handler) getAllUser() ([]string, error) {
 		users = append(users, u.GetName())
 	}
 	return users, nil
+}
+
+func (h *Handler) renderManifest(req *restful.Request, resp *restful.Response) {
+	owner := req.Attribute(constants.UserContextAttribute).(string)
+
+	request := api.ManifestRenderRequest{}
+	err := req.ReadEntity(&request)
+	if err != nil {
+		api.HandleBadRequest(resp, req, err)
+		return
+	}
+	admin, err := kubesphere.GetAdminUsername(req.Request.Context(), h.kubeConfig)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	renderedYAML, err := utils.RenderManifestFromContent([]byte(request.Content), owner, admin)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	resp.WriteEntity(api.ManifestRenderResponse{
+		Response: api.Response{Code: 200},
+		Data:     api.ManifestRenderRespData{Content: renderedYAML},
+	})
+}
+
+func (h *Handler) adminUsername(req *restful.Request, resp *restful.Response) {
+	config, err := ctrl.GetConfig()
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+
+	username, err := kubesphere.GetAdminUsername(req.Request.Context(), config)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	resp.WriteEntity(api.AdminUsernameResponse{
+		Response: api.Response{Code: 200},
+		Data:     api.AdminUsernameRespData{Username: username},
+	})
 }
