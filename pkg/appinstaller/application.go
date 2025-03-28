@@ -71,6 +71,7 @@ type ApplicationConfig struct {
 	AnalyticsEnabled     bool
 	ResetCookieEnabled   bool
 	Dependencies         []Dependency
+	Conflicts            []Conflict
 	AppScope             AppScope
 	WsConfig             WsConfig
 	Upload               Upload

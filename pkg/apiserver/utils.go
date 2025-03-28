@@ -103,7 +103,7 @@ func CheckDependencies(ctx context.Context, deps []appinstaller.Dependency, ctrl
 		return unSatisfiedDeps, err
 	}
 	appToVersion := make(map[string]string)
-	appNames := make([]string, len(applist.Items))
+	appNames := make([]string, 0, len(applist.Items))
 	for _, app := range applist.Items {
 		clusterScoped, _ := strconv.ParseBool(app.Spec.Settings["clusterScoped"])
 		// add app name to list if app is cluster scoped or owner equal app.Spec.Name
@@ -129,6 +129,9 @@ func CheckDependencies(ctx context.Context, deps []appinstaller.Dependency, ctrl
 			}
 		}
 		if dep.Type == constants.DependencyTypeApp {
+			if dep.SelfRely == true {
+				continue
+			}
 			if !set.Has(dep.Name) && dep.Mandatory {
 				unSatisfiedDeps = append(unSatisfiedDeps, dep)
 				if !checkAll {
@@ -228,6 +231,43 @@ func CheckUserResRequirement(ctx context.Context, kubeConfig *rest.Config, appCo
 		}
 	}
 	return "", nil
+}
+
+func CheckConflicts(ctx context.Context, conflicts []appinstaller.Conflict, owner string) ([]string, error) {
+	installedConflictApp := make([]string, 0)
+	client, err := utils.GetClient()
+	if err != nil {
+		return installedConflictApp, err
+	}
+	appSet := sets.NewString()
+	applist, err := client.AppV1alpha1().Applications().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return installedConflictApp, err
+	}
+	for _, app := range applist.Items {
+		if app.Spec.Owner != owner {
+			continue
+		}
+		appSet.Insert(app.Spec.Name)
+	}
+	for _, cf := range conflicts {
+		if cf.Type != "application" {
+			continue
+		}
+		if appSet.Has(cf.Name) {
+			installedConflictApp = append(installedConflictApp, cf.Name)
+		}
+	}
+	return installedConflictApp, nil
+}
+
+type Conflict struct {
+	Name string `yaml:"name" json:"name"`
+	// conflict type: application
+	Type string `yaml:"type" json:"type"`
+}
+type Options struct {
+	Conflicts *[]Conflict `yaml:"conflicts" json:"conflicts"`
 }
 
 // GetClusterResource returns cluster resource metrics and cluster arches.

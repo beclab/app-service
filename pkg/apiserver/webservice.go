@@ -690,6 +690,21 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Param(ws.PathParameter(ParamInstallationID, "the id of a installation or uninstallation")).
 		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to cancel app install", &api.InstallationResponse{}))
+
+	ws.Route(ws.POST("/apps/manifest/render").
+		To(handler.renderManifest).
+		Doc("render olares manifest").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
+		Returns(http.StatusOK, "Success to render olares manifest", &api.ManifestRenderResponse{}))
+
+	ws.Route(ws.GET("/users/admin/username").
+		To(handler.adminUsername).
+		Doc("return admin username").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
+		Returns(http.StatusOK, "Success to get admin username", nil))
+
 	c.Add(ws)
 
 	return nil
