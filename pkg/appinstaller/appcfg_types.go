@@ -94,7 +94,14 @@ type Dependency struct {
 	Version string `yaml:"version" json:"version"`
 	// dependency type: system, application.
 	Type      string `yaml:"type" json:"type"`
-	Mandatory bool   `json:"mandatory"`
+	Mandatory bool   `yaml:"mandatory" json:"mandatory"`
+	SelfRely  bool   `yaml:"selfRely" json:"selfRely"`
+}
+
+type Conflict struct {
+	Name string `yaml:"name" json:"name"`
+	// conflict type: application
+	Type string `yaml:"type" json:"type"`
 }
 
 type Options struct {
@@ -103,6 +110,7 @@ type Options struct {
 	Analytics            Analytics                `yaml:"analytics" json:"analytics"`
 	ResetCookie          ResetCookie              `yaml:"resetCookie" json:"resetCookie"`
 	Dependencies         []Dependency             `yaml:"dependencies" json:"dependencies"`
+	Conflicts            []Conflict               `yaml:"conflicts" json:"conflicts"`
 	AppScope             AppScope                 `yaml:"appScope" json:"appScope"`
 	WsConfig             WsConfig                 `yaml:"websocket" json:"websocket"`
 	Upload               Upload                   `yaml:"upload" json:"upload"`

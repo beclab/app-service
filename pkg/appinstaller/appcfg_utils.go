@@ -1,17 +1,17 @@
 package appinstaller
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
-	"os"
 	"path/filepath"
 	"time"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
+	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 
 	"github.com/emicklei/go-restful/v3"
@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
+	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 const (
@@ -32,7 +33,7 @@ func AppChartPath(app string) string {
 // GetAppInstallationConfig get app installation configuration from app store
 func GetAppInstallationConfig(app, owner string) (*ApplicationConfig, error) {
 	chart := AppChartPath(app)
-	appcfg, err := getAppConfigFromConfigurationFile(app, chart)
+	appcfg, err := getAppConfigFromConfigurationFile(app, chart, owner)
 	if err != nil {
 		return nil, err
 	}
@@ -51,19 +52,30 @@ func GetAppInstallationConfig(app, owner string) (*ApplicationConfig, error) {
 	return appcfg, nil
 }
 
-func getAppConfigFromConfigurationFile(app, chart string) (*ApplicationConfig, error) {
-	f, err := os.Open(filepath.Join(chart, "OlaresManifest.yaml"))
+func getAppConfigFromConfigurationFile(app, chart, owner string) (*ApplicationConfig, error) {
+	//f, err := os.Open(filepath.Join(chart, "OlaresManifest.yaml"))
+	//if err != nil {
+	//	return nil, err
+	//}
+	//defer f.Close()
+	//data, err := ioutil.ReadAll(f)
+	//if err != nil {
+	//	return nil, err
+	//}
+	config, err := ctrl.GetConfig()
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
-	data, err := ioutil.ReadAll(f)
+	admin, err := kubesphere.GetAdminUsername(context.TODO(), config)
 	if err != nil {
 		return nil, err
 	}
-
+	data, err := utils.RenderManifest(filepath.Join(chart, "OlaresManifest.yaml"), owner, admin)
+	if err != nil {
+		return nil, err
+	}
 	var cfg AppConfiguration
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	if err := yaml.Unmarshal([]byte(data), &cfg); err != nil {
 		return nil, err
 	}
 
@@ -162,6 +174,7 @@ func getAppConfigFromConfigurationFile(app, chart string) (*ApplicationConfig, e
 		AnalyticsEnabled:     cfg.Options.Analytics.Enabled,
 		ResetCookieEnabled:   cfg.Options.ResetCookie.Enabled,
 		Dependencies:         cfg.Options.Dependencies,
+		Conflicts:            cfg.Options.Conflicts,
 		AppScope:             cfg.Options.AppScope,
 		OnlyAdmin:            cfg.Spec.OnlyAdmin,
 		Namespace:            cfg.Spec.Namespace,

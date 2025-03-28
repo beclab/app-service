@@ -8,6 +8,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/helm"
+	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 
 	"github.com/emicklei/go-restful/v3"
@@ -75,7 +76,13 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 
 	token := req.HeaderParameter(constants.AuthorizationTokenKey)
 
-	appConfig, _, err := GetAppConfig(req.Request.Context(), app, owner, request.CfgURL, request.RepoURL, request.Version, token)
+	admin, err := kubesphere.GetAdminUsername(req.Request.Context(), h.kubeConfig)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+
+	appConfig, _, err := GetAppConfig(req.Request.Context(), app, owner, request.CfgURL, request.RepoURL, request.Version, token, admin)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
