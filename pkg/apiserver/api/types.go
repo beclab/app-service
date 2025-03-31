@@ -112,6 +112,27 @@ type InstallRequest struct {
 	Source  AppSource `json:"source"`
 }
 
+type ManifestRenderRequest struct {
+	Content string `json:"content"`
+}
+
+type ManifestRenderResponse struct {
+	Response
+	Data ManifestRenderRespData `json:"data"`
+}
+type ManifestRenderRespData struct {
+	Content string `json:"content"`
+}
+
+type AdminUsernameResponse struct {
+	Response
+	Data AdminUsernameRespData `json:"data"`
+}
+
+type AdminUsernameRespData struct {
+	Username string `json:"username"`
+}
+
 // ResponseWithMsg represents  a response with an additional message.
 type ResponseWithMsg struct {
 	Response
