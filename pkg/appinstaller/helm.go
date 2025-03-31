@@ -1012,6 +1012,13 @@ func (h *HelmOps) createOIDCClient(values map[string]interface{}, userZone, name
 }
 
 func (h *HelmOps) waitForLaunch() (bool, error) {
+	if h.options.Source == "devbox" {
+		req := reconcile.Request{NamespacedName: types.NamespacedName{
+			Namespace: h.app.OwnerName,
+		}}
+		task.WQueue.(*task.Type).SetCompleted(req)
+		return true, nil
+	}
 	ok := h.waitForStartUp()
 	if !ok {
 		return false, api.ErrStartUpFailed
