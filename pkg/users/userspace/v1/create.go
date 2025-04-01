@@ -237,6 +237,9 @@ func (c *Creator) installSysApps(ctx context.Context, bflPod *corev1.Pod) error 
 			"appSecret": s,
 		}
 	}
+	osVals["appstore"] = map[string]interface{}{
+		"marketProvider": os.Getenv("MARKET_PROVIDER"),
+	}
 	vals["os"] = osVals
 
 	var arch string
