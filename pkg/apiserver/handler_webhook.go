@@ -291,17 +291,11 @@ func (h *Handler) gpuLimitMutate(ctx context.Context, req *admissionv1.Admission
 		return h.sidecarWebhook.AdmissionError(req.UID, err)
 	}
 
-	// no gpu found or gpu required is zero, no need to inject env, just return.
-	if GPUType == "" || gpuRequired.IsZero() {
+	// no gpu found, no need to inject env, just return.
+	if GPUType == "" {
 		return resp
 	}
 
-	//if gpuRequired.IsZero() && GPUType == "" {
-	//	return resp
-	//}
-	//if !gpuRequired.IsZero() && GPUType == "" {
-	//	return h.sidecarWebhook.AdmissionError(req.UID, api.ErrGPUNodeNotFound)
-	//}
 	terminus, err := upgrade.GetTerminusVersion(ctx, h.ctrlClient)
 	if err != nil {
 		return h.sidecarWebhook.AdmissionError(req.UID, err)
