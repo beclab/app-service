@@ -9,6 +9,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/prometheus"
 
 	"github.com/emicklei/go-restful/v3"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 func (h *Handler) userMetrics(req *restful.Request, resp *restful.Response) {
@@ -34,6 +35,8 @@ func (h *Handler) clusterResource(req *restful.Request, resp *restful.Response) 
 		return
 	}
 	type App struct {
+		Title   string `json:"title"`
+		State   string `json:"state"`
 		Name    string `json:"name"`
 		Type    string `json:"type"`
 		Version string `json:"version"`
@@ -50,13 +53,18 @@ func (h *Handler) clusterResource(req *restful.Request, resp *restful.Response) 
 		if am.Spec.Type != v1alpha1.Middleware {
 			continue
 		}
-		if am.Status.State == v1alpha1.Completed && am.Status.OpType == v1alpha1.InstallOp {
-			apps = append(apps, App{
-				Name:    am.Spec.AppName,
-				Type:    am.Spec.Type.String(),
-				Version: am.Status.Payload["version"],
-			})
+		s, err := getMiddlewareStatus(req.Request.Context(), h.kubeConfig, am.Spec.AppName, am.Spec.AppOwner)
+		if err != nil && !apierrors.IsNotFound(err) {
+			api.HandleError(resp, req, err)
+			return
 		}
+		apps = append(apps, App{
+			Title:   s.Title,
+			Name:    am.Spec.AppName,
+			Type:    am.Spec.Type.String(),
+			Version: am.Status.Payload["version"],
+			State:   s.ResourceStatus,
+		})
 
 	}
 
@@ -67,16 +75,25 @@ func (h *Handler) clusterResource(req *restful.Request, resp *restful.Response) 
 		return
 	}
 	for _, a := range appList.Items {
-		if a.Status.State != v1alpha1.AppRunning.String() {
-			continue
-		}
+		//if a.Status.State != v1alpha1.AppRunning.String() {
+		//	continue
+		//}
 		if a.Spec.Settings["clusterScoped"] != "true" {
 			continue
 		}
+		title := ""
+		for i := range a.Spec.Entrances {
+			if !a.Spec.Entrances[i].Invisible {
+				title = a.Spec.Entrances[i].Title
+				break
+			}
+		}
 		apps = append(apps, App{
+			Title:   title,
 			Name:    a.Spec.Name,
 			Type:    "app",
 			Version: a.Spec.Settings["version"],
+			State:   a.Status.State,
 		})
 	}
 
