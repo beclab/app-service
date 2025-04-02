@@ -253,6 +253,10 @@ func (h *Handler) uninstall(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
+	if application.Spec.IsSysApp {
+		api.HandleBadRequest(resp, req, errors.New("can not uninstall sys app"))
+		return
+	}
 	if !(application.Status.State == v1alpha1.AppSuspend.String() ||
 		application.Status.State == v1alpha1.AppResuming.String() ||
 		application.Status.State == v1alpha1.AppRunning.String()) {
