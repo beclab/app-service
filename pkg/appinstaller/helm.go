@@ -347,7 +347,7 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 			if perm == AppCacheRW {
 				userspace["appCache"] = appCachePath
 				if h.options.Source == "devbox" {
-					userspace["appCache"] = filepath.Join(appCachePath, "Studio")
+					userspace["appCache"] = filepath.Join(appCachePath, "studio")
 				}
 			}
 			if perm == UserDataRW {
@@ -357,7 +357,7 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 				appData := fmt.Sprintf("%s/Data", userspacePath)
 				userspace["appData"] = appData
 				if h.options.Source == "devbox" {
-					userspace["appData"] = filepath.Join(appData, "Studio")
+					userspace["appData"] = filepath.Join(appData, "studio")
 				}
 			}
 
