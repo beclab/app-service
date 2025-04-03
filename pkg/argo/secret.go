@@ -83,10 +83,6 @@ func createFakes3SecretAndRole(clientset *kubernetes.Clientset, namespace string
 func createFakes3Secret(clientset kubernetes.Interface, namespace string) error {
 	secret, err := clientset.CoreV1().Secrets(namespace).Get(context.Background(), fakes3SecretName, metav1.GetOptions{})
 	if err != nil {
-		klog.Warningf("Failed to createFakes3Secret namespace=%s err=%v", namespace, err)
-		if errors.IsAlreadyExists(err) {
-			return nil
-		}
 		if !errors.IsNotFound(err) {
 			return err
 		}
@@ -101,7 +97,6 @@ func createFakes3Secret(clientset kubernetes.Interface, namespace string) error 
 	}
 
 	secret = obj.(*corev1.Secret)
-	klog.Infof("Secret:%+v", secret)
 
 	_, err = clientset.CoreV1().Secrets(namespace).Create(context.Background(), secret, metav1.CreateOptions{})
 	if err != nil {
@@ -118,10 +113,6 @@ func createWorkflowRole(clientset kubernetes.Interface, namespace string) error 
 	rolesClient := clientset.RbacV1().Roles(namespace)
 	role, err := rolesClient.Get(context.Background(), workflowRoleName, metav1.GetOptions{})
 	if err != nil {
-		klog.Warningf("Failed to createWorkflowRole namespace=%s err=%v", namespace, err)
-		if errors.IsAlreadyExists(err) {
-			return nil
-		}
 		if !errors.IsNotFound(err) {
 			return err
 		}
@@ -135,7 +126,6 @@ func createWorkflowRole(clientset kubernetes.Interface, namespace string) error 
 	}
 
 	role = obj.(*rbacv1.Role)
-	klog.Infof("Role:%+v", role)
 
 	_, err = rolesClient.Create(context.Background(), role, metav1.CreateOptions{})
 	if err != nil {
@@ -152,10 +142,6 @@ func createWorkflowRoleBinding(clientset kubernetes.Interface, namespace string)
 	roleBindingsClient := clientset.RbacV1().RoleBindings(namespace)
 	rolebinding, err := roleBindingsClient.Get(context.Background(), workflowRoleBindingName, metav1.GetOptions{})
 	if err != nil {
-		klog.Warningf("Failed to createWorkflowRoleBinding namespace=%s err=%v", namespace, err)
-		if errors.IsAlreadyExists(err) {
-			return nil
-		}
 		if !errors.IsNotFound(err) {
 			return err
 		}
@@ -169,7 +155,6 @@ func createWorkflowRoleBinding(clientset kubernetes.Interface, namespace string)
 	}
 
 	rolebinding = obj.(*rbacv1.RoleBinding)
-	klog.Infof("Rolebinding:%+v", rolebinding)
 
 	_, err = roleBindingsClient.Create(context.Background(), rolebinding, metav1.CreateOptions{})
 	if err != nil {
