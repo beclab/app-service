@@ -37,6 +37,7 @@ require (
 	golang.org/x/exp v0.0.0-20231108232855-2478ac86f678
 	google.golang.org/protobuf v1.31.0
 	gopkg.in/yaml.v2 v2.4.0
+	gotest.tools/v3 v3.0.3
 	helm.sh/helm/v3 v3.10.1
 	k8s.io/api v0.26.2
 	k8s.io/apimachinery v0.26.2

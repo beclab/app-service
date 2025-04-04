@@ -540,11 +540,18 @@ func TryToGetAppdataDirFromDeployment(ctx context.Context, namespace, name, owne
 		}
 		return
 	}
-
+	hostDirSet := sets.NewString()
 	for _, v := range deployment.Spec.Template.Spec.Volumes {
 		if v.HostPath != nil && strings.HasPrefix(v.HostPath.Path, appCachePath) && len(v.HostPath.Path) > len(appCachePath) {
 			appdirs = append(appdirs, filepath.Base(v.HostPath.Path))
-			hostdirs = append(hostdirs, v.HostPath.Path)
+			hostDir := GetFirstSubDir(v.HostPath.Path, appCachePath)
+			if hostDir != "" {
+				if hostDirSet.Has(hostDir) {
+					continue
+				}
+				hostdirs = append(hostdirs, hostDir)
+				hostDirSet.Insert(hostDir)
+			}
 		}
 	}
 	return appdirs, hostdirs, nil
@@ -565,11 +572,44 @@ func tryToGetAppdataDirFromSts(ctx context.Context, namespace, stsName, baseDir 
 	if err != nil {
 		return
 	}
+	hostDirSet := sets.NewString()
 	for _, v := range sts.Spec.Template.Spec.Volumes {
 		if v.HostPath != nil && strings.HasPrefix(v.HostPath.Path, baseDir) && len(v.HostPath.Path) > len(baseDir) {
 			appdirs = append(appdirs, filepath.Base(v.HostPath.Path))
-			hostdirs = append(hostdirs, v.HostPath.Path)
+			hostDir := GetFirstSubDir(v.HostPath.Path, baseDir)
+
+			if hostDir != "" {
+				if hostDirSet.Has(hostDir) {
+					continue
+				}
+				hostdirs = append(hostdirs, hostDir)
+				hostDirSet.Insert(hostDir)
+			}
 		}
 	}
 	return appdirs, hostdirs, nil
+}
+
+func GetFirstSubDir(fullPath, basePath string) string {
+	if basePath == "" {
+		return ""
+	}
+	if !strings.HasSuffix(basePath, "/") {
+		basePath += "/"
+	}
+
+	if !strings.HasPrefix(fullPath, basePath) {
+		return ""
+	}
+
+	relPath := strings.TrimPrefix(fullPath, basePath)
+	if relPath == "" {
+		return ""
+	}
+
+	parts := strings.Split(relPath, "/")
+	if len(parts) == 0 {
+		return ""
+	}
+	return filepath.Join(basePath, parts[0])
 }
