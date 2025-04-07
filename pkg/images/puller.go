@@ -99,6 +99,7 @@ func (is *imageService) PullImage(ctx context.Context, ref appv1alpha1.Ref, opts
 		containerd.WithPullLabels(labels),
 		containerd.WithResolver(config.Resolver),
 		containerd.WithImageHandler(h),
+		containerd.WithPullUnpack,
 		containerd.WithSchema1Conversion,
 	}
 	if config.AllMetadata {
