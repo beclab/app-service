@@ -50,7 +50,7 @@ metadata:
   namespace: %s
 subjects:
   - kind: ServiceAccount
-    namespace: os-system
+    namespace: %[2]s
     name: default
 roleRef:
   kind: Role

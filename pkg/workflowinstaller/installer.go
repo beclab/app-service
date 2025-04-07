@@ -3,7 +3,6 @@ package workflowinstaller
 import (
 	"context"
 	"errors"
-	"fmt"
 	"path/filepath"
 
 	"bytetrade.io/web3os/app-service/pkg/argo"
@@ -41,8 +40,9 @@ func Install(ctx context.Context, kubeConfig *rest.Config, workflow *WorkflowCon
 		klog.Errorf("Failed to install workflow chart name=%s err=%v", workflow.WorkflowName, err)
 		return err
 	}
-
-	instanceID := "user-space-" + workflow.OwnerName
+	klog.Infof("install workflow old instanceID: %s", "user-space-"+workflow.OwnerName)
+	instanceID := "os-system"
+	//instanceID := "user-space-" + workflow.OwnerName
 	return argo.UpdateWorkflowInNamespace(ctx, kubeConfig, workflow.WorkflowName,
 		workflow.Namespace, instanceID, workflow.OwnerName, workflow.Cfg.Metadata.Title, workflow.Cfg.Options.SyncProvider)
 }
@@ -95,7 +95,9 @@ func Upgrade(ctx context.Context, kubeConfig *rest.Config, workflow *WorkflowCon
 		return err
 	}
 
-	instanceID := "user-space-" + workflow.OwnerName
+	//instanceID := "user-space-" + workflow.OwnerName
+	klog.Infof("install workflow old instanceID: %s", "user-space-"+workflow.OwnerName)
+	instanceID := "os-system"
 	return argo.UpdateWorkflowInNamespace(ctx, kubeConfig, workflow.WorkflowName,
 		workflow.Namespace, instanceID, workflow.OwnerName, workflow.Cfg.Metadata.Title, workflow.Cfg.Options.SyncProvider)
 }
@@ -106,16 +108,16 @@ func getSettings(ctx context.Context, kubeConfig *rest.Config, workflow *Workflo
 		"username": workflow.OwnerName,
 	}
 
-	values["apiUrl"] = fmt.Sprintf("http://knowledge-base-api.user-system-%s:3010", workflow.OwnerName)
+	//values["apiUrl"] = fmt.Sprintf("http://knowledge-base-api.user-system-%s:3010", workflow.OwnerName)
 	values["title"] = workflow.Cfg.Metadata.Title
 
-	appData, appCache, userdata, err := getAppData(ctx, kubeConfig, workflow.OwnerName)
+	/*appData, appCache, userdata, err := getAppData(ctx, kubeConfig, workflow.OwnerName)
 	if err != nil {
 		klog.Errorf("Failed to get user appdata err=%v", err)
 		return nil, err
-	}
+	}*/
 	userspce := make(map[string]interface{})
-	if workflow.Cfg.Permission.AppData {
+	/*if workflow.Cfg.Permission.AppData {
 		userspce["appData"] = appData
 	}
 	if workflow.Cfg.Permission.AppCache {
@@ -123,7 +125,7 @@ func getSettings(ctx context.Context, kubeConfig *rest.Config, workflow *Workflo
 	}
 	if len(workflow.Cfg.Permission.UserData) > 0 {
 		userspce["userData"] = userdata
-	}
+	}*/
 	values["userspace"] = userspce
 	return values, nil
 }
