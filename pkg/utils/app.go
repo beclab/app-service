@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -500,7 +499,7 @@ func parseDestination(dest string) (string, string, error) {
 	return alias, tokens[len(tokens)-1], nil
 }
 
-func TryToGetAppdataDirFromDeployment(ctx context.Context, namespace, name, owner string) (appdirs, hostdirs []string, err error) {
+func TryToGetAppdataDirFromDeployment(ctx context.Context, namespace, name, owner string) (appdirs []string, err error) {
 	userspaceNs := UserspaceName(owner)
 	config, err := ctrl.GetConfig()
 	if err != nil {
@@ -540,24 +539,23 @@ func TryToGetAppdataDirFromDeployment(ctx context.Context, namespace, name, owne
 		}
 		return
 	}
-	hostDirSet := sets.NewString()
+	appDirSet := sets.NewString()
 	for _, v := range deployment.Spec.Template.Spec.Volumes {
 		if v.HostPath != nil && strings.HasPrefix(v.HostPath.Path, appCachePath) && len(v.HostPath.Path) > len(appCachePath) {
-			appdirs = append(appdirs, filepath.Base(v.HostPath.Path))
-			hostDir := GetFirstSubDir(v.HostPath.Path, appCachePath)
-			if hostDir != "" {
-				if hostDirSet.Has(hostDir) {
+			appDir := GetFirstSubDir(v.HostPath.Path, appCachePath)
+			if appDir != "" {
+				if appDirSet.Has(appDir) {
 					continue
 				}
-				hostdirs = append(hostdirs, hostDir)
-				hostDirSet.Insert(hostDir)
+				appdirs = append(appdirs, appDir)
+				appDirSet.Insert(appDir)
 			}
 		}
 	}
-	return appdirs, hostdirs, nil
+	return appdirs, nil
 }
 
-func tryToGetAppdataDirFromSts(ctx context.Context, namespace, stsName, baseDir string) (appdirs, hostdirs []string, err error) {
+func tryToGetAppdataDirFromSts(ctx context.Context, namespace, stsName, baseDir string) (appdirs []string, err error) {
 	config, err := ctrl.GetConfig()
 	if err != nil {
 		return
@@ -572,22 +570,20 @@ func tryToGetAppdataDirFromSts(ctx context.Context, namespace, stsName, baseDir 
 	if err != nil {
 		return
 	}
-	hostDirSet := sets.NewString()
+	appDirSet := sets.NewString()
 	for _, v := range sts.Spec.Template.Spec.Volumes {
 		if v.HostPath != nil && strings.HasPrefix(v.HostPath.Path, baseDir) && len(v.HostPath.Path) > len(baseDir) {
-			appdirs = append(appdirs, filepath.Base(v.HostPath.Path))
-			hostDir := GetFirstSubDir(v.HostPath.Path, baseDir)
-
-			if hostDir != "" {
-				if hostDirSet.Has(hostDir) {
+			appDir := GetFirstSubDir(v.HostPath.Path, baseDir)
+			if appDir != "" {
+				if appDirSet.Has(appDir) {
 					continue
 				}
-				hostdirs = append(hostdirs, hostDir)
-				hostDirSet.Insert(hostDir)
+				appdirs = append(appdirs, appDir)
+				appDirSet.Insert(appDir)
 			}
 		}
 	}
-	return appdirs, hostdirs, nil
+	return appdirs, nil
 }
 
 func GetFirstSubDir(fullPath, basePath string) string {
@@ -611,5 +607,5 @@ func GetFirstSubDir(fullPath, basePath string) string {
 	if len(parts) == 0 {
 		return ""
 	}
-	return filepath.Join(basePath, parts[0])
+	return parts[0]
 }
