@@ -1,7 +1,9 @@
 package apiserver
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"os"
 	"time"
 
@@ -100,6 +102,11 @@ func (h *Handler) upgrade(req *restful.Request, resp *restful.Response) {
 	var job batchv1.Job
 	mode := req.QueryParameter("dev_mode")
 
+	if err := h.nodeReady(req.Request.Context()); err != nil {
+		responseError(resp, err)
+		return
+	}
+
 	err := h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Namespace: JobNamespace, Name: UpgradeJobName}, &job)
 	if client.IgnoreNotFound(err) != nil {
 		responseError(resp, err)
@@ -195,4 +202,30 @@ func jobStatus(item *batchv1.Job) string {
 		status = StatusFailed
 	}
 	return status
+}
+
+func (h *Handler) nodeReady(ctx context.Context) error {
+	var nodes corev1.NodeList
+	err := h.ctrlClient.List(ctx, &nodes)
+	if err != nil {
+		return err
+	}
+
+	checkList := map[corev1.NodeConditionType]func(condition *corev1.NodeCondition) bool{
+		corev1.NodeReady:              func(condition *corev1.NodeCondition) bool { return condition.Status == corev1.ConditionTrue },
+		corev1.NodeNetworkUnavailable: func(condition *corev1.NodeCondition) bool { return condition.Status == corev1.ConditionFalse },
+		corev1.NodeDiskPressure:       func(condition *corev1.NodeCondition) bool { return condition.Status == corev1.ConditionFalse },
+		corev1.NodePIDPressure:        func(condition *corev1.NodeCondition) bool { return condition.Status == corev1.ConditionFalse },
+		corev1.NodeMemoryPressure:     func(condition *corev1.NodeCondition) bool { return condition.Status == corev1.ConditionFalse },
+	}
+
+	for _, node := range nodes.Items {
+		for _, condition := range node.Status.Conditions {
+			if !checkList[condition.Type](&condition) {
+				return fmt.Errorf("node status is not ready: %s: %s", condition.Type, condition.Status)
+			}
+		}
+	}
+
+	return nil
 }
