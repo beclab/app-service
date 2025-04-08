@@ -41,8 +41,8 @@ func Install(ctx context.Context, kubeConfig *rest.Config, workflow *WorkflowCon
 		return err
 	}
 	klog.Infof("install workflow old instanceID: %s", "user-space-"+workflow.OwnerName)
-	instanceID := "os-system"
-	//instanceID := "user-space-" + workflow.OwnerName
+	//instanceID := "os-system"
+	instanceID := "user-space-" + workflow.OwnerName
 	return argo.UpdateWorkflowInNamespace(ctx, kubeConfig, workflow.WorkflowName,
 		workflow.Namespace, instanceID, workflow.OwnerName, workflow.Cfg.Metadata.Title, workflow.Cfg.Options.SyncProvider)
 }
@@ -108,16 +108,16 @@ func getSettings(ctx context.Context, kubeConfig *rest.Config, workflow *Workflo
 		"username": workflow.OwnerName,
 	}
 
-	//values["apiUrl"] = fmt.Sprintf("http://knowledge-base-api.user-system-%s:3010", workflow.OwnerName)
+	values["apiUrl"] = "http://knowledge-base-api.os-system:3010"
 	values["title"] = workflow.Cfg.Metadata.Title
 
-	/*appData, appCache, userdata, err := getAppData(ctx, kubeConfig, workflow.OwnerName)
+	appData, appCache, userdata, err := getAppData(ctx, kubeConfig, workflow.OwnerName)
 	if err != nil {
 		klog.Errorf("Failed to get user appdata err=%v", err)
 		return nil, err
-	}*/
+	}
 	userspce := make(map[string]interface{})
-	/*if workflow.Cfg.Permission.AppData {
+	if workflow.Cfg.Permission.AppData {
 		userspce["appData"] = appData
 	}
 	if workflow.Cfg.Permission.AppCache {
@@ -125,7 +125,7 @@ func getSettings(ctx context.Context, kubeConfig *rest.Config, workflow *Workflo
 	}
 	if len(workflow.Cfg.Permission.UserData) > 0 {
 		userspce["userData"] = userdata
-	}*/
+	}
 	values["userspace"] = userspce
 	return values, nil
 }
