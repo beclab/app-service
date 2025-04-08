@@ -109,7 +109,7 @@ func getSettings(ctx context.Context, kubeConfig *rest.Config, workflow *Workflo
 		"username": workflow.OwnerName,
 	}
 
-	values["apiUrl"] = "http://knowledge-base-api.os-system:3010"
+	values["apiUrl"] = "http://rss-svc.os-system:3010"
 	values["title"] = workflow.Cfg.Metadata.Title
 
 	appData, appCache, userdata, err := getAppData(ctx, kubeConfig, workflow.OwnerName)
