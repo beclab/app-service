@@ -121,7 +121,7 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 	now := metav1.Now()
 	status := appv1alpha1.ApplicationManagerStatus{
 		OpType:  appv1alpha1.UpgradeOp,
-		State:   appv1alpha1.Pending,
+		State:   appv1alpha1.Upgrading,
 		Message: "waiting for upgrade",
 		Payload: map[string]string{
 			"cfgURL":  request.CfgURL,

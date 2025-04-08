@@ -128,9 +128,9 @@ func (r *ImageManagerController) reconcile(instance *appv1alpha1.ImageManager) {
 	if err != nil {
 		klog.Infof("download failed err=%v", err)
 
-		state := appv1alpha1.Failed.String()
+		state := "failed"
 		if errors.Is(err, context.Canceled) {
-			state = appv1alpha1.Canceled.String()
+			state = appv1alpha1.DownloadingCanceled.String()
 		}
 		err = r.updateStatus(ctx, instance, state, err.Error())
 		if err != nil {
@@ -146,7 +146,7 @@ func (r *ImageManagerController) reconcile(instance *appv1alpha1.ImageManager) {
 func (r *ImageManagerController) preEnqueueCheckForCreate(obj client.Object) bool {
 	im, _ := obj.(*appv1alpha1.ImageManager)
 	klog.Infof("enqueue check: %v", im.Status.State)
-	if im.Status.State == appv1alpha1.Failed.String() || im.Status.State == appv1alpha1.Canceled.String() || im.Status.State == appv1alpha1.Completed.String() {
+	if im.Status.State == "failed" || im.Status.State == appv1alpha1.DownloadingCanceled.String() || im.Status.State == "completed" {
 		return false
 	}
 	return true

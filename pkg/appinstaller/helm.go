@@ -10,6 +10,7 @@ import (
 	"net/http/httputil"
 	"os"
 	"path/filepath"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strconv"
 	"time"
 
@@ -41,7 +42,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	//"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -65,6 +66,8 @@ type HelmOpsInterface interface {
 	Upgrade() error
 	// RollBack is the action for rollback a release.
 	RollBack() error
+	Install2() error
+	WaitForLaunch() (bool, error)
 }
 
 // Opt options for helm ops.
@@ -74,7 +77,7 @@ type Opt struct {
 
 // HelmOps implements HelmOpsInterface.
 type HelmOps struct {
-	HelmOpsInterface
+	//HelmOpsInterface
 	ctx          context.Context
 	kubeConfig   *rest.Config
 	actionConfig *action.Configuration
@@ -164,7 +167,7 @@ func (h *HelmOps) Install() error {
 }
 
 // NewHelmOps constructs a new helmOps.
-func NewHelmOps(ctx context.Context, kubeConfig *rest.Config, app *ApplicationConfig, token string, options Opt) (*HelmOps, error) {
+func NewHelmOps(ctx context.Context, kubeConfig *rest.Config, app *ApplicationConfig, token string, options Opt) (HelmOpsInterface, error) {
 	actionConfig, settings, err := helm.InitConfig(kubeConfig, app.Namespace)
 	if err != nil {
 		return nil, err
@@ -745,7 +748,7 @@ func (h *HelmOps) upgrade() error {
 	}
 	err = h.addApplicationLabelsToDeployment()
 	if err != nil {
-		h.rollBack()
+		//h.rollBack()
 		return err
 	}
 
@@ -774,7 +777,7 @@ func (h *HelmOps) upgrade() error {
 	if isDepClusterScopedApp {
 		err = h.addLabelToNamespaceForDependClusterApp()
 		if err != nil {
-			h.rollBack()
+			//h.rollBack()
 			return err
 		}
 	}
@@ -883,12 +886,12 @@ func (h *HelmOps) upgrade() error {
 		return err
 	}
 
-	ok, err := h.waitForLaunch()
-	if !ok {
-		// canceled
-		h.rollBack()
-		return err
-	}
+	//ok, err := h.waitForLaunch()
+	//if !ok {
+	//	// canceled
+	//	h.rollBack()
+	//	return err
+	//}
 
 	return nil
 }
@@ -1043,7 +1046,7 @@ func (h *HelmOps) waitForStartUp() bool {
 	for {
 		select {
 		case <-timer.C:
-			startedUp := h.isStartUp()
+			startedUp, _ := h.isStartUp()
 			if startedUp {
 				name, _ := utils.FmtAppMgrName(h.app.AppName, h.app.OwnerName, h.app.Namespace)
 				appMgr := &appv1alpha1.ApplicationManager{
@@ -1055,7 +1058,7 @@ func (h *HelmOps) waitForStartUp() bool {
 						AppOwner: h.app.OwnerName,
 					},
 				}
-				err := utils.UpdateAppState(h.ctx, appMgr, appv1alpha1.AppInitializing)
+				err := utils.UpdateAppState(h.ctx, appMgr, appv1alpha1.AppInitializing.String())
 				if err != nil {
 					klog.Errorf("update app state err=%v", err)
 				}
@@ -1071,7 +1074,7 @@ func (h *HelmOps) waitForStartUp() bool {
 	}
 }
 
-func (h *HelmOps) isStartUp() bool {
+func (h *HelmOps) isStartUp() (bool, error) {
 	var labelSelector string
 	deployment, err := h.client.KubeClient.Kubernetes().AppsV1().Deployments(h.app.Namespace).
 		Get(h.ctx, h.app.AppName, metav1.GetOptions{})
@@ -1084,14 +1087,14 @@ func (h *HelmOps) isStartUp() bool {
 		sts, err := h.client.KubeClient.Kubernetes().AppsV1().StatefulSets(h.app.Namespace).
 			Get(h.ctx, h.app.AppName, metav1.GetOptions{})
 		if err != nil {
-			return false
+			return false, err
 		}
 		labelSelector = metav1.FormatLabelSelector(sts.Spec.Selector)
 	}
 	pods, err := h.client.KubeClient.Kubernetes().CoreV1().Pods(h.app.Namespace).
 		List(h.ctx, metav1.ListOptions{LabelSelector: labelSelector})
 	if len(pods.Items) == 0 {
-		return false
+		return false, errors.New("no pod found")
 	}
 	for _, pod := range pods.Items {
 		totalContainers := len(pod.Spec.Containers)
@@ -1103,10 +1106,10 @@ func (h *HelmOps) isStartUp() bool {
 			}
 		}
 		if startedContainers == totalContainers {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
 type applicationSettingsSubPolicy struct {
@@ -1222,4 +1225,99 @@ func parseAppPermission(data []AppPermission) []AppPermission {
 		}
 	}
 	return permissions
+}
+
+func (h *HelmOps) Install2() error {
+	var err error
+	values, err := h.setValues()
+	if err != nil {
+		klog.Errorf("set values err %v", err)
+		return err
+	}
+	namespace := fmt.Sprintf("%s-%s", "user-system", h.app.OwnerName)
+	if err := tapr.Apply(h.app.Middleware, h.kubeConfig, h.app.AppName, h.app.Namespace,
+		namespace, h.token, h.app.ChartsName, h.app.OwnerName, values); err != nil {
+		klog.Errorf("Failed to apply middleware err=%v", err)
+		return err
+	}
+	err = h.install(values)
+	if err != nil && !errors.Is(err, driver.ErrReleaseExists) {
+		klog.Errorf("Failed to install chart err=%v", err)
+		return err
+	}
+	err = h.addApplicationLabelsToDeployment()
+	if err != nil {
+		h.Uninstall()
+		return err
+	}
+
+	isDepClusterScopedApp := false
+	client, err := versioned.NewForConfig(h.kubeConfig)
+	if err != nil {
+		return err
+	}
+	apps, err := client.AppV1alpha1().Applications().List(h.ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+
+	for _, dep := range h.app.Dependencies {
+		if dep.Type == constants.DependencyTypeSystem {
+			continue
+		}
+		for _, app := range apps.Items {
+			if app.Spec.Name == dep.Name && app.Spec.Settings["clusterScoped"] == "true" {
+				isDepClusterScopedApp = true
+				break
+			}
+		}
+
+	}
+	if isDepClusterScopedApp {
+		err = h.addLabelToNamespaceForDependClusterApp()
+		if err != nil {
+			h.Uninstall()
+			return err
+		}
+	}
+
+	ok := h.waitForStartUp()
+	if !ok {
+		h.Uninstall()
+		return err
+	}
+	return nil
+}
+
+func (h *HelmOps) WaitForLaunch() (bool, error) {
+	//req := reconcile.Request{NamespacedName: types.NamespacedName{
+	//	Namespace: h.app.OwnerName,
+	//}}
+	//task.WQueue.(*task.Type).SetCompleted(req)
+	//
+	//klog.Infof("dequeue username:%s,appname:%s", h.app.OwnerName, h.app.AppName)
+
+	timer := time.NewTicker(2 * time.Second)
+	entrances := h.app.Entrances
+	entranceCount := len(entrances)
+	for {
+		select {
+		case <-timer.C:
+			count := 0
+			for _, e := range entrances {
+				klog.Info("Waiting service for launch :", e.Host)
+				host := fmt.Sprintf("%s.%s", e.Host, h.app.Namespace)
+				if utils.TryConnect(host, strconv.Itoa(int(e.Port))) {
+					count++
+				}
+			}
+			if entranceCount == count {
+				return true, nil
+			}
+
+		case <-h.ctx.Done():
+			klog.Infof("Waiting for launch canceled appName=%s", h.app.AppName)
+			return false, h.ctx.Err()
+		}
+	}
 }

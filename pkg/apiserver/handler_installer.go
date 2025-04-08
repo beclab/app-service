@@ -70,7 +70,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 
 	installedConflictApp, err := CheckConflicts(req.Request.Context(), appConfig.Conflicts, owner)
 	if err != nil {
-		api.HandleError(resp, req, err)
+		api.HandleBadRequest(resp, req, err)
 		return
 	}
 
@@ -224,6 +224,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		Progress:   "0.00",
 		StatusTime: &now,
 		UpdateTime: &now,
+		OpTime:     &now,
 	}
 	a, err = utils.UpdateAppMgrStatus(name, status)
 
@@ -257,16 +258,16 @@ func (h *Handler) uninstall(req *restful.Request, resp *restful.Response) {
 		api.HandleBadRequest(resp, req, errors.New("can not uninstall sys app"))
 		return
 	}
-	if !(application.Status.State == v1alpha1.AppSuspend.String() ||
-		application.Status.State == v1alpha1.AppResuming.String() ||
-		application.Status.State == v1alpha1.AppRunning.String()) {
-		api.HandleBadRequest(resp, req, api.ErrNotSupportOperation)
-		return
-	}
+
+	//if application.Status.State == v1alpha1.Pending.String() ||
+	//	application.Status.State == v1alpha1.Downloading.String() {
+	//
+	//}
 
 	now := metav1.Now()
 	status := v1alpha1.ApplicationManagerStatus{
 		OpType: v1alpha1.UninstallOp,
+		State:  v1alpha1.Uninstalling,
 		Payload: map[string]string{
 			"token": token,
 		},
@@ -295,15 +296,24 @@ func (h *Handler) cancel(req *restful.Request, resp *restful.Response) {
 		cancelType = "operate"
 	}
 
+	name, err := utils.FmtAppMgrName(app, owner, "")
+	var am v1alpha1.ApplicationManager
+	err = h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: name}, &am)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+
 	now := metav1.Now()
 	status := v1alpha1.ApplicationManagerStatus{
 		OpType:     v1alpha1.CancelOp,
+		LastState:  am.Status.LastState,
+		State:      v1alpha1.Canceling,
 		Progress:   "0.00",
 		Message:    cancelType,
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
-	name, err := utils.FmtAppMgrName(app, owner, "")
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -669,17 +679,17 @@ func (h *Handler) installRecommend(req *restful.Request, resp *restful.Response)
 	}
 
 	opRecord := v1alpha1.OpRecord{
-		OpType:     v1alpha1.InstallOp,
-		Version:    workflowCfg.Cfg.Metadata.Version,
-		Source:     a.Spec.Source,
-		Status:     v1alpha1.Completed,
-		StatusTime: &now,
+		OpType:    v1alpha1.InstallOp,
+		Version:   workflowCfg.Cfg.Metadata.Version,
+		Source:    a.Spec.Source,
+		Status:    v1alpha1.Running,
+		StateTime: &now,
 	}
 
 	klog.Info("Start to install workflow, ", workflowCfg)
 	err = workflowinstaller.Install(req.Request.Context(), h.kubeConfig, workflowCfg)
 	if err != nil {
-		opRecord.Status = v1alpha1.Failed
+		opRecord.Status = "failed"
 		opRecord.Message = fmt.Sprintf(constants.OperationFailedTpl, a.Status.OpType, err.Error())
 		e := utils.UpdateStatus(a, opRecord.Status, &opRecord, "", opRecord.Message)
 		if e != nil {
@@ -691,7 +701,7 @@ func (h *Handler) installRecommend(req *restful.Request, resp *restful.Response)
 
 	now = metav1.Now()
 	opRecord.Message = fmt.Sprintf(constants.InstallOperationCompletedTpl, a.Spec.Type.String(), a.Spec.AppName)
-	err = utils.UpdateStatus(a, v1alpha1.Completed, &opRecord, "", opRecord.Message)
+	err = utils.UpdateStatus(a, v1alpha1.Running, &opRecord, "", opRecord.Message)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -836,14 +846,14 @@ func (h *Handler) uninstallRecommend(req *restful.Request, resp *restful.Respons
 			now := metav1.Now()
 			message := fmt.Sprintf(constants.OperationFailedTpl, recommendMgr.Status.OpType, err.Error())
 			opRecord := v1alpha1.OpRecord{
-				OpType:     v1alpha1.UninstallOp,
-				Message:    message,
-				Source:     recommendMgr.Spec.Source,
-				Version:    recommendMgr.Status.Payload["version"],
-				Status:     v1alpha1.Failed,
-				StatusTime: &now,
+				OpType:    v1alpha1.UninstallOp,
+				Message:   message,
+				Source:    recommendMgr.Spec.Source,
+				Version:   recommendMgr.Status.Payload["version"],
+				Status:    "failed",
+				StateTime: &now,
 			}
-			e := utils.UpdateStatus(recommendMgr, v1alpha1.Failed, &opRecord, "", message)
+			e := utils.UpdateStatus(recommendMgr, "failed", &opRecord, "", message)
 			if e != nil {
 				klog.Errorf("Failed to update applicationmanager status in uninstall Recommend name=%s err=%v", recommendMgr.Name, e)
 			}
@@ -875,12 +885,12 @@ func (h *Handler) uninstallRecommend(req *restful.Request, resp *restful.Respons
 						now := metav1.Now()
 						message := fmt.Sprintf(constants.UninstallOperationCompletedTpl, recommendMgr.Spec.Type.String(), recommendMgr.Spec.AppName)
 						opRecord := v1alpha1.OpRecord{
-							OpType:     v1alpha1.UninstallOp,
-							Message:    message,
-							Source:     recommendMgr.Spec.Source,
-							Version:    recommendMgr.Status.Payload["version"],
-							Status:     v1alpha1.Completed,
-							StatusTime: &now,
+							OpType:    v1alpha1.UninstallOp,
+							Message:   message,
+							Source:    recommendMgr.Spec.Source,
+							Version:   recommendMgr.Status.Payload["version"],
+							Status:    v1alpha1.Running,
+							StateTime: &now,
 						}
 						err = utils.UpdateStatus(recommendMgr, opRecord.Status, &opRecord, "", message)
 						if err != nil {
@@ -918,15 +928,15 @@ func (h *Handler) upgradeRecommend(req *restful.Request, resp *restful.Response)
 	defer func() {
 		now := metav1.Now()
 		opRecord := v1alpha1.OpRecord{
-			OpType:     v1alpha1.UpgradeOp,
-			Message:    fmt.Sprintf(constants.UpgradeOperationCompletedTpl, recommendMgr.Spec.Type.String(), recommendMgr.Spec.AppName),
-			Source:     recommendMgr.Spec.Source,
-			Version:    workflowCfg.Cfg.Metadata.Version,
-			Status:     v1alpha1.Completed,
-			StatusTime: &now,
+			OpType:    v1alpha1.UpgradeOp,
+			Message:   fmt.Sprintf(constants.UpgradeOperationCompletedTpl, recommendMgr.Spec.Type.String(), recommendMgr.Spec.AppName),
+			Source:    recommendMgr.Spec.Source,
+			Version:   workflowCfg.Cfg.Metadata.Version,
+			Status:    v1alpha1.Running,
+			StateTime: &now,
 		}
 		if err != nil {
-			opRecord.Status = v1alpha1.Failed
+			opRecord.Status = "failed"
 			opRecord.Message = fmt.Sprintf(constants.OperationFailedTpl, recommendMgr.Status.OpType, err.Error())
 		}
 		e := utils.UpdateStatus(recommendMgr, opRecord.Status, &opRecord, "", opRecord.Message)

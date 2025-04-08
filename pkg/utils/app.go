@@ -71,13 +71,13 @@ func GetClient() (*versioned.Clientset, error) {
 }
 
 // UpdateAppState update application status state.
-func UpdateAppState(ctx context.Context, appmgr *v1alpha1.ApplicationManager, state v1alpha1.ApplicationState) error {
+func UpdateAppState(ctx context.Context, am *v1alpha1.ApplicationManager, state string) error {
 	client, err := GetClient()
 	if err != nil {
 		return err
 	}
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		app, err := client.AppV1alpha1().Applications().Get(ctx, appmgr.Name, metav1.GetOptions{})
+		app, err := client.AppV1alpha1().Applications().Get(ctx, am.Name, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				// dev mode, try to find app in user-space
@@ -87,8 +87,8 @@ func UpdateAppState(ctx context.Context, appmgr *v1alpha1.ApplicationManager, st
 				}
 
 				for _, a := range apps.Items {
-					if a.Spec.Name == appmgr.Spec.AppName &&
-						a.Spec.Owner == appmgr.Spec.AppOwner &&
+					if a.Spec.Name == am.Spec.AppName &&
+						a.Spec.Owner == am.Spec.AppOwner &&
 						a.Spec.Namespace == "user-space-"+a.Spec.Owner {
 						app = &a
 
@@ -102,12 +102,12 @@ func UpdateAppState(ctx context.Context, appmgr *v1alpha1.ApplicationManager, st
 		}
 		now := metav1.Now()
 		appCopy := app.DeepCopy()
-		appCopy.Status.State = state.String()
+		appCopy.Status.State = state
 		appCopy.Status.StatusTime = &now
 		appCopy.Status.UpdateTime = &now
 
 		// set startedTime when app first become running
-		if state == v1alpha1.AppRunning && appCopy.Status.StartedTime.IsZero() {
+		if state == v1alpha1.AppRunning.String() && appCopy.Status.StartedTime.IsZero() {
 			appCopy.Status.StartedTime = &now
 			entranceStatues := make([]v1alpha1.EntranceStatus, 0, len(app.Spec.Entrances))
 			for _, e := range app.Spec.Entrances {
@@ -245,7 +245,7 @@ func CreateSysAppMgr(app, owner string) error {
 	appMgrCopy := a.DeepCopy()
 	status := v1alpha1.ApplicationManagerStatus{
 		OpType:       v1alpha1.InstallOp,
-		State:        v1alpha1.Completed,
+		State:        v1alpha1.Running,
 		OpGeneration: int64(0),
 		Message:      "sys app install completed",
 		UpdateTime:   &now,
@@ -388,7 +388,7 @@ func UpdateStatus(appMgr *v1alpha1.ApplicationManager, state v1alpha1.Applicatio
 			return err
 		}
 		if len(appState) > 0 {
-			err = UpdateAppState(context.TODO(), appMgr, appState)
+			err = UpdateAppState(context.TODO(), appMgr, appState.String())
 			if err != nil {
 				return err
 			}

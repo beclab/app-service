@@ -36,6 +36,7 @@ func (h *Handler) suspend(req *restful.Request, resp *restful.Response) {
 	now := metav1.Now()
 	status := v1alpha1.ApplicationManagerStatus{
 		OpType:     v1alpha1.SuspendOp,
+		State:      v1alpha1.Suspending,
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
@@ -82,6 +83,7 @@ func (h *Handler) resume(req *restful.Request, resp *restful.Response) {
 	now := metav1.Now()
 	status := v1alpha1.ApplicationManagerStatus{
 		OpType:     v1alpha1.ResumeOp,
+		State:      v1alpha1.Resuming,
 		StatusTime: &now,
 		UpdateTime: &now,
 	}

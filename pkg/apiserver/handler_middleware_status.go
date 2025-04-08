@@ -114,7 +114,7 @@ func getMiddlewareStatus(ctx context.Context, kubeConfig *rest.Config, app, owne
 	if mgr.Status.OpType == v1alpha1.UninstallOp && mgr.Status.State == v1alpha1.Uninstalling {
 		res.ResourceStatus = v1alpha1.Uninstalling.String()
 	}
-	if mgr.Status.OpType == v1alpha1.InstallOp && mgr.Status.State == v1alpha1.Completed {
+	if mgr.Status.State == v1alpha1.Running {
 		res.ResourceStatus = v1alpha1.AppRunning.String()
 	}
 
@@ -167,7 +167,7 @@ func (h *Handler) operateMiddleware(req *restful.Request, resp *restful.Response
 		AppOwner:          am.Spec.AppOwner,
 		OpType:            am.Status.OpType,
 		ResourceType:      am.Spec.Type.String(),
-		State:             toProcessing(am.Status.State),
+		State:             am.Status.State,
 		Message:           am.Status.Message,
 		CreationTimestamp: am.CreationTimestamp,
 		Source:            am.Spec.Source,
@@ -190,7 +190,7 @@ func (h *Handler) operateMiddlewareList(req *restful.Request, resp *restful.Resp
 			operate := appinstaller.Operate{
 				AppName:           am.Spec.AppName,
 				AppOwner:          am.Spec.AppOwner,
-				State:             toProcessing(am.Status.State),
+				State:             am.Status.State,
 				OpType:            am.Status.OpType,
 				ResourceType:      am.Spec.Type.String(),
 				Message:           am.Status.Message,

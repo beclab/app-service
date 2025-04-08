@@ -212,14 +212,14 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 							return ctrl.Result{}, err
 						}
 						now := metav1.Now()
-						state := appv1alpha1.Completed
+						state := appv1alpha1.Running
 						opRecord := appv1alpha1.OpRecord{
-							OpType:     appv1alpha1.UninstallOp,
-							Message:    fmt.Sprintf(constants.UninstallOperationCompletedTpl, appMgr.Spec.Type.String(), appMgr.Spec.AppName),
-							Source:     appMgr.Spec.Source,
-							Version:    appMgr.Status.Payload["version"],
-							Status:     appv1alpha1.Completed,
-							StatusTime: &now,
+							OpType:    appv1alpha1.UninstallOp,
+							Message:   fmt.Sprintf(constants.UninstallOperationCompletedTpl, appMgr.Spec.Type.String(), appMgr.Spec.AppName),
+							Source:    appMgr.Spec.Source,
+							Version:   appMgr.Status.Payload["version"],
+							Status:    appv1alpha1.Running,
+							StateTime: &now,
 						}
 
 						if appMgr.Status.OpType == appv1alpha1.CancelOp {
@@ -229,8 +229,8 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 								opRecord.Message = constants.OperationCanceledByUserTpl
 							}
 							opRecord.OpType = appv1alpha1.CancelOp
-							opRecord.Status = appv1alpha1.Canceled
-							state = appv1alpha1.Canceled
+							opRecord.Status = appv1alpha1.InstallingCanceled
+							state = appv1alpha1.InstallingCanceled
 						}
 						err = utils.UpdateStatus(&appMgr, state, &opRecord, "", opRecord.Message)
 						if err != nil {
@@ -386,7 +386,7 @@ func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.
 	if err != nil {
 		klog.Errorf("Failed to get applicationmanagers status err=%v", err)
 	} else {
-		if status.State == appv1alpha1.Completed {
+		if status.State == appv1alpha1.Running {
 			app.Status.State = appv1alpha1.AppRunning.String()
 		}
 	}
@@ -708,7 +708,7 @@ func (r *ApplicationReconciler) getAppPorts(ctx context.Context, deployment clie
 	if isMultiApp {
 		err = json.Unmarshal([]byte(portsLabel), &portsMap)
 		if err != nil {
-			klog.Errorf("unmarshal portMap errro=%v", err)
+			klog.Errorf("unmarshal portMap err=%v", err)
 			return nil, err
 		}
 	} else {

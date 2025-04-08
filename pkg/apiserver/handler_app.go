@@ -66,11 +66,12 @@ func (h *Handler) status(req *restful.Request, resp *restful.Response) {
 			return
 		}
 
-		if (am.Status.OpType == v1alpha1.InstallOp && am.Status.State == v1alpha1.Canceled) ||
-			(am.Status.OpType == v1alpha1.UninstallOp && am.Status.State == v1alpha1.Completed) {
-			api.HandleNotFound(resp, req, fmt.Errorf("app %s not found", app))
-			return
-		}
+		// TODO:hysyeah
+		//if (am.Status.OpType == v1alpha1.InstallOp && am.Status.State == v1alpha1.Canceled) ||
+		//	(am.Status.OpType == v1alpha1.UninstallOp && am.Status.State == v1alpha1.Completed) {
+		//	api.HandleNotFound(resp, req, fmt.Errorf("app %s not found", app))
+		//	return
+		//}
 
 		state := v1alpha1.Pending
 		if am.Status.State == v1alpha1.Downloading || am.Status.State == v1alpha1.Installing {
@@ -213,7 +214,7 @@ func (h *Handler) operate(req *restful.Request, resp *restful.Response) {
 		AppOwner:          am.Spec.AppOwner,
 		OpType:            am.Status.OpType,
 		ResourceType:      am.Spec.Type.String(),
-		State:             toProcessing(am.Status.State),
+		State:             am.Status.State,
 		Message:           am.Status.Message,
 		CreationTimestamp: am.CreationTimestamp,
 		Source:            am.Spec.Source,
@@ -246,7 +247,7 @@ func (h *Handler) appsOperate(req *restful.Request, resp *restful.Response) {
 				AppName:           am.Spec.AppName,
 				AppNamespace:      am.Spec.AppNamespace,
 				AppOwner:          am.Spec.AppOwner,
-				State:             toProcessing(am.Status.State),
+				State:             am.Status.State,
 				OpType:            am.Status.OpType,
 				ResourceType:      am.Spec.Type.String(),
 				Message:           am.Status.Message,
@@ -295,12 +296,12 @@ func (h *Handler) operateHistory(req *restful.Request, resp *restful.Response) {
 			AppOwner:     am.Spec.AppOwner,
 			ResourceType: am.Spec.Type.String(),
 			OpRecord: v1alpha1.OpRecord{
-				OpType:     r.OpType,
-				Message:    r.Message,
-				Source:     r.Source,
-				Version:    r.Version,
-				Status:     r.Status,
-				StatusTime: r.StatusTime,
+				OpType:    r.OpType,
+				Message:   r.Message,
+				Source:    r.Source,
+				Version:   r.Version,
+				Status:    r.Status,
+				StateTime: r.StateTime,
 			},
 		}
 		ops = append(ops, op)
@@ -354,19 +355,19 @@ func (h *Handler) allOperateHistory(req *restful.Request, resp *restful.Response
 				AppOwner:     am.Spec.AppOwner,
 				ResourceType: am.Spec.Type.String(),
 				OpRecord: v1alpha1.OpRecord{
-					OpType:     r.OpType,
-					Message:    r.Message,
-					Source:     r.Source,
-					Version:    r.Version,
-					Status:     r.Status,
-					StatusTime: r.StatusTime,
+					OpType:    r.OpType,
+					Message:   r.Message,
+					Source:    r.Source,
+					Version:   r.Version,
+					Status:    r.Status,
+					StateTime: r.StateTime,
 				},
 			}
 			ops = append(ops, op)
 		}
 	}
 	sort.Slice(ops, func(i, j int) bool {
-		return ops[j].StatusTime.Before(ops[i].StatusTime)
+		return ops[j].StateTime.Before(ops[i].StateTime)
 	})
 
 	resp.WriteAsJson(map[string]interface{}{"result": ops})
@@ -570,14 +571,14 @@ func (h *Handler) nodes(req *restful.Request, resp *restful.Response) {
 	resp.WriteAsJson(map[string]interface{}{"result": nodes.Items})
 }
 
-func toProcessing(state v1alpha1.ApplicationManagerState) v1alpha1.ApplicationManagerState {
-	if state == v1alpha1.Installing || state == v1alpha1.Uninstalling ||
-		state == v1alpha1.Upgrading || state == v1alpha1.Resuming ||
-		state == v1alpha1.Canceling || state == v1alpha1.Stopping {
-		return v1alpha1.Processing
-	}
-	return state
-}
+//func toProcessing(state v1alpha1.ApplicationManagerState) v1alpha1.ApplicationManagerState {
+//	if state == v1alpha1.Installing || state == v1alpha1.Uninstalling ||
+//		state == v1alpha1.Upgrading || state == v1alpha1.Resuming ||
+//		state == v1alpha1.Canceling || state == v1alpha1.Pending {
+//		return v1alpha1.Processing
+//	}
+//	return state
+//}
 
 func (h *Handler) operateRecommend(req *restful.Request, resp *restful.Response) {
 	app := req.PathParameter(ParamWorkflowName)
@@ -604,7 +605,7 @@ func (h *Handler) operateRecommend(req *restful.Request, resp *restful.Response)
 		AppOwner:          am.Spec.AppOwner,
 		OpType:            am.Status.OpType,
 		ResourceType:      am.Spec.Type.String(),
-		State:             toProcessing(am.Status.State),
+		State:             am.Status.State,
 		Message:           am.Status.Message,
 		CreationTimestamp: am.CreationTimestamp,
 		Source:            am.Spec.Source,
@@ -627,7 +628,7 @@ func (h *Handler) operateRecommendList(req *restful.Request, resp *restful.Respo
 			operate := appinstaller.Operate{
 				AppName:           am.Spec.AppName,
 				AppOwner:          am.Spec.AppOwner,
-				State:             toProcessing(am.Status.State),
+				State:             am.Status.State,
 				OpType:            am.Status.OpType,
 				ResourceType:      am.Spec.Type.String(),
 				Message:           am.Status.Message,
@@ -675,12 +676,12 @@ func (h *Handler) operateRecommendHistory(req *restful.Request, resp *restful.Re
 			ResourceType: am.Spec.Type.String(),
 
 			OpRecord: v1alpha1.OpRecord{
-				OpType:     r.OpType,
-				Message:    r.Message,
-				Source:     r.Source,
-				Version:    r.Version,
-				Status:     r.Status,
-				StatusTime: r.StatusTime,
+				OpType:    r.OpType,
+				Message:   r.Message,
+				Source:    r.Source,
+				Version:   r.Version,
+				Status:    r.Status,
+				StateTime: r.StateTime,
 			},
 		}
 		ops = append(ops, op)
@@ -711,19 +712,19 @@ func (h *Handler) allOperateRecommendHistory(req *restful.Request, resp *restful
 				ResourceType: am.Spec.Type.String(),
 
 				OpRecord: v1alpha1.OpRecord{
-					OpType:     r.OpType,
-					Message:    r.Message,
-					Source:     r.Source,
-					Version:    r.Version,
-					Status:     r.Status,
-					StatusTime: r.StatusTime,
+					OpType:    r.OpType,
+					Message:   r.Message,
+					Source:    r.Source,
+					Version:   r.Version,
+					Status:    r.Status,
+					StateTime: r.StateTime,
 				},
 			}
 			ops = append(ops, op)
 		}
 	}
 	sort.Slice(ops, func(i, j int) bool {
-		return ops[j].StatusTime.Before(ops[i].StatusTime)
+		return ops[j].StateTime.Before(ops[i].StateTime)
 	})
 
 	resp.WriteAsJson(map[string]interface{}{"result": ops})
