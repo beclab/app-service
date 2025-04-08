@@ -3,6 +3,7 @@ package workflowinstaller
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 
 	"bytetrade.io/web3os/app-service/pkg/argo"
@@ -109,7 +110,7 @@ func getSettings(ctx context.Context, kubeConfig *rest.Config, workflow *Workflo
 		"username": workflow.OwnerName,
 	}
 
-	values["apiUrl"] = "http://rss-svc.os-system:3010"
+	values["apiUrl"] = fmt.Sprintf("http://knowledge-base-api.user-system-%s:3010", workflow.OwnerName)
 	values["title"] = workflow.Cfg.Metadata.Title
 
 	appData, appCache, userdata, err := getAppData(ctx, kubeConfig, workflow.OwnerName)
