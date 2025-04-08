@@ -41,8 +41,9 @@ func Install(ctx context.Context, kubeConfig *rest.Config, workflow *WorkflowCon
 		return err
 	}
 	klog.Infof("install workflow old instanceID: %s", "user-space-"+workflow.OwnerName)
-	//instanceID := "os-system"
-	instanceID := "user-space-" + workflow.OwnerName
+	//instanceID := "user-space-" + workflow.OwnerName
+	instanceID := "os-system"
+
 	return argo.UpdateWorkflowInNamespace(ctx, kubeConfig, workflow.WorkflowName,
 		workflow.Namespace, instanceID, workflow.OwnerName, workflow.Cfg.Metadata.Title, workflow.Cfg.Options.SyncProvider)
 }
