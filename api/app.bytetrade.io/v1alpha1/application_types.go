@@ -67,9 +67,9 @@ type TailScale struct {
 type EntranceState string
 
 const (
-	EntranceRunning EntranceState = "running"
-	EntranceCrash   EntranceState = "crash"
-	EntranceSuspend EntranceState = "suspend"
+	EntranceRunning  EntranceState = "running"
+	EntranceNotReady EntranceState = "notReady"
+	EntranceStopped  EntranceState = "stopped"
 )
 
 func (e EntranceState) String() string {
@@ -116,20 +116,24 @@ type ApplicationStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// the state of the application: draft, submitted, passed, rejected, suspended, active
-	State      string       `json:"state,omitempty"`
+	State string `json:"state,omitempty"`
+	// for downloading phase
+	Progress   string       `json:"progress,omitempty"`
 	UpdateTime *metav1.Time `json:"updateTime"`
 	StatusTime *metav1.Time `json:"statusTime"`
 	// StartedTime is the time that app first to running state
-	StartedTime      *metav1.Time     `json:"startedTime,omitempty"`
-	EntranceStatuses []EntranceStatus `json:"entranceStatuses,omitempty"`
+	StartedTime        *metav1.Time     `json:"startedTime,omitempty"`
+	LastTransitionTime *metav1.Time     `json:"lastTransitionTime,omitempty"`
+	EntranceStatuses   []EntranceStatus `json:"entranceStatuses,omitempty"`
 }
 
 type EntranceStatus struct {
-	Name       string        `json:"name"`
-	State      EntranceState `json:"state"`
-	StatusTime *metav1.Time  `json:"statusTime"`
-	Reason     string        `json:"reason"`
-	Message    string        `json:"message,omitempty"`
+	Name               string        `json:"name"`
+	State              EntranceState `json:"state"`
+	StatusTime         *metav1.Time  `json:"statusTime"`
+	Reason             string        `json:"reason"`
+	Message            string        `json:"message,omitempty"`
+	LastTransitionTime *metav1.Time  `json:"lastTransitionTime,omitempty"`
 }
 
 //+genclient

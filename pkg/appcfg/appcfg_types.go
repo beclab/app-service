@@ -1,8 +1,11 @@
-package appinstaller
+package appcfg
 
 import (
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
-	"bytetrade.io/web3os/app-service/pkg/tapr"
+)
+
+const (
+	ChartsPath = "./charts"
 )
 
 // TODO: share the structs in projects
@@ -27,7 +30,7 @@ type AppConfiguration struct {
 	TailScale     v1alpha1.TailScale     `yaml:"tailscale" json:"tailscale"`
 	Spec          AppSpec                `yaml:"spec" json:"spec"`
 	Permission    Permission             `yaml:"permission" json:"permission" description:"app permission request"`
-	Middleware    *tapr.Middleware       `yaml:"middleware" json:"middleware" description:"app middleware request"`
+	Middleware    *MiddlewareCfg         `yaml:"middleware" json:"middleware" description:"app middleware request"`
 	Options       Options                `yaml:"options" json:"options" description:"app options"`
 }
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/images"
 	"context"
 	"flag"
 	"fmt"
@@ -68,6 +69,9 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	config := ctrl.GetConfigOrDie()
+	//rateLimitedConfig := *config
+	//rateLimitedConfig.QPS = 200
+	//rateLimitedConfig.Burst = 200
 
 	mgr, err := ctrl.NewManager(config, ctrl.Options{
 		Scheme:                 scheme,
@@ -115,8 +119,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	//rateLimitedClient, err := client.New(&rateLimitedConfig, client.Options{
+	//	Scheme: scheme,
+	//	Mapper: mgr.GetRESTMapper(),
+	//})
+	//if err != nil {
+	//	setupLog.Error(err, "Unable to create rateLimitedClient")
+	//	os.Exit(1)
+	//}
+
 	if err = (&controllers.ApplicationManagerController{
-		Client: mgr.GetClient(),
+		Client:      mgr.GetClient(),
+		KubeConfig:  config,
+		ImageClient: images.NewImageManager(mgr.GetClient()),
+		//Manager:    make(map[string]context.CancelFunc),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Unable to create controller", "controller", "Application Manager")
 		os.Exit(1)

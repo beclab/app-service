@@ -24,18 +24,18 @@ type Type struct {
 // Add insert an item to the queue, marks item as needing processing.
 func (q *Type) Add(item interface{}) {
 	req, _ := item.(reconcile.Request)
-	username := req.Namespace
+	name := req.Name
 	q.cond.L.Lock()
 	defer q.cond.L.Unlock()
-	if _, ok := q.queue[username]; !ok {
-		q.queue[username] = workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), username)
+	if _, ok := q.queue[name]; !ok {
+		q.queue[name] = workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), name)
 	}
 	total := q.len()
-	q.queue[username].Add(item)
+	q.queue[name].Add(item)
 	if q.len() > total {
-		q.indexes[username] = append(q.indexes[username], q.index)
+		q.indexes[name] = append(q.indexes[name], q.index)
 		q.index++
-		if !q.gM[username] {
+		if !q.gM[name] {
 			q.cond.Signal()
 		}
 	}
@@ -92,9 +92,9 @@ func (q *Type) SetCompleted(item interface{}) {
 	q.cond.L.Lock()
 	defer q.cond.L.Unlock()
 	req, _ := item.(reconcile.Request)
-	username := req.Namespace
-	delete(q.gM, username)
-	if q.queue[username].Len() > 0 {
+	name := req.Name
+	delete(q.gM, name)
+	if q.queue[name].Len() > 0 {
 		q.cond.Signal()
 	}
 }
@@ -113,7 +113,7 @@ func (q *Type) Done(item interface{}) {
 	q.cond.L.Lock()
 	defer q.cond.L.Unlock()
 	req, _ := item.(reconcile.Request)
-	u := req.Namespace
+	u := req.Name
 	total := q.queue[u].Len()
 	q.queue[u].Done(item)
 	if q.queue[u].Len() > total {
@@ -157,27 +157,26 @@ func (q *Type) AddAfter(item interface{}, duration time.Duration) {
 		return
 	}
 	req, _ := item.(reconcile.Request)
-	q.queue[req.Namespace].AddAfter(item, duration)
+	q.queue[req.Name].AddAfter(item, duration)
 }
 
 // AddRateLimited adds an item to the workqueue after the rate limiter says it's ok
 func (q *Type) AddRateLimited(item interface{}) {
 	req, _ := item.(reconcile.Request)
-	q.queue[req.Namespace].AddRateLimited(item)
+	q.queue[req.Name].AddRateLimited(item)
 }
 
 // Forget indicates that an item is finished being retried.  Doesn't matter whether it's for failing
 // or for success, we'll stop tracking it.
 func (q *Type) Forget(item interface{}) {
 	req, _ := item.(reconcile.Request)
-	username := req.Namespace
-	q.queue[username].Forget(item)
+	q.queue[req.Name].Forget(item)
 }
 
 // NumRequeues returns back how many times the item was requeued.
 func (q *Type) NumRequeues(item interface{}) int {
 	req, _ := item.(reconcile.Request)
-	return q.queue[req.Namespace].NumRequeues(item)
+	return q.queue[req.Name].NumRequeues(item)
 }
 
 // NewQ initializes the Type which implements workqueue.RateLimitingInterface.
