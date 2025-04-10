@@ -168,7 +168,9 @@ func (r *SecurityReconciler) Reconcile(rootCtx context.Context, req ctrl.Request
 func (r *SecurityReconciler) reconcileNamespaceLabels(ctx context.Context, ns *corev1.Namespace) error {
 	logger := ctx.Value(loggerKey).(logr.Logger)
 	updated := false
-	if security.IsOSSystemNamespace(ns.Name) {
+	if security.IsOSSystemNamespace(ns.Name) || security.IsUnderLayerNamespace(ns.Name) {
+		// make underlay namespaces can access other namespaces' network
+		// especially for prometheus exporters
 		if ns.Labels == nil {
 			ns.Labels = make(map[string]string)
 		}
@@ -177,8 +179,6 @@ func (r *SecurityReconciler) reconcileNamespaceLabels(ctx context.Context, ns *c
 			ns.Labels[security.NamespaceTypeLabel] = security.System
 			updated = true
 		}
-	} else if security.IsUnderLayerNamespace(ns.Name) {
-		// do nothing
 	} else if ok, owner := security.IsUserInternalNamespaces(ns.Name); ok {
 		if ns.Labels == nil {
 			ns.Labels = make(map[string]string)
