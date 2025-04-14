@@ -71,7 +71,7 @@ func (b *handlerBuilder) Build() (*Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = wh.CreateOrUpdateKubeletEvictionValidatingWebhook()
+	err = wh.DeleteKubeletEvictionValidatingWebhook()
 	if err != nil {
 		return nil, err
 	}
