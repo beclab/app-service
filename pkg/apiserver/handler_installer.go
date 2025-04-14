@@ -198,6 +198,10 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 				"source": insReq.Source.String(),
 			},
 		}
+		if a.Status.State != v1alpha1.Completed && a.Status.State != v1alpha1.Canceled && a.Status.State != v1alpha1.Failed {
+			api.HandleBadRequest(resp, req, fmt.Errorf("installation failed, a operation %s are in progress", a.Status.State))
+			return
+		}
 		patchByte, err := json.Marshal(patchData)
 		if err != nil {
 			api.HandleError(resp, req, err)
