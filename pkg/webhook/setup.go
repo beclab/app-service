@@ -386,103 +386,12 @@ func (wh *Webhook) CreateOrUpdateProviderRegistryValidatingWebhook() error {
 	return nil
 }
 
-func (wh *Webhook) CreateOrUpdateKubeletEvictionValidatingWebhook() error {
-	webhookPath := "/app-service/v1/pods/kubelet/eviction"
-	port, err := strconv.Atoi(strings.Split(constants.WebhookServerListenAddress, ":")[1])
-	if err != nil {
+func (wh *Webhook) DeleteKubeletEvictionValidatingWebhook() error {
+	err := wh.kubeClient.AdmissionregistrationV1().ValidatingWebhookConfigurations().Delete(context.TODO(), evictionWebhookName, metav1.DeleteOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		klog.Errorf("Failed to delete ValidatingWebhookConfiguration name=%s", evictionWebhookName)
 		return err
 	}
-	webhookPort := int32(port)
-	failurePolicy := admissionregv1.Ignore
-	matchPolicy := admissionregv1.Exact
-	webhookTimeout := int32(5)
-
-	vwhcLabels := map[string]string{"velero.io/exclude-from-backup": "true"}
-
-	caBundle, err := ioutil.ReadFile(defaultCaPath)
-	if err != nil {
-		return err
-	}
-	vwc := admissionregv1.ValidatingWebhookConfiguration{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   evictionWebhookName,
-			Labels: vwhcLabels,
-		},
-		Webhooks: []admissionregv1.ValidatingWebhook{
-			{
-				Name: evictionValidatingWebhookName,
-				ClientConfig: admissionregv1.WebhookClientConfig{
-					CABundle: caBundle,
-					Service: &admissionregv1.ServiceReference{
-						Namespace: webhookServiceNamespace,
-						Name:      webhookServiceName,
-						Path:      &webhookPath,
-						Port:      &webhookPort,
-					},
-				},
-				FailurePolicy: &failurePolicy,
-				MatchPolicy:   &matchPolicy,
-				NamespaceSelector: &metav1.LabelSelector{
-					MatchExpressions: []metav1.LabelSelectorRequirement{
-						{
-							Key:      "kubernetes.io/metadata.name",
-							Operator: metav1.LabelSelectorOpNotIn,
-							Values:   security.UnderLayerNamespaces,
-						},
-						{
-							Key:      "kubernetes.io/metadata.name",
-							Operator: metav1.LabelSelectorOpNotIn,
-							Values:   security.OSSystemNamespaces,
-						},
-						{
-							Key:      "kubernetes.io/metadata.name",
-							Operator: metav1.LabelSelectorOpNotIn,
-							Values:   security.GPUSystemNamespaces,
-						},
-					},
-				},
-				Rules: []admissionregv1.RuleWithOperations{
-					{
-						Operations: []admissionregv1.OperationType{admissionregv1.Update},
-						Rule: admissionregv1.Rule{
-							APIGroups:   []string{"*"},
-							APIVersions: []string{"*"},
-							Resources:   []string{"pods/status"},
-						},
-					},
-				},
-				SideEffects: func() *admissionregv1.SideEffectClass {
-					sideEffect := admissionregv1.SideEffectClassNoneOnDryRun
-					return &sideEffect
-				}(),
-				TimeoutSeconds:          &webhookTimeout,
-				AdmissionReviewVersions: []string{"v1"},
-			},
-		},
-	}
-	if _, err = wh.kubeClient.AdmissionregistrationV1().ValidatingWebhookConfigurations().
-		Create(context.TODO(), &vwc, metav1.CreateOptions{}); err != nil {
-		if apierrors.IsAlreadyExists(err) {
-			existing, err := wh.kubeClient.AdmissionregistrationV1().ValidatingWebhookConfigurations().
-				Get(context.Background(), vwc.Name, metav1.GetOptions{})
-			if err != nil {
-				klog.Errorf("Failed to get ValidatingWebhookConfiguration name=%s err=%v", vwc.Name, err)
-				return err
-			}
-			vwc.ObjectMeta = existing.ObjectMeta
-			if _, err = wh.kubeClient.AdmissionregistrationV1().ValidatingWebhookConfigurations().
-				Update(context.TODO(), &vwc, metav1.UpdateOptions{}); err != nil {
-				if !apierrors.IsConflict(err) {
-					klog.Errorf("Failed to update ValidatingWebhookConfiguration name=%s err=%v", vwc.Name, err)
-					return err
-				}
-			}
-		} else {
-			klog.Errorf("Failed to create ValidatingWebhookConfiguration name=%s err=%v", vwc.Name, err)
-			return err
-		}
-	}
-	klog.Info("Finished creating ValidatingWebhookConfiguration name=%s", vwc.Name)
 	return nil
 }
 

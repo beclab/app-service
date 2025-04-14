@@ -314,13 +314,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Returns(http.StatusOK, "App namespace validated success", nil)).
 		Consumes(restful.MIME_JSON)
 
-	ws.Route(ws.POST("/pods/kubelet/eviction").
-		To(handler.kubeletPodEviction).
-		Doc("validating webhook for validate pod eviction from kubelet").
-		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Returns(http.StatusOK, "pod eviction validated success", nil)).
-		Consumes(restful.MIME_JSON)
-
 	ws.Route(ws.POST("/runasuser/inject").
 		To(handler.handleRunAsUser).
 		Doc("mutating webhook for inject runasuser 1000 for third party app's pod").
