@@ -764,9 +764,9 @@ func (h *Handler) notifyKnowledgeInstall(title, name, owner string) error {
 		ID:    name,
 		Title: title,
 	}
-	body, err := json.Marshal(msg)
-	if err != nil {
-		return nil, err
+	body, jsonErr := json.Marshal(msg)
+	if jsonErr != nil {
+		return jsonErr
 	}
 	resp, err := client.SetTimeout(10*time.Second).R().
 		SetHeader("X-Bfl-User", owner).
@@ -787,9 +787,9 @@ func (h *Handler) notifyKnowledgeUnInstall(name, owner string) error {
 	msg := KnowledgeInstallMsg{
 		ID: name,
 	}
-	body, err := json.Marshal(msg)
-	if err != nil {
-		return nil, err
+	body, jsonErr := json.Marshal(msg)
+	if jsonErr != nil {
+		return jsonErr
 	}
 	klog.Info("Start to notify knowledge to Install ", knowledgeAPI)
 	resp, err := client.SetTimeout(10*time.Second).R().
