@@ -770,6 +770,7 @@ func (h *Handler) notifyKnowledgeInstall(title, name, owner string) error {
 	}
 	client := resty.New()
 	resp, err := client.SetTimeout(10*time.Second).R().
+		SetHeader(restful.HEADER_ContentType, restful.MIME_JSON).
 		SetHeader("X-Bfl-User", owner).
 		SetBody(body).Post(knowledgeAPI)
 	if err != nil {
@@ -792,9 +793,10 @@ func (h *Handler) notifyKnowledgeUnInstall(name, owner string) error {
 	if jsonErr != nil {
 		return jsonErr
 	}
-	klog.Info("Start to notify knowledge to Install ", knowledgeAPI)
+	klog.Info("Start to notify knowledge to unInstall ", knowledgeAPI)
 	client := resty.New()
 	resp, err := client.SetTimeout(10*time.Second).R().
+		SetHeader(restful.HEADER_ContentType, restful.MIME_JSON).
 		SetHeader("X-Bfl-User", owner).
 		SetBody(body).Post(knowledgeAPI)
 
