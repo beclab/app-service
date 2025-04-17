@@ -768,6 +768,7 @@ func (h *Handler) notifyKnowledgeInstall(title, name, owner string) error {
 	if jsonErr != nil {
 		return jsonErr
 	}
+	client := resty.New()
 	resp, err := client.SetTimeout(10*time.Second).R().
 		SetHeader("X-Bfl-User", owner).
 		SetBody(body).Post(knowledgeAPI)
@@ -775,7 +776,7 @@ func (h *Handler) notifyKnowledgeInstall(title, name, owner string) error {
 		return err
 	}
 	if resp.StatusCode() != http.StatusOK {
-		klog.Errorf("Failed to notify knowledge to Install status=%s", entryResp.Status())
+		klog.Errorf("Failed to notify knowledge to Install status=%s", resp.Status())
 		return errors.New(resp.Status())
 	}
 	return nil
@@ -792,6 +793,7 @@ func (h *Handler) notifyKnowledgeUnInstall(name, owner string) error {
 		return jsonErr
 	}
 	klog.Info("Start to notify knowledge to Install ", knowledgeAPI)
+	client := resty.New()
 	resp, err := client.SetTimeout(10*time.Second).R().
 		SetHeader("X-Bfl-User", owner).
 		SetBody(body).Post(knowledgeAPI)
