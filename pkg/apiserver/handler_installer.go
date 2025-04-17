@@ -756,7 +756,7 @@ func (h *Handler) notifyKnowledgeInstall(name, owner string) error {
 	klog.Info("Start to notify knowledge to Install ", knowledgeAPI)
 	client := resty.New().SetTimeout(10*time.Second).
 		SetHeader("X-Bfl-User", owner)
-	entryResp, err := client.R().Get(knowledgeAPI)
+	entryResp, err := client.R().Post(knowledgeAPI)
 	if err != nil {
 		return err
 	}
@@ -768,11 +768,11 @@ func (h *Handler) notifyKnowledgeInstall(name, owner string) error {
 }
 
 func (h *Handler) notifyKnowledgeUnInstall(name, owner string) error {
-	knowledgeAPI := "http://rss-svc.os-system:3010/knowledge/algorithm/recommend/install"
+	knowledgeAPI := "http://rss-svc.os-system:3010/knowledge/algorithm/recommend/uninstall"
 	klog.Info("Start to notify knowledge to Install ", knowledgeAPI)
 	client := resty.New().SetTimeout(10*time.Second).
 		SetHeader("X-Bfl-User", owner)
-	entryResp, err := client.R().Get(knowledgeAPI)
+	entryResp, err := client.R().Post(knowledgeAPI)
 	if err != nil {
 		return err
 	}
