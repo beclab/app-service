@@ -605,7 +605,7 @@ func (h *Handler) installRecommend(req *restful.Request, resp *restful.Response)
 		return
 	}
 
-	go h.notifyKnowledgeInstall(app, owner)
+	go h.notifyKnowledgeInstall(workflowCfg.Cfg.Metadata.Title, app, owner)
 
 	client, _ := utils.GetClient()
 
@@ -751,34 +751,57 @@ func (h *Handler) cleanRecommendFeedData(name, owner string) error {
 	return nil
 }
 
-func (h *Handler) notifyKnowledgeInstall(name, owner string) error {
+type KnowledgeInstallMsg struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
+
+func (h *Handler) notifyKnowledgeInstall(title, name, owner string) error {
 	knowledgeAPI := "http://rss-svc.os-system:3010/knowledge/algorithm/recommend/install"
-	klog.Info("Start to notify knowledge to Install ", knowledgeAPI)
-	client := resty.New().SetTimeout(10*time.Second).
-		SetHeader("X-Bfl-User", owner)
-	entryResp, err := client.R().Post(knowledgeAPI)
+	klog.Info("Start to notify knowledge to Install ", knowledgeAPI, title, name)
+
+	msg := KnowledgeInstallMsg{
+		ID:    name,
+		Title: title,
+	}
+	body, err := json.Marshal(msg)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.SetTimeout(10*time.Second).R().
+		SetHeader("X-Bfl-User", owner).
+		SetBody(body).Post(knowledgeAPI)
 	if err != nil {
 		return err
 	}
-	if entryResp.StatusCode() != http.StatusOK {
+	if resp.StatusCode() != http.StatusOK {
 		klog.Errorf("Failed to notify knowledge to Install status=%s", entryResp.Status())
-		return errors.New(entryResp.Status())
+		return errors.New(resp.Status())
 	}
 	return nil
 }
 
 func (h *Handler) notifyKnowledgeUnInstall(name, owner string) error {
 	knowledgeAPI := "http://rss-svc.os-system:3010/knowledge/algorithm/recommend/uninstall"
+
+	msg := KnowledgeInstallMsg{
+		ID: name,
+	}
+	body, err := json.Marshal(msg)
+	if err != nil {
+		return nil, err
+	}
 	klog.Info("Start to notify knowledge to Install ", knowledgeAPI)
-	client := resty.New().SetTimeout(10*time.Second).
-		SetHeader("X-Bfl-User", owner)
-	entryResp, err := client.R().Post(knowledgeAPI)
+	resp, err := client.SetTimeout(10*time.Second).R().
+		SetHeader("X-Bfl-User", owner).
+		SetBody(body).Post(knowledgeAPI)
+
 	if err != nil {
 		return err
 	}
-	if entryResp.StatusCode() != http.StatusOK {
-		klog.Errorf("Failed to notify knowledge to Install status=%s", entryResp.Status())
-		return errors.New(entryResp.Status())
+	if resp.StatusCode() != http.StatusOK {
+		klog.Errorf("Failed to notify knowledge to Install status=%s", resp.Status())
+		return errors.New(resp.Status())
 	}
 	return nil
 }
