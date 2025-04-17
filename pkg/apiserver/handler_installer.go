@@ -605,6 +605,8 @@ func (h *Handler) installRecommend(req *restful.Request, resp *restful.Response)
 		return
 	}
 
+	go h.notifyKnowledgeInstall(app, owner)
+
 	client, _ := utils.GetClient()
 
 	var a *v1alpha1.ApplicationManager
@@ -748,11 +750,44 @@ func (h *Handler) cleanRecommendFeedData(name, owner string) error {
 	klog.Info("Delete entry success page: ", name, len(feedUrls))
 	return nil
 }
+
+func (h *Handler) notifyKnowledgeInstall(name, owner string) error {
+	knowledgeAPI := "http://rss-svc.os-system:3010/knowledge/algorithm/recommend/install"
+	klog.Info("Start to notify knowledge to Install ", knowledgeAPI)
+	client := resty.New().SetTimeout(10*time.Second).
+		SetHeader("X-Bfl-User", owner)
+	entryResp, err := client.R().Get(knowledgeAPI)
+	if err != nil {
+		return err
+	}
+	if entryResp.StatusCode() != http.StatusOK {
+		klog.Errorf("Failed to notify knowledge to Install status=%s", entryResp.Status())
+		return errors.New(entryResp.Status())
+	}
+	return nil
+}
+
+func (h *Handler) notifyKnowledgeUnInstall(name, owner string) error {
+	knowledgeAPI := "http://rss-svc.os-system:3010/knowledge/algorithm/recommend/install"
+	klog.Info("Start to notify knowledge to Install ", knowledgeAPI)
+	client := resty.New().SetTimeout(10*time.Second).
+		SetHeader("X-Bfl-User", owner)
+	entryResp, err := client.R().Get(knowledgeAPI)
+	if err != nil {
+		return err
+	}
+	if entryResp.StatusCode() != http.StatusOK {
+		klog.Errorf("Failed to notify knowledge to Install status=%s", entryResp.Status())
+		return errors.New(entryResp.Status())
+	}
+	return nil
+}
 func (h *Handler) cleanRecommendEntryData(name, owner string) error {
 	knowledgeAPI := fmt.Sprintf("http://knowledge-base-api.user-system-%s:3010", owner)
 	entryAPI := knowledgeAPI + "/knowledge/entry/algorithm/" + name
 	klog.Info("Start to clean recommend entry data ", entryAPI)
-	client := resty.New()
+	client := resty.New().SetTimeout(10*time.Second).
+		SetHeader("X-Bfl-User", owner)
 	entryResp, err := client.R().Get(entryAPI)
 	if err != nil {
 		return err
@@ -814,6 +849,7 @@ func (h *Handler) uninstallRecommend(req *restful.Request, resp *restful.Respons
 	klog.Infof("Start to uninstall workflow name=%s", workflowCfg.WorkflowName)
 
 	go h.cleanRecommendEntryData(app, owner)
+	go h.notifyKnowledgeUnInstall(app, owner)
 
 	now := metav1.Now()
 	var recommendMgr *v1alpha1.ApplicationManager
