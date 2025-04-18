@@ -42,9 +42,10 @@ func init() {
 }
 
 const (
-	deployment         = "Deployment"
-	statefulSet        = "StatefulSet"
-	applicationNameKey = "applications.app.bytetrade.io/name"
+	deployment              = "Deployment"
+	statefulSet             = "StatefulSet"
+	applicationNameKey      = "applications.app.bytetrade.io/name"
+	applicationGpuInjectKey = "applications.app.bytetrade.io/gpu-inject"
 )
 
 func (h *Handler) sandboxInject(req *restful.Request, resp *restful.Response) {
@@ -248,6 +249,7 @@ func (h *Handler) gpuLimitMutate(ctx context.Context, req *admissionv1.Admission
 	}
 
 	var tpl *corev1.PodTemplateSpec
+	annotations := make(map[string]string)
 
 	switch req.Kind.Kind {
 	case "Deployment":
@@ -257,6 +259,7 @@ func (h *Handler) gpuLimitMutate(ctx context.Context, req *admissionv1.Admission
 			return h.sidecarWebhook.AdmissionError(req.UID, err)
 		}
 		tpl = &d.Spec.Template
+		annotations = d.Annotations
 	case "StatefulSet":
 		var s *appsv1.StatefulSet
 		if err = json.Unmarshal(req.Object.Raw, &s); err != nil {
@@ -264,6 +267,7 @@ func (h *Handler) gpuLimitMutate(ctx context.Context, req *admissionv1.Admission
 			return h.sidecarWebhook.AdmissionError(req.UID, err)
 		}
 		tpl = &s.Spec.Template
+		annotations = s.Annotations
 	}
 
 	resp := &admissionv1.AdmissionResponse{
@@ -278,7 +282,7 @@ func (h *Handler) gpuLimitMutate(ctx context.Context, req *admissionv1.Admission
 	}
 
 	appName := appcfg.AppName
-	if len(appName) == 0 || appName != object.Name {
+	if len(appName) == 0 {
 		return resp
 	}
 
@@ -286,6 +290,10 @@ func (h *Handler) gpuLimitMutate(ctx context.Context, req *admissionv1.Admission
 	if gpuRequired == nil {
 		return resp
 	}
+	if annotations[applicationGpuInjectKey] != "true" {
+		return resp
+	}
+
 	GPUType, err := h.findNvidiaGpuFromNodes(ctx)
 	if err != nil && !errors.Is(err, api.ErrGPUNodeNotFound) {
 		return h.sidecarWebhook.AdmissionError(req.UID, err)
