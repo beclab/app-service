@@ -278,7 +278,7 @@ func (h *Handler) gpuLimitMutate(ctx context.Context, req *admissionv1.Admission
 	}
 
 	appName := appcfg.AppName
-	if len(appName) == 0 {
+	if len(appName) == 0 || appName != object.Name {
 		return resp
 	}
 
