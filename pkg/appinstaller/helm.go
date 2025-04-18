@@ -660,7 +660,7 @@ func (h *HelmOps) Uninstall() error {
 	}
 
 	err = helm.UninstallCharts(h.actionConfig, h.app.AppName)
-	if err != nil {
+	if err != nil && !errors.Is(err, driver.ErrReleaseNotFound) {
 		return err
 	}
 	err = h.unregisterAppPerm()
