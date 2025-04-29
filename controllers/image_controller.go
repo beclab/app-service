@@ -91,13 +91,17 @@ func (r *ImageManagerController) Reconcile(ctx context.Context, req ctrl.Request
 		// unexpected error, retry after 5s
 		return ctrl.Result{}, err
 	}
-	r.reconcile(&im)
 
-	return reconcile.Result{}, nil
+	err = r.reconcile(ctx, &im)
+	if err != nil {
+		ctrl.Log.Error(err, "download image error", "name", req.Name)
+	}
+
+	return reconcile.Result{}, err
 }
 
-func (r *ImageManagerController) reconcile(instance *appv1alpha1.ImageManager) {
-	ctx, cancel := context.WithCancel(context.Background())
+func (r *ImageManagerController) reconcile(ctx context.Context, instance *appv1alpha1.ImageManager) error {
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	defer func() {
@@ -109,19 +113,21 @@ func (r *ImageManagerController) reconcile(instance *appv1alpha1.ImageManager) {
 	err = r.Get(ctx, types.NamespacedName{Name: instance.Name}, &cur)
 	if err != nil {
 		klog.Errorf("Failed to get imagemanagers name=%s err=%v", instance.Name, err)
+		return err
 	}
 
 	if imageManager == nil {
 		imageManager = make(map[string]context.CancelFunc)
 	}
 	if _, ok := imageManager[instance.Name]; ok {
-		return
+		return nil
 	}
 	imageManager[instance.Name] = cancel
 	if cur.Status.State != appv1alpha1.Downloading.String() {
 		err = r.updateStatus(ctx, &cur, appv1alpha1.Downloading.String(), "downloading")
 		if err != nil {
 			klog.Infof("Failed to update imagemanager status name=%v, err=%v", cur.Name, err)
+			return err
 		}
 	}
 	err = r.download(ctx, cur.Spec.Refs, images.PullOptions{AppName: instance.Spec.AppName, OwnerName: instance.Spec.AppOwner, AppNamespace: instance.Spec.AppNamespace})
@@ -136,11 +142,11 @@ func (r *ImageManagerController) reconcile(instance *appv1alpha1.ImageManager) {
 		if err != nil {
 			klog.Infof("Failed to update status err=%v", err)
 		}
-		return
+		return err
 	}
 
 	klog.Infof("download image success")
-	return
+	return nil
 }
 
 func (r *ImageManagerController) preEnqueueCheckForCreate(obj client.Object) bool {
@@ -155,12 +161,9 @@ func (r *ImageManagerController) preEnqueueCheckForCreate(obj client.Object) boo
 func (r *ImageManagerController) preEnqueueCheckForUpdate(old, new client.Object) bool {
 	im, _ := new.(*appv1alpha1.ImageManager)
 	if im.Status.State == "canceled" {
-		go r.reconcile2(im)
+		go r.cancel(im)
 	}
 	return false
-}
-func (r *ImageManagerController) reconcile2(cur *appv1alpha1.ImageManager) {
-	r.cancel(cur)
 }
 
 func (r *ImageManagerController) download(ctx context.Context, refs []appv1alpha1.Ref, opts images.PullOptions) (err error) {
