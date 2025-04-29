@@ -1,23 +1,26 @@
 package controllers
 
 import (
-	"bytetrade.io/web3os/app-service/pkg/apiserver"
-	"bytetrade.io/web3os/app-service/pkg/helm"
-	"bytetrade.io/web3os/app-service/pkg/images"
-	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"helm.sh/helm/v3/pkg/action"
-	"k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/client-go/rest"
 	"math"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"bytetrade.io/web3os/app-service/pkg/apiserver"
+	"bytetrade.io/web3os/app-service/pkg/appstate"
+	"bytetrade.io/web3os/app-service/pkg/helm"
+	"bytetrade.io/web3os/app-service/pkg/images"
+	"bytetrade.io/web3os/app-service/pkg/users/userspace"
+	"helm.sh/helm/v3/pkg/action"
+	"k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/rest"
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
@@ -96,11 +99,93 @@ func (r *ApplicationManagerController) SetupWithManager(mgr ctrl.Manager) error 
 		return fmt.Errorf("add watch failed %w", err)
 	}
 
+	// start auto reconcile the application manager state
+	go wait.Until(r.ReconcileAll, 5*time.Second, wait.NeverStop)
+
 	return nil
+}
+
+func (r *ApplicationManagerController) ReconcileAll() {
+	ctx, cancal := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancal()
+
+	var appManagerList appv1alpha1.ApplicationManagerList
+	err := r.List(ctx, &appManagerList)
+	if err != nil {
+		klog.Errorf("list application manager failed %v", err)
+		return
+	}
+
+	for _, appmgr := range appManagerList.Items {
+		_, err := r.Reconcile(ctx, ctrl.Request{
+			NamespacedName: types.NamespacedName{
+				Name: appmgr.Name,
+			},
+		})
+
+		if err != nil {
+			klog.Error("reconcile application manager error, ", err, ", ", appmgr.Name)
+		}
+	} // end of app mgr list loop
 }
 
 // Reconcile implements the reconciliation loop for the ApplicationManagerController
 func (r *ApplicationManagerController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	klog.Infof("reconcile application manager request name=%s", req.Name)
+	statefulApp, err := LoadStatefulApp(ctx, r, req.Name)
+	if err != nil {
+		klog.Errorf("load stateful app failed %v", err)
+
+		if appstate.IsUnknownState(err) {
+			if srfunc := err.StateReconcile(); srfunc != nil {
+				err := srfunc(ctx)
+				if err != nil {
+					klog.Errorf("reconcile stateful app failed %v", err)
+					return ctrl.Result{}, err
+				}
+
+				return ctrl.Result{}, nil
+			}
+		}
+
+		return ctrl.Result{}, err
+	}
+
+	if statefulApp == nil {
+		// app not found
+		klog.Warning("reconciling app not found, ", req.Name)
+		return ctrl.Result{}, nil
+	}
+
+	if statefulApp.IsOperating() {
+		klog.Info("stateful app is doing something, ", statefulApp.State())
+		if statefulApp.IsTimeout() {
+			klog.Info("stateful app is doing something timeout, should be canceled, ", statefulApp.GetManager().Name, ", ", statefulApp.State())
+			err := statefulApp.Cancel(ctx)
+			if err != nil {
+				klog.Info("cancel stateful app operation error, ", err, ", ", statefulApp.GetManager().Name)
+			}
+
+			return ctrl.Result{}, err
+		}
+
+		err := statefulApp.Exec(ctx)
+		if err != nil {
+			klog.Error("execute stateful app operation error, ", err, ", ", statefulApp.GetManager().Name, ", ", statefulApp.State())
+		}
+
+		return ctrl.Result{}, err
+	}
+
+	// FIXME: reconcile the failed state app
+
+	klog.Infof("reconciled application manager request name=%s state=%s", req.Name, statefulApp.State())
+
+	return ctrl.Result{}, nil
+}
+
+// FIXME: TO BE DELETED
+func (r *ApplicationManagerController) _Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	klog.Infof("reconcile application manager request name=%s", req.Name)
 	taskName, err := r.getNextTask(ctx)
 
@@ -235,7 +320,7 @@ func (r *ApplicationManagerController) reconcile(am *appv1alpha1.ApplicationMana
 	return ctrl.Result{}, nil
 }
 
-func (r *ApplicationManagerController) reconcile2(cur *appv1alpha1.ApplicationManager) {
+func (r *ApplicationManagerController) handleCancel(cur *appv1alpha1.ApplicationManager) {
 	var err error
 	klog.Infof("Start to handle operate=%s app=%s", cur.Status.OpType, cur.Spec.AppName)
 	klog.Infof("Start to handle cur.Status.State=%s", cur.Status.State)
@@ -287,7 +372,7 @@ func (r *ApplicationManagerController) preEnqueueCheckForCreate(obj client.Objec
 	}
 
 	if state == appv1alpha1.Canceling {
-		go r.reconcile2(cur)
+		go r.handleCancel(cur)
 		return false
 	}
 
@@ -308,7 +393,7 @@ func (r *ApplicationManagerController) preEnqueueCheckForUpdate(old, new client.
 	//}
 
 	if curAppMgr.Status.State == appv1alpha1.Canceling {
-		go r.reconcile2(curAppMgr)
+		go r.handleCancel(curAppMgr)
 		return false
 	}
 
@@ -918,7 +1003,7 @@ func (r *ApplicationManagerController) handleInstall(ctx context.Context, am *ap
 	if err != nil {
 		return err
 	}
-	err = ops.Install2()
+	err = ops.Install()
 	if err != nil {
 		return err
 	}

@@ -10,9 +10,10 @@ import (
 	"net/http/httputil"
 	"os"
 	"path/filepath"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strconv"
 	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
@@ -42,6 +43,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
+
 	//"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -66,8 +68,9 @@ type HelmOpsInterface interface {
 	Upgrade() error
 	// RollBack is the action for rollback a release.
 	RollBack() error
-	Install2() error
 	WaitForLaunch() (bool, error)
+
+	// Install2() error
 }
 
 // Opt options for helm ops.
@@ -75,9 +78,11 @@ type Opt struct {
 	Source string
 }
 
+var _ HelmOpsInterface = &HelmOps{}
+
 // HelmOps implements HelmOpsInterface.
 type HelmOps struct {
-	//HelmOpsInterface
+	HelmOpsInterface
 	ctx          context.Context
 	kubeConfig   *rest.Config
 	actionConfig *action.Configuration
@@ -102,7 +107,7 @@ func (h *HelmOps) install(values map[string]interface{}) error {
 }
 
 // Install makes install operation for an application.
-func (h *HelmOps) Install() error {
+func (h *HelmOps) Install_deprecated() error {
 	values, err := h.setValues()
 	if err != nil {
 		return err
@@ -462,6 +467,10 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 
 	if h.app.OIDC.Enabled {
 		err = h.createOIDCClient(values, zone, h.app.Namespace)
+		if err != nil {
+			klog.Errorf("Failed to create OIDCClient err=%v", err)
+			return values, err
+		}
 	}
 
 	sharedLibPath := os.Getenv("SHARED_LIB_PATH")
@@ -1093,6 +1102,12 @@ func (h *HelmOps) isStartUp() (bool, error) {
 	}
 	pods, err := h.client.KubeClient.Kubernetes().CoreV1().Pods(h.app.Namespace).
 		List(h.ctx, metav1.ListOptions{LabelSelector: labelSelector})
+
+	if err != nil {
+		klog.Error("get pods err=", err, "appname=", h.app.AppName)
+		return false, err
+	}
+
 	if len(pods.Items) == 0 {
 		return false, errors.New("no pod found")
 	}
@@ -1101,7 +1116,7 @@ func (h *HelmOps) isStartUp() (bool, error) {
 		startedContainers := 0
 		for i := len(pod.Status.ContainerStatuses) - 1; i >= 0; i-- {
 			container := pod.Status.ContainerStatuses[i]
-			if *container.Started == true {
+			if *container.Started {
 				startedContainers++
 			}
 		}
@@ -1227,7 +1242,7 @@ func parseAppPermission(data []AppPermission) []AppPermission {
 	return permissions
 }
 
-func (h *HelmOps) Install2() error {
+func (h *HelmOps) Install() error {
 	var err error
 	values, err := h.setValues()
 	if err != nil {
