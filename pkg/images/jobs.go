@@ -191,7 +191,7 @@ outer:
 					} else {
 						statuses[key] = StatusInfo{
 							Ref:    key,
-							Status: "done",
+							Status: "exists",
 						}
 					}
 				}
@@ -241,6 +241,13 @@ func updateProgress(statuses []StatusInfo, ongoing *jobs, seen map[string]int64,
 	}
 	for _, status := range statuses {
 		klog.Infof("status: %s,ref: %v, offset: %v, Total: %v", status.Status, status.Ref, status.Offset, status.Total)
+		if status.Status == "exists" {
+			key := strings.Split(status.Ref, "-")[1]
+			offset += seen[key]
+			doneLayer++
+			continue
+		}
+
 		if !isLayerType(status.Ref) {
 			statusesLen--
 			continue
@@ -250,12 +257,7 @@ func updateProgress(statuses []StatusInfo, ongoing *jobs, seen map[string]int64,
 			doneLayer++
 			continue
 		}
-		if status.Status == "exists" {
-			key := strings.Split(status.Ref, "-")[1]
-			offset += seen[key]
-			doneLayer++
-			continue
-		}
+
 		offset += status.Offset
 	}
 	if doneLayer == statusesLen && doneLayer != 0 {
