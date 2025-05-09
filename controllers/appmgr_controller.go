@@ -945,7 +945,7 @@ func (r *ApplicationManagerController) pollDownloadProgress(ctx context.Context,
 				continue
 			}
 
-			klog.Infof("download progress.... %v", cur.Status.Progress)
+			klog.Infof("app: %s,download progress.... %v", appMgr.Spec.AppName, cur.Status.Progress)
 			if cur.Status.Progress == "100.00" {
 				return nil
 			}
