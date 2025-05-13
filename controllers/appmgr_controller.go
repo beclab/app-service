@@ -592,7 +592,7 @@ func (r *ApplicationManagerController) upgrade(ctx context.Context, appMgr *appv
 		//	return err
 		//}
 	} else {
-		chartPath, err = apiserver.GetIndexAndDownloadChart(ctx, appMgr.Spec.AppName, repoURL, version, token)
+		chartPath, err = apiserver.GetIndexAndDownloadChart(ctx, appMgr.Spec.AppName, repoURL, version, token, appMgr.Spec.AppOwner)
 		if err != nil {
 			return err
 		}
