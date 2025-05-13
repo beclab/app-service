@@ -441,7 +441,7 @@ func getAppConfigFromURL(ctx context.Context, app, url string) (*appinstaller.Ap
 }
 
 func getAppConfigFromRepo(ctx context.Context, app, repoURL, version, token, owner, admin string) (*appinstaller.ApplicationConfig, string, error) {
-	chartPath, err := GetIndexAndDownloadChart(ctx, app, repoURL, version, token)
+	chartPath, err := GetIndexAndDownloadChart(ctx, app, repoURL, version, token, owner)
 	if err != nil {
 		return nil, chartPath, err
 	}

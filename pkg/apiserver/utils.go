@@ -467,7 +467,7 @@ func pKCS7Padding(ciphertext []byte, blockSize int) []byte {
 }
 
 func getWorkflowConfigFromRepo(ctx context.Context, owner, app, repoURL, version, token string) (*workflowinstaller.WorkflowConfig, error) {
-	chartPath, err := GetIndexAndDownloadChart(ctx, app, repoURL, version, token)
+	chartPath, err := GetIndexAndDownloadChart(ctx, app, repoURL, version, token, owner)
 	if err != nil {
 		return nil, err
 	}
@@ -500,14 +500,15 @@ func getWorkflowConfigFromRepo(ctx context.Context, owner, app, repoURL, version
 }
 
 // GetIndexAndDownloadChart download a chart and returns download chart path.
-func GetIndexAndDownloadChart(ctx context.Context, app, repoURL, version, token string) (string, error) {
+func GetIndexAndDownloadChart(ctx context.Context, app, repoURL, version, token, owner string) (string, error) {
 	terminusNonce, err := genTerminusNonce()
 	if err != nil {
 		return "", err
 	}
 	client := resty.New().SetTimeout(10*time.Second).
 		SetHeader(constants.AuthorizationTokenKey, token).
-		SetHeader("Terminus-Nonce", terminusNonce)
+		SetHeader("Terminus-Nonce", terminusNonce).
+		SetHeader("x-bfl-user", owner)
 	indexFileURL := repoURL
 	if repoURL[len(repoURL)-1] != '/' {
 		indexFileURL += "/"
@@ -519,7 +520,7 @@ func GetIndexAndDownloadChart(ctx context.Context, app, repoURL, version, token 
 	}
 
 	if resp.StatusCode() >= 400 {
-		return "", fmt.Errorf("get app config from repo returns unexpected status code, %d", resp.StatusCode())
+		return "", fmt.Errorf("get app config from repo returns unexpected status code, %d, resp %s", resp.StatusCode(), resp.String())
 	}
 
 	index, err := loadIndex(resp.Body())
@@ -554,19 +555,21 @@ func GetIndexAndDownloadChart(ctx context.Context, app, repoURL, version, token 
 			return "", err
 		}
 	}
-	_, err = downloadAndUnpack(ctx, url, token, terminusNonce)
+	_, err = downloadAndUnpack(ctx, url, token, terminusNonce, owner)
 	if err != nil {
 		return "", err
 	}
 	return chartPath, nil
 }
 
-func downloadAndUnpack(ctx context.Context, tgz *url.URL, token, terminusNonce string) (string, error) {
+func downloadAndUnpack(ctx context.Context, tgz *url.URL, token, terminusNonce, owner string) (string, error) {
 	dst := appinstaller.ChartsPath
 	g := new(getter.HttpGetter)
 	g.Header = make(http.Header)
 	g.Header.Set(constants.AuthorizationTokenKey, token)
 	g.Header.Set("Terminus-Nonce", terminusNonce)
+	g.Header.Set("x-bfl-user", owner)
+
 	downloader := &getter.Client{
 		Ctx:       ctx,
 		Dst:       dst,
@@ -618,7 +621,7 @@ func loadIndex(data []byte) (*repo.IndexFile, error) {
 }
 
 func getMiddlewareConfigFromRepo(ctx context.Context, owner, app, repoURL, version, token string) (*middlewareinstaller.MiddlewareConfig, error) {
-	chartPath, err := GetIndexAndDownloadChart(ctx, app, repoURL, version, token)
+	chartPath, err := GetIndexAndDownloadChart(ctx, app, repoURL, version, token, owner)
 	if err != nil {
 		return nil, err
 	}
