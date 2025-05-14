@@ -1,17 +1,17 @@
 package apiserver
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
+	"bytetrade.io/web3os/app-service/pkg/appstate"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"path/filepath"
 	"time"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
-	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
@@ -22,16 +22,14 @@ import (
 	"github.com/emicklei/go-restful/v3"
 	"github.com/go-resty/resty/v2"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/yaml"
 )
 
 type depRequest struct {
-	Data []appinstaller.Dependency `json:"data"`
+	Data []appcfg.Dependency `json:"data"`
 }
 
 func (h *Handler) install(req *restful.Request, resp *restful.Response) {
@@ -55,7 +53,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	appConfig, _, err := GetAppConfig(req.Request.Context(), app, owner,
+	appConfig, _, err := utils.GetAppConfig(req.Request.Context(), app, owner,
 		insReq.CfgURL, insReq.RepoURL, "", token, admin)
 	if err != nil {
 		klog.Errorf("Failed to get appconfig err=%v", err)
@@ -208,6 +206,11 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 			api.HandleError(resp, req, err)
 			return
 		}
+		if !appstate.IsOperationAllowed(a.Status.State, v1alpha1.InstallOp) {
+			api.HandleBadRequest(resp, req, fmt.Errorf("%s operation is not allowed for %s state", v1alpha1.SuspendOp, a.Status.State))
+
+			return
+		}
 	}
 
 	now := metav1.Now()
@@ -243,26 +246,37 @@ func (h *Handler) uninstall(req *restful.Request, resp *restful.Response) {
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 	token := req.HeaderParameter(constants.AuthorizationTokenKey)
 
+	if userspace.IsSysApp(app) {
+		api.HandleBadRequest(resp, req, errors.New("sys app can not be uninstall"))
+		return
+	}
+
 	name, err := utils.FmtAppMgrName(app, owner, "")
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
-	var application v1alpha1.Application
-	err = h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: name}, &application)
+	var am v1alpha1.ApplicationManager
+	err = h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: name}, &am)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
-	if application.Spec.IsSysApp {
-		api.HandleBadRequest(resp, req, errors.New("can not uninstall sys app"))
+
+	//var application v1alpha1.Application
+	//err = h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: name}, &application)
+	//if err != nil {
+	//	api.HandleError(resp, req, err)
+	//	return
+	//}
+	//if application.Spec.IsSysApp {
+	//	api.HandleBadRequest(resp, req, errors.New("can not uninstall sys app"))
+	//	return
+	//}
+	if !appstate.IsOperationAllowed(am.Status.State, v1alpha1.UninstallOp) {
+		api.HandleBadRequest(resp, req, fmt.Errorf("%s operation is not allowed for %s state", v1alpha1.UninstallOp, am.Status.State))
 		return
 	}
-
-	//if application.Status.State == v1alpha1.Pending.String() ||
-	//	application.Status.State == v1alpha1.Downloading.String() {
-	//
-	//}
 
 	now := metav1.Now()
 	status := v1alpha1.ApplicationManagerStatus{
@@ -303,12 +317,33 @@ func (h *Handler) cancel(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
+	state := am.Status.State
+	if !appstate.IsOperationAllowed(state, v1alpha1.CancelOp) {
+		api.HandleBadRequest(resp, req, fmt.Errorf("%s operation is not allowed for %s state", v1alpha1.CancelOp, am.Status.State))
+
+		return
+	}
+	var cancelState v1alpha1.ApplicationManagerState
+	switch state {
+	case v1alpha1.Pending:
+		cancelState = v1alpha1.PendingCanceling
+	case v1alpha1.Downloading:
+		cancelState = v1alpha1.DownloadingCanceling
+	case v1alpha1.Installing:
+		cancelState = v1alpha1.InstallingCanceling
+	case v1alpha1.Initializing:
+		cancelState = v1alpha1.InitializingCanceling
+	case v1alpha1.Resuming:
+		cancelState = v1alpha1.ResumingCanceling
+	case v1alpha1.Upgrading:
+		cancelState = v1alpha1.UpgradingCanceling
+	}
 
 	now := metav1.Now()
 	status := v1alpha1.ApplicationManagerStatus{
 		OpType:     v1alpha1.CancelOp,
 		LastState:  am.Status.LastState,
-		State:      v1alpha1.Canceling,
+		State:      cancelState,
 		Progress:   "0.00",
 		Message:    cancelType,
 		StatusTime: &now,
@@ -373,212 +408,6 @@ func (h *Handler) checkDependencies(req *restful.Request, resp *restful.Response
 		Response: api.Response{Code: 200},
 		Data:     data,
 	})
-}
-
-// GetAppConfig get app installation configuration from app store
-func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, token, admin string) (*appinstaller.ApplicationConfig, string, error) {
-	if repoURL == "" {
-		return nil, "", fmt.Errorf("url info is empty, cfg [%s], repo [%s]", cfgURL, repoURL)
-	}
-
-	var (
-		appcfg    *appinstaller.ApplicationConfig
-		chartPath string
-		err       error
-	)
-
-	if cfgURL != "" {
-		appcfg, chartPath, err = getAppConfigFromURL(ctx, app, cfgURL)
-		if err != nil {
-			return nil, "", err
-		}
-	} else {
-		appcfg, chartPath, err = getAppConfigFromRepo(ctx, app, repoURL, version, token, owner, admin)
-		if err != nil {
-			return nil, chartPath, err
-		}
-	}
-
-	// set appcfg.Namespace to specified namespace by OlaresManifests.Spec
-	var namespace string
-	if appcfg.Namespace != "" {
-		namespace, _ = utils.AppNamespace(app, owner, appcfg.Namespace)
-	} else {
-		namespace = fmt.Sprintf("%s-%s", app, owner)
-	}
-
-	appcfg.Namespace = namespace
-	appcfg.OwnerName = owner
-	appcfg.RepoURL = repoURL
-	return appcfg, chartPath, nil
-}
-
-func getAppConfigFromConfigurationFile(app, chart, owner, admin string) (*appinstaller.ApplicationConfig, string, error) {
-	data, err := utils.RenderManifest(filepath.Join(chart, AppCfgFileName), owner, admin)
-	if err != nil {
-		return nil, chart, err
-	}
-
-	var cfg appinstaller.AppConfiguration
-	if err := yaml.Unmarshal([]byte(data), &cfg); err != nil {
-		return nil, chart, err
-	}
-
-	return toApplicationConfig(app, chart, &cfg)
-}
-
-func getAppConfigFromURL(ctx context.Context, app, url string) (*appinstaller.ApplicationConfig, string, error) {
-	client := resty.New().SetTimeout(2 * time.Second)
-	resp, err := client.R().Get(url)
-	if err != nil {
-		return nil, "", err
-	}
-
-	if resp.StatusCode() >= 400 {
-		return nil, "", fmt.Errorf("app config url returns unexpected status code, %d", resp.StatusCode())
-	}
-
-	var cfg appinstaller.AppConfiguration
-	if err := yaml.Unmarshal(resp.Body(), &cfg); err != nil {
-		return nil, "", err
-	}
-
-	return toApplicationConfig(app, app, &cfg)
-}
-
-func getAppConfigFromRepo(ctx context.Context, app, repoURL, version, token, owner, admin string) (*appinstaller.ApplicationConfig, string, error) {
-	chartPath, err := GetIndexAndDownloadChart(ctx, app, repoURL, version, token)
-	if err != nil {
-		return nil, chartPath, err
-	}
-	return getAppConfigFromConfigurationFile(app, chartPath, owner, admin)
-}
-
-func toApplicationConfig(app, chart string, cfg *appinstaller.AppConfiguration) (*appinstaller.ApplicationConfig, string, error) {
-	var permission []appinstaller.AppPermission
-	if cfg.Permission.AppData {
-		permission = append(permission, appinstaller.AppDataRW)
-	}
-	if cfg.Permission.AppCache {
-		permission = append(permission, appinstaller.AppCacheRW)
-	}
-	if len(cfg.Permission.UserData) > 0 {
-		permission = append(permission, appinstaller.UserDataRW)
-	}
-
-	if len(cfg.Permission.SysData) > 0 {
-		var perm []appinstaller.SysDataPermission
-		for _, s := range cfg.Permission.SysData {
-			perm = append(perm, appinstaller.SysDataPermission{
-				AppName:   s.AppName,
-				Svc:       s.Svc,
-				Namespace: s.Namespace,
-				Port:      s.Port,
-				Group:     s.Group,
-				DataType:  s.DataType,
-				Version:   s.Version,
-				Ops:       s.Ops,
-			})
-		}
-		permission = append(permission, perm)
-	}
-
-	valuePtr := func(v resource.Quantity, err error) (*resource.Quantity, error) {
-		if errors.Is(err, resource.ErrFormatWrong) {
-			return nil, nil
-		}
-
-		return &v, nil
-	}
-
-	mem, err := valuePtr(resource.ParseQuantity(cfg.Spec.RequiredMemory))
-	if err != nil {
-		return nil, chart, err
-	}
-
-	disk, err := valuePtr(resource.ParseQuantity(cfg.Spec.RequiredDisk))
-	if err != nil {
-		return nil, chart, err
-	}
-
-	cpu, err := valuePtr(resource.ParseQuantity(cfg.Spec.RequiredCPU))
-	if err != nil {
-		return nil, chart, err
-	}
-
-	gpu, err := valuePtr(resource.ParseQuantity(cfg.Spec.RequiredGPU))
-	if err != nil {
-		return nil, chart, err
-	}
-
-	// transform from Policy to AppPolicy
-	var policies []appinstaller.AppPolicy
-	for _, p := range cfg.Options.Policies {
-		d, _ := time.ParseDuration(p.Duration)
-		policies = append(policies, appinstaller.AppPolicy{
-			EntranceName: p.EntranceName,
-			URIRegex:     p.URIRegex,
-			Level:        p.Level,
-			OneTime:      p.OneTime,
-			Duration:     d,
-		})
-	}
-
-	// check dependencies version format
-	for _, dep := range cfg.Options.Dependencies {
-		if err = checkVersionFormat(dep.Version); err != nil {
-			return nil, chart, err
-		}
-	}
-
-	if cfg.Middleware != nil && cfg.Middleware.Redis != nil {
-		if len(cfg.Middleware.Redis.Namespace) == 0 {
-			return nil, chart, errors.New("middleware of Redis namespace can not be empty")
-		}
-	}
-	var appid string
-	if userspace.IsSysApp(app) {
-		appid = app
-	} else {
-		appid = utils.Md5String(app)[:8]
-	}
-
-	return &appinstaller.ApplicationConfig{
-		AppID:          appid,
-		CfgFileVersion: cfg.ConfigVersion,
-		AppName:        app,
-		Title:          cfg.Metadata.Title,
-		Version:        cfg.Metadata.Version,
-		Target:         cfg.Metadata.Target,
-		ChartsName:     chart,
-		Entrances:      cfg.Entrances,
-		Ports:          cfg.Ports,
-		TailScale:      cfg.TailScale,
-		Icon:           cfg.Metadata.Icon,
-		Permission:     permission,
-		Requirement: appinstaller.AppRequirement{
-			Memory: mem,
-			CPU:    cpu,
-			Disk:   disk,
-			GPU:    gpu,
-		},
-		Policies:             policies,
-		Middleware:           cfg.Middleware,
-		AnalyticsEnabled:     cfg.Options.Analytics.Enabled,
-		ResetCookieEnabled:   cfg.Options.ResetCookie.Enabled,
-		Dependencies:         cfg.Options.Dependencies,
-		Conflicts:            cfg.Options.Conflicts,
-		AppScope:             cfg.Options.AppScope,
-		WsConfig:             cfg.Options.WsConfig,
-		Upload:               cfg.Options.Upload,
-		OnlyAdmin:            cfg.Spec.OnlyAdmin,
-		Namespace:            cfg.Spec.Namespace,
-		MobileSupported:      cfg.Options.MobileSupported,
-		OIDC:                 cfg.Options.OIDC,
-		ApiTimeout:           cfg.Options.ApiTimeout,
-		RunAsUser:            cfg.Spec.RunAsUser,
-		AllowedOutboundPorts: cfg.Options.AllowedOutboundPorts,
-	}, chart, nil
 }
 
 func (h *Handler) installRecommend(req *restful.Request, resp *restful.Response) {

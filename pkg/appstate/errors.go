@@ -1,6 +1,8 @@
 package appstate
 
-import "context"
+import (
+	"context"
+)
 
 type StateError interface {
 	error

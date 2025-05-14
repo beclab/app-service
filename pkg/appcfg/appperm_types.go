@@ -1,4 +1,4 @@
-package appinstaller
+package appcfg
 
 type PermissionRegister struct {
 	App   string              `json:"app"`

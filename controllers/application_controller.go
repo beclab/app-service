@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"context"
 	"encoding/json"
 	"errors"
@@ -206,36 +207,36 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 						if err != nil && !apierrors.IsNotFound(err) {
 							return ctrl.Result{}, err
 						}
-						var appMgr appv1alpha1.ApplicationManager
-						err = r.Get(ctx, types.NamespacedName{Name: app.Name}, &appMgr)
-						if err != nil {
-							return ctrl.Result{}, err
-						}
-						now := metav1.Now()
-						state := appv1alpha1.Running
-						opRecord := appv1alpha1.OpRecord{
-							OpType:    appv1alpha1.UninstallOp,
-							Message:   fmt.Sprintf(constants.UninstallOperationCompletedTpl, appMgr.Spec.Type.String(), appMgr.Spec.AppName),
-							Source:    appMgr.Spec.Source,
-							Version:   appMgr.Status.Payload["version"],
-							Status:    appv1alpha1.Running,
-							StateTime: &now,
-						}
-
-						if appMgr.Status.OpType == appv1alpha1.CancelOp {
-							if appMgr.Status.Message == "timeout" {
-								opRecord.Message = constants.OperationCanceledByTerminusTpl
-							} else {
-								opRecord.Message = constants.OperationCanceledByUserTpl
-							}
-							opRecord.OpType = appv1alpha1.CancelOp
-							opRecord.Status = appv1alpha1.InstallingCanceled
-							state = appv1alpha1.InstallingCanceled
-						}
-						err = utils.UpdateStatus(&appMgr, state, &opRecord, "", opRecord.Message)
-						if err != nil {
-							klog.Errorf("Failed to update applicationmanagers err=%v", err)
-						}
+						//var appMgr appv1alpha1.ApplicationManager
+						//err = r.Get(ctx, types.NamespacedName{Name: app.Name}, &appMgr)
+						//if err != nil {
+						//	return ctrl.Result{}, err
+						//}
+						//now := metav1.Now()
+						//state := appv1alpha1.Running
+						//opRecord := appv1alpha1.OpRecord{
+						//	OpType:    appv1alpha1.UninstallOp,
+						//	Message:   fmt.Sprintf(constants.UninstallOperationCompletedTpl, appMgr.Spec.Type.String(), appMgr.Spec.AppName),
+						//	Source:    appMgr.Spec.Source,
+						//	Version:   appMgr.Status.Payload["version"],
+						//	Status:    appv1alpha1.Running,
+						//	StateTime: &now,
+						//}
+						//
+						//if appMgr.Status.OpType == appv1alpha1.CancelOp {
+						//	if appMgr.Status.Message == "timeout" {
+						//		opRecord.Message = constants.OperationCanceledByTerminusTpl
+						//	} else {
+						//		opRecord.Message = constants.OperationCanceledByUserTpl
+						//	}
+						//	opRecord.OpType = appv1alpha1.CancelOp
+						//	opRecord.Status = appv1alpha1.InstallingCanceled
+						//	state = appv1alpha1.InstallingCanceled
+						//}
+						//err = utils.UpdateStatus(&appMgr, state, &opRecord, "", opRecord.Message)
+						//if err != nil {
+						//	klog.Errorf("Failed to update applicationmanagers err=%v", err)
+						//}
 						err = r.clearHelmHistory(app.Spec.Name, app.Spec.Namespace)
 					} else {
 						// get namespace err, re-enqueue
@@ -625,7 +626,7 @@ func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, app
 	} else {
 		// sys applications.
 		type Policies struct {
-			Policies []appinstaller.Policy `json:"policies"`
+			Policies []appcfg.Policy `json:"policies"`
 		}
 		applicationPoliciesFromAnnotation, ok := deployment.GetAnnotations()[constants.ApplicationPolicies]
 
@@ -647,10 +648,10 @@ func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, app
 		}
 
 		// transform from Policy to AppPolicy
-		var appPolicies []appinstaller.AppPolicy
+		var appPolicies []appcfg.AppPolicy
 		for _, p := range policy.Policies {
 			d, _ := time.ParseDuration(p.Duration)
-			appPolicies = append(appPolicies, appinstaller.AppPolicy{
+			appPolicies = append(appPolicies, appcfg.AppPolicy{
 				EntranceName: p.EntranceName,
 				URIRegex:     p.URIRegex,
 				Level:        p.Level,
@@ -776,7 +777,7 @@ func isWorkflow(obs ...metav1.Object) bool {
 	return true
 }
 
-func getApplicationPolicy(policies []appinstaller.AppPolicy, entrances []appv1alpha1.Entrance) (string, error) {
+func getApplicationPolicy(policies []appcfg.AppPolicy, entrances []appv1alpha1.Entrance) (string, error) {
 	subPolicy := make(map[string][]*applicationSettingsSubPolicy)
 
 	for _, p := range policies {

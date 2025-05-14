@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -394,7 +395,7 @@ func (h *Handler) getApp(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
-	var appConfig appinstaller.ApplicationConfig
+	var appConfig appcfg.ApplicationConfig
 	err = json.Unmarshal([]byte(am.Spec.Config), &appConfig)
 	if err != nil {
 		api.HandleError(resp, req, err)
@@ -478,7 +479,7 @@ func (h *Handler) apps(req *restful.Request, resp *restful.Response) {
 			if len(isSysApp) > 0 && isSysApp == "true" {
 				continue
 			}
-			var appconfig appinstaller.ApplicationConfig
+			var appconfig appcfg.ApplicationConfig
 			err = json.Unmarshal([]byte(am.Spec.Config), &appconfig)
 			if err != nil {
 				api.HandleError(resp, req, err)
@@ -776,7 +777,7 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 			if len(isSysApp) > 0 && isSysApp == "true" {
 				continue
 			}
-			var appconfig appinstaller.ApplicationConfig
+			var appconfig appcfg.ApplicationConfig
 			err = json.Unmarshal([]byte(am.Spec.Config), &appconfig)
 			if err != nil {
 				api.HandleError(resp, req, err)

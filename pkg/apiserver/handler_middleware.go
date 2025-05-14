@@ -37,7 +37,7 @@ func (h *Handler) installMiddleware(req *restful.Request, resp *restful.Response
 	token := req.HeaderParameter(constants.AuthorizationTokenKey)
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 
-	middlewareConfig, err := getMiddlewareConfigFromRepo(req.Request.Context(), owner, app, insReq.RepoURL, "", token)
+	middlewareConfig, err := utils.GetMiddlewareConfigFromRepo(req.Request.Context(), owner, app, insReq.RepoURL, "", token)
 	if err != nil {
 		api.HandleBadRequest(resp, req, err)
 		return

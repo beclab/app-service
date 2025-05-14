@@ -49,13 +49,31 @@ const (
 	Uninstalled ApplicationManagerState = "uninstalled"
 
 	// PendingCanceled means that the installation operation has been canceled.
-	PendingCanceled ApplicationManagerState = "pendingCanceled"
-
+	PendingCanceled      ApplicationManagerState = "pendingCanceled"
 	DownloadingCanceled  ApplicationManagerState = "downloadingCanceled"
 	InstallingCanceled   ApplicationManagerState = "installingCanceled"
 	InitializingCanceled ApplicationManagerState = "initializingCanceled"
 	UpgradingCanceled    ApplicationManagerState = "upgradingCanceled"
 	ResumingCanceled     ApplicationManagerState = "resumingCanceled"
+	SuspendingCanceled   ApplicationManagerState = "suspendingCanceled"
+
+	// PendingCanceling means that the installation operation is under canceling operation.
+	PendingCanceling      ApplicationManagerState = "pendingCanceling"
+	DownloadingCanceling  ApplicationManagerState = "downloadingCanceling"
+	InstallingCanceling   ApplicationManagerState = "installingCanceling"
+	InitializingCanceling ApplicationManagerState = "initializingCanceling"
+	UpgradingCanceling    ApplicationManagerState = "upgradingCanceling"
+	ResumingCanceling     ApplicationManagerState = "resumingCanceling"
+	SuspendingCanceling   ApplicationManagerState = "suspendingCanceling"
+
+	PendingCancelFailed      ApplicationManagerState = "pendingCancelFailed"
+	DownloadingCancelFailed  ApplicationManagerState = "downloadingCancelFailed"
+	InstallingCancelFailed   ApplicationManagerState = "installingCancelFailed"
+	InitializingCancelFailed ApplicationManagerState = "initializingCancelFailed"
+	UpgradingCancelFailed    ApplicationManagerState = "upgradingCancelFailed"
+	ResumingCancelFailed     ApplicationManagerState = "resumingCancelFailed"
+
+	SuspendingCancelFailed ApplicationManagerState = "suspendingCancelFailed"
 
 	// Canceling means that the cancel operation is underway.
 	Canceling ApplicationManagerState = "canceling"

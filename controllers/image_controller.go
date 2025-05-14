@@ -160,7 +160,7 @@ func (r *ImageManagerController) preEnqueueCheckForCreate(obj client.Object) boo
 
 func (r *ImageManagerController) preEnqueueCheckForUpdate(old, new client.Object) bool {
 	im, _ := new.(*appv1alpha1.ImageManager)
-	if im.Status.State == "canceled" {
+	if im.Status.State == appv1alpha1.DownloadingCanceled.String() {
 		go r.cancel(im)
 	}
 	return false

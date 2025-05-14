@@ -15,7 +15,7 @@ const (
 	// AppRunning means that the application is installed success and ready for serve.
 	AppRunning ApplicationState = "running"
 	// AppSuspend means that the application's deployment/statefulset replicas has been set to zero.
-	AppSuspend ApplicationState = "suspended"
+	AppSuspended ApplicationState = "suspended"
 	// AppUninstalling means that an uninstall operation is underway.
 	AppUninstalling ApplicationState = "uninstalling"
 	// AppUpgrading means that an upgrade operation is underway.
@@ -30,11 +30,36 @@ const (
 	AppCanceling    ApplicationState = "canceling"
 )
 
-var AppStateCollect = sets.NewString(AppPending.String(), AppInstalling.String(), AppRunning.String(), AppSuspend.String(), AppUninstalling.String(),
-	AppUpgrading.String(), AppSuspending.String(), AppResuming.String(), AppDownloading.String(), AppInitializing.String(), AppCanceling.String())
+var AppStateCollect = sets.NewString(AppPending.String(), AppDownloading.String(), AppInstalling.String(), AppRunning.String(), AppSuspended.String(), AppUninstalling.String(),
+	AppUpgrading.String(), AppSuspending.String(), AppResuming.String(), AppInitializing.String(), AppCanceling.String())
 
 func (a ApplicationState) String() string {
 	return string(a)
+}
+
+var toAppState = map[ApplicationManagerState]ApplicationState{
+	Pending:      AppPending,
+	Downloading:  AppDownloading,
+	Installing:   AppInstalling,
+	Running:      AppRunning,
+	Suspended:    AppSuspended,
+	Uninstalling: AppUninstalling,
+	Upgrading:    AppUpgrading,
+	Suspending:   AppSuspending,
+	Resuming:     AppResuming,
+	Initializing: AppInitializing,
+
+	PendingCanceling:      AppCanceling,
+	DownloadingCanceling:  AppCanceling,
+	InstallingCanceling:   AppCanceling,
+	InitializingCanceling: AppCanceling,
+	UpgradingCanceling:    AppCanceling,
+	ResumingCanceling:     AppCanceling,
+}
+
+func IsAppState(state ApplicationManagerState) (ApplicationState, bool) {
+	appState, ok := toAppState[state]
+	return appState, ok
 }
 
 /* ApplicationState change

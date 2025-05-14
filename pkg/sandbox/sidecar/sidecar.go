@@ -1,7 +1,7 @@
 package sidecar
 
 import (
-	"bytetrade.io/web3os/app-service/pkg/appinstaller"
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 
 	corev1 "k8s.io/api/core/v1"
@@ -9,7 +9,7 @@ import (
 )
 
 // GetSidecarConfigMap returns a configmap that data is envoy.yaml.
-func GetSidecarConfigMap(configMapName, namespace string, appcfg *appinstaller.ApplicationConfig, injectPolicy, injectWs, injectUpload bool, appDomains []string, pod *corev1.Pod, perms []appinstaller.SysDataPermission) *corev1.ConfigMap {
+func GetSidecarConfigMap(configMapName, namespace string, appcfg *appcfg.ApplicationConfig, injectPolicy, injectWs, injectUpload bool, appDomains []string, pod *corev1.Pod, perms []appcfg.SysDataPermission) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      configMapName,

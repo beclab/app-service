@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/appstate"
 	"encoding/json"
 	"fmt"
 
@@ -68,6 +69,10 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
+	if !appstate.IsOperationAllowed(appMgr.Status.State, appv1alpha1.UpgradeOp) {
+		api.HandleBadRequest(resp, req, fmt.Errorf("%s operation is not allowed for %s state", appv1alpha1.SuspendOp, appMgr.Status.State))
+		return
+	}
 
 	if appMgr.Spec.Source != request.Source.String() {
 		api.HandleBadRequest(resp, req, fmt.Errorf("unmatched chart source"))
@@ -82,7 +87,7 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	appConfig, _, err := GetAppConfig(req.Request.Context(), app, owner, request.CfgURL, request.RepoURL, request.Version, token, admin)
+	appConfig, _, err := utils.GetAppConfig(req.Request.Context(), app, owner, request.CfgURL, request.RepoURL, request.Version, token, admin)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return

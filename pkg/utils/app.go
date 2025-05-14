@@ -1,11 +1,28 @@
 package utils
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
+	"bytetrade.io/web3os/app-service/pkg/constants"
+	"bytetrade.io/web3os/app-service/pkg/middlewareinstaller"
+	"bytetrade.io/web3os/app-service/pkg/utils/files"
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/go-resty/resty/v2"
+	"github.com/hashicorp/go-getter"
+	"helm.sh/helm/v3/pkg/chart"
+	"helm.sh/helm/v3/pkg/repo"
+	"io"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"net"
+	"net/http"
 	"net/netip"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -22,9 +39,11 @@ import (
 	"k8s.io/client-go/util/retry"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/yaml"
 )
 
 const expectedTokenItems = 2
+const AppCfgFileName = "OlaresManifest.yaml"
 
 var (
 	ErrInvalidAction     = errors.New("invalid action")
@@ -608,4 +627,396 @@ func GetFirstSubDir(fullPath, basePath string) string {
 		return ""
 	}
 	return parts[0]
+}
+
+// GetAppConfig get app installation configuration from app store
+func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, token, admin string) (*appcfg.ApplicationConfig, string, error) {
+	if repoURL == "" {
+		return nil, "", fmt.Errorf("url info is empty, cfg [%s], repo [%s]", cfgURL, repoURL)
+	}
+
+	var (
+		appcfg    *appcfg.ApplicationConfig
+		chartPath string
+		err       error
+	)
+
+	if cfgURL != "" {
+		appcfg, chartPath, err = getAppConfigFromURL(ctx, app, cfgURL)
+		if err != nil {
+			return nil, "", err
+		}
+	} else {
+		appcfg, chartPath, err = getAppConfigFromRepo(ctx, app, repoURL, version, token, owner, admin)
+		if err != nil {
+			return nil, chartPath, err
+		}
+	}
+
+	// set appcfg.Namespace to specified namespace by OlaresManifests.Spec
+	var namespace string
+	if appcfg.Namespace != "" {
+		namespace, _ = AppNamespace(app, owner, appcfg.Namespace)
+	} else {
+		namespace = fmt.Sprintf("%s-%s", app, owner)
+	}
+
+	appcfg.Namespace = namespace
+	appcfg.OwnerName = owner
+	appcfg.RepoURL = repoURL
+	return appcfg, chartPath, nil
+}
+
+func getAppConfigFromURL(ctx context.Context, app, url string) (*appcfg.ApplicationConfig, string, error) {
+	client := resty.New().SetTimeout(2 * time.Second)
+	resp, err := client.R().Get(url)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if resp.StatusCode() >= 400 {
+		return nil, "", fmt.Errorf("app config url returns unexpected status code, %d", resp.StatusCode())
+	}
+
+	var cfg appcfg.AppConfiguration
+	if err := yaml.Unmarshal(resp.Body(), &cfg); err != nil {
+		return nil, "", err
+	}
+
+	return toApplicationConfig(app, app, &cfg)
+}
+
+func getAppConfigFromRepo(ctx context.Context, app, repoURL, version, token, owner, admin string) (*appcfg.ApplicationConfig, string, error) {
+	chartPath, err := GetIndexAndDownloadChart(ctx, app, repoURL, version, token)
+	if err != nil {
+		return nil, chartPath, err
+	}
+	return getAppConfigFromConfigurationFile(app, chartPath, owner, admin)
+}
+
+func toApplicationConfig(app, chart string, cfg *appcfg.AppConfiguration) (*appcfg.ApplicationConfig, string, error) {
+	var permission []appcfg.AppPermission
+	if cfg.Permission.AppData {
+		permission = append(permission, appcfg.AppDataRW)
+	}
+	if cfg.Permission.AppCache {
+		permission = append(permission, appcfg.AppCacheRW)
+	}
+	if len(cfg.Permission.UserData) > 0 {
+		permission = append(permission, appcfg.UserDataRW)
+	}
+
+	if len(cfg.Permission.SysData) > 0 {
+		var perm []appcfg.SysDataPermission
+		for _, s := range cfg.Permission.SysData {
+			perm = append(perm, appcfg.SysDataPermission{
+				AppName:   s.AppName,
+				Svc:       s.Svc,
+				Namespace: s.Namespace,
+				Port:      s.Port,
+				Group:     s.Group,
+				DataType:  s.DataType,
+				Version:   s.Version,
+				Ops:       s.Ops,
+			})
+		}
+		permission = append(permission, perm)
+	}
+
+	valuePtr := func(v resource.Quantity, err error) (*resource.Quantity, error) {
+		if errors.Is(err, resource.ErrFormatWrong) {
+			return nil, nil
+		}
+
+		return &v, nil
+	}
+
+	mem, err := valuePtr(resource.ParseQuantity(cfg.Spec.RequiredMemory))
+	if err != nil {
+		return nil, chart, err
+	}
+
+	disk, err := valuePtr(resource.ParseQuantity(cfg.Spec.RequiredDisk))
+	if err != nil {
+		return nil, chart, err
+	}
+
+	cpu, err := valuePtr(resource.ParseQuantity(cfg.Spec.RequiredCPU))
+	if err != nil {
+		return nil, chart, err
+	}
+
+	gpu, err := valuePtr(resource.ParseQuantity(cfg.Spec.RequiredGPU))
+	if err != nil {
+		return nil, chart, err
+	}
+
+	// transform from Policy to AppPolicy
+	var policies []appcfg.AppPolicy
+	for _, p := range cfg.Options.Policies {
+		d, _ := time.ParseDuration(p.Duration)
+		policies = append(policies, appcfg.AppPolicy{
+			EntranceName: p.EntranceName,
+			URIRegex:     p.URIRegex,
+			Level:        p.Level,
+			OneTime:      p.OneTime,
+			Duration:     d,
+		})
+	}
+
+	// check dependencies version format
+	for _, dep := range cfg.Options.Dependencies {
+		if err = checkVersionFormat(dep.Version); err != nil {
+			return nil, chart, err
+		}
+	}
+
+	if cfg.Middleware != nil && cfg.Middleware.Redis != nil {
+		if len(cfg.Middleware.Redis.Namespace) == 0 {
+			return nil, chart, errors.New("middleware of Redis namespace can not be empty")
+		}
+	}
+	var appid string
+	if userspace.IsSysApp(app) {
+		appid = app
+	} else {
+		appid = Md5String(app)[:8]
+	}
+
+	return &appcfg.ApplicationConfig{
+		AppID:          appid,
+		CfgFileVersion: cfg.ConfigVersion,
+		AppName:        app,
+		Title:          cfg.Metadata.Title,
+		Version:        cfg.Metadata.Version,
+		Target:         cfg.Metadata.Target,
+		ChartsName:     chart,
+		Entrances:      cfg.Entrances,
+		Ports:          cfg.Ports,
+		TailScale:      cfg.TailScale,
+		Icon:           cfg.Metadata.Icon,
+		Permission:     permission,
+		Requirement: appcfg.AppRequirement{
+			Memory: mem,
+			CPU:    cpu,
+			Disk:   disk,
+			GPU:    gpu,
+		},
+		Policies:             policies,
+		Middleware:           cfg.Middleware,
+		AnalyticsEnabled:     cfg.Options.Analytics.Enabled,
+		ResetCookieEnabled:   cfg.Options.ResetCookie.Enabled,
+		Dependencies:         cfg.Options.Dependencies,
+		Conflicts:            cfg.Options.Conflicts,
+		AppScope:             cfg.Options.AppScope,
+		WsConfig:             cfg.Options.WsConfig,
+		Upload:               cfg.Options.Upload,
+		OnlyAdmin:            cfg.Spec.OnlyAdmin,
+		Namespace:            cfg.Spec.Namespace,
+		MobileSupported:      cfg.Options.MobileSupported,
+		OIDC:                 cfg.Options.OIDC,
+		ApiTimeout:           cfg.Options.ApiTimeout,
+		RunAsUser:            cfg.Spec.RunAsUser,
+		AllowedOutboundPorts: cfg.Options.AllowedOutboundPorts,
+	}, chart, nil
+}
+
+func getAppConfigFromConfigurationFile(app, chart, owner, admin string) (*appcfg.ApplicationConfig, string, error) {
+	data, err := RenderManifest(filepath.Join(chart, AppCfgFileName), owner, admin)
+	if err != nil {
+		return nil, chart, err
+	}
+
+	var cfg appcfg.AppConfiguration
+	if err := yaml.Unmarshal([]byte(data), &cfg); err != nil {
+		return nil, chart, err
+	}
+
+	return toApplicationConfig(app, chart, &cfg)
+}
+
+func checkVersionFormat(constraint string) error {
+	_, err := semver.NewConstraint(constraint)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// GetIndexAndDownloadChart download a chart and returns download chart path.
+func GetIndexAndDownloadChart(ctx context.Context, app, repoURL, version, token string) (string, error) {
+	terminusNonce, err := genTerminusNonce()
+	if err != nil {
+		return "", err
+	}
+	client := resty.New().SetTimeout(10*time.Second).
+		SetHeader(constants.AuthorizationTokenKey, token).
+		SetHeader("Terminus-Nonce", terminusNonce)
+	indexFileURL := repoURL
+	if repoURL[len(repoURL)-1] != '/' {
+		indexFileURL += "/"
+	}
+	indexFileURL += "index.yaml"
+	resp, err := client.R().Get(indexFileURL)
+	if err != nil {
+		return "", err
+	}
+
+	if resp.StatusCode() >= 400 {
+		return "", fmt.Errorf("get app config from repo returns unexpected status code, %d", resp.StatusCode())
+	}
+
+	index, err := loadIndex(resp.Body())
+	if err != nil {
+		klog.Errorf("Failed to load chart index err=%v", err)
+		return "", err
+	}
+
+	klog.Infof("Success to find app chart from index app=%s version=%s", app, version)
+	// get specified version chart, if version is empty return the chart with the latest stable version
+	chartVersion, err := index.Get(app, version)
+
+	if err != nil {
+		klog.Errorf("Failed to get chart version err=%v", err)
+		return "", fmt.Errorf("app [%s-%s] not found in repo", app, version)
+	}
+
+	chartURL, err := repo.ResolveReferenceURL(repoURL, chartVersion.URLs[0])
+	if err != nil {
+		return "", err
+	}
+
+	url, err := url.Parse(chartURL)
+	if err != nil {
+		return "", err
+	}
+
+	// assume the chart path is app name
+	chartPath := appcfg.ChartsPath + "/" + app
+	if files.IsExist(chartPath) {
+		if err := files.RemoveAll(chartPath); err != nil {
+			return "", err
+		}
+	}
+	_, err = downloadAndUnpack(ctx, url, token, terminusNonce)
+	if err != nil {
+		return "", err
+	}
+	return chartPath, nil
+}
+
+func downloadAndUnpack(ctx context.Context, tgz *url.URL, token, terminusNonce string) (string, error) {
+	dst := appcfg.ChartsPath
+	g := new(getter.HttpGetter)
+	g.Header = make(http.Header)
+	g.Header.Set(constants.AuthorizationTokenKey, token)
+	g.Header.Set("Terminus-Nonce", terminusNonce)
+	downloader := &getter.Client{
+		Ctx:       ctx,
+		Dst:       dst,
+		Src:       tgz.String(),
+		Mode:      getter.ClientModeDir,
+		Detectors: getter.Detectors,
+		Getters: map[string]getter.Getter{
+			"http": g,
+			"file": new(getter.FileGetter),
+		},
+	}
+
+	//download the files
+	if err := downloader.Get(); err != nil {
+		klog.Errorf("Failed to get path=%s err=%v", downloader.Src, err)
+		return "", err
+	}
+
+	return dst, nil
+}
+
+func loadIndex(data []byte) (*repo.IndexFile, error) {
+	i := &repo.IndexFile{}
+
+	if len(data) == 0 {
+		return i, repo.ErrEmptyIndexYaml
+	}
+
+	if err := yaml.UnmarshalStrict(data, i); err != nil {
+		return i, err
+	}
+
+	for name, cvs := range i.Entries {
+		for idx := len(cvs) - 1; idx >= 0; idx-- {
+			if cvs[idx].APIVersion == "" {
+				cvs[idx].APIVersion = chart.APIVersionV1
+			}
+			if err := cvs[idx].Validate(); err != nil {
+				klog.Infof("Skipping loading invalid entry for chart name=%q version=%q err=%v", name, cvs[idx].Version, err)
+				cvs = append(cvs[:idx], cvs[idx+1:]...)
+			}
+		}
+	}
+	i.SortEntries()
+	if i.APIVersion == "" {
+		return i, repo.ErrNoAPIVersion
+	}
+	return i, nil
+}
+
+func GetMiddlewareConfigFromRepo(ctx context.Context, owner, app, repoURL, version, token string) (*middlewareinstaller.MiddlewareConfig, error) {
+	chartPath, err := GetIndexAndDownloadChart(ctx, app, repoURL, version, token)
+	if err != nil {
+		return nil, err
+	}
+
+	f, err := os.Open(chartPath + "/OlaresManifest.yaml")
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+
+	var cfg appcfg.AppConfiguration
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, err
+	}
+
+	namespace, _ := AppNamespace(app, owner, cfg.Spec.Namespace)
+
+	return &middlewareinstaller.MiddlewareConfig{
+		MiddlewareName: app,
+		Title:          cfg.Metadata.Title,
+		Version:        cfg.Metadata.Version,
+		ChartsName:     chartPath,
+		RepoURL:        repoURL,
+		Namespace:      namespace,
+		OwnerName:      owner,
+		Cfg:            &cfg}, nil
+}
+
+func genTerminusNonce() (string, error) {
+	randomKey := os.Getenv("APP_RANDOM_KEY")
+	timestamp := getTimestamp()
+	cipherText, err := aesEncrypt([]byte(timestamp), []byte(randomKey))
+	if err != nil {
+		return "", err
+	}
+	b64CipherText := base64.StdEncoding.EncodeToString(cipherText)
+	terminusNonce := "appservice:" + b64CipherText
+	return terminusNonce, nil
+}
+
+func aesEncrypt(origin, key []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	blockSize := block.BlockSize()
+	origin = pKCS7Padding(origin, blockSize)
+	blockMode := cipher.NewCBCEncrypter(block, key[:blockSize])
+	crypted := make([]byte, len(origin))
+	blockMode.CryptBlocks(crypted, origin)
+	return crypted, nil
 }
