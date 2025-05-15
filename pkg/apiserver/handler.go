@@ -2,12 +2,17 @@ package apiserver
 
 import (
 	"context"
+	"fmt"
+	"time"
 
+	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
+	"bytetrade.io/web3os/app-service/pkg/generated/informers/externalversions"
+	lister_v1alpha1 "bytetrade.io/web3os/app-service/pkg/generated/listers/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/upgrade"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace/v1"
 	"bytetrade.io/web3os/app-service/pkg/webhook"
-
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -20,6 +25,11 @@ type Handler struct {
 	sidecarWebhook   *webhook.Webhook
 	upgrader         *upgrade.Upgrader
 	ctrlClient       client.Client
+	informer         externalversions.SharedInformerFactory
+	appLister        lister_v1alpha1.ApplicationLister
+	appmgrLister     lister_v1alpha1.ApplicationManagerLister
+	appSynced        cache.InformerSynced
+	appmgrSynced     cache.InformerSynced
 }
 
 type handlerBuilder struct {
@@ -27,6 +37,7 @@ type handlerBuilder struct {
 	ksHost     string
 	kubeConfig *rest.Config
 	ctrlClient client.Client
+	informer   externalversions.SharedInformerFactory
 }
 
 func (b *handlerBuilder) WithKubesphereConfig(ksHost string) *handlerBuilder {
@@ -46,6 +57,17 @@ func (b *handlerBuilder) WithKubernetesConfig(config *rest.Config) *handlerBuild
 
 func (b *handlerBuilder) WithCtrlClient(client client.Client) *handlerBuilder {
 	b.ctrlClient = client
+	return b
+}
+
+func (b *handlerBuilder) WithAppInformer() *handlerBuilder {
+	appClient, err := versioned.NewForConfig(b.kubeConfig)
+	if err != nil {
+		return nil
+	}
+
+	informer := externalversions.NewSharedInformerFactory(appClient, 10*time.Minute)
+	b.informer = informer
 	return b
 }
 
@@ -96,6 +118,19 @@ func (b *handlerBuilder) Build() (*Handler, error) {
 		sidecarWebhook:   wh,
 		upgrader:         upgrade.NewUpgrader(),
 		ctrlClient:       b.ctrlClient,
+		informer:         b.informer,
+		appLister:        b.informer.App().V1alpha1().Applications().Lister(),
+		appmgrLister:     b.informer.App().V1alpha1().ApplicationManagers().Lister(),
+		appSynced:        b.informer.App().V1alpha1().Applications().Informer().HasSynced,
+		appmgrSynced:     b.informer.App().V1alpha1().ApplicationManagers().Informer().HasSynced,
 	}, err
 
+}
+
+func (h *Handler) Run(stopCh <-chan struct{}) error {
+	h.informer.Start(stopCh)
+	if !cache.WaitForCacheSync(stopCh, h.appSynced, h.appmgrSynced) {
+		return fmt.Errorf("failed to wait for application caches to sync")
+	}
+	return nil
 }

@@ -208,7 +208,10 @@ func runAPIServer(ctx context.Context, ksHost string, kubeConfig *rest.Config, c
 		return err
 	}
 
-	err = server.PrepareRun(ksHost, kubeConfig, client)
+	stopCh := make(chan struct{})
+	defer close(stopCh)
+
+	err = server.PrepareRun(ksHost, kubeConfig, client, stopCh)
 	if err != nil {
 		return err
 	}
