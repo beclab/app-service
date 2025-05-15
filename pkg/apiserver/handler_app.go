@@ -22,10 +22,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -96,7 +98,6 @@ func (h *Handler) status(req *restful.Request, resp *restful.Response) {
 }
 
 func (h *Handler) appsStatus(req *restful.Request, resp *restful.Response) {
-	client := req.Attribute(constants.KubeSphereClientAttribute).(*clientset.ClientSet)
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 	isSysApp := req.QueryParameter("issysapp")
 	state := req.QueryParameter("state")
@@ -112,8 +113,7 @@ func (h *Handler) appsStatus(req *restful.Request, resp *restful.Response) {
 		stateSet.Insert(s)
 	}
 
-	// run with request context for incoming client
-	allApps, err := client.AppClient.AppV1alpha1().Applications().List(req.Request.Context(), metav1.ListOptions{})
+	allApps, err := h.appLister.List(labels.Everything())
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -122,7 +122,7 @@ func (h *Handler) appsStatus(req *restful.Request, resp *restful.Response) {
 	// filter by application's owner
 	filteredApps := make([]appinstaller.Status, 0)
 	appSets := sets.String{}
-	for _, a := range allApps.Items {
+	for _, a := range allApps {
 		if a.Spec.Owner == owner {
 			if !stateSet.Has(a.Status.State) {
 				continue
@@ -147,12 +147,12 @@ func (h *Handler) appsStatus(req *restful.Request, resp *restful.Response) {
 		}
 	}
 
-	appAms, err := client.AppClient.AppV1alpha1().ApplicationManagers().List(req.Request.Context(), metav1.ListOptions{})
+	appAms, err := h.appmgrLister.List(labels.Everything())
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
-	for _, am := range appAms.Items {
+	for _, am := range appAms {
 		if am.Spec.AppOwner == owner && (am.Status.State == v1alpha1.Pending ||
 			am.Status.State == v1alpha1.Downloading || am.Status.State == v1alpha1.Installing) {
 			if !stateSet.Has(v1alpha1.Pending.String()) || !stateSet.Has(v1alpha1.Downloading.String()) || !stateSet.Has(v1alpha1.Installing.String()) {
@@ -224,11 +224,9 @@ func (h *Handler) operate(req *restful.Request, resp *restful.Response) {
 }
 
 func (h *Handler) appsOperate(req *restful.Request, resp *restful.Response) {
-	client := req.Attribute(constants.KubeSphereClientAttribute).(*clientset.ClientSet)
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 
-	// run with request context for incoming client
-	ams, err := client.AppClient.AppV1alpha1().ApplicationManagers().List(req.Request.Context(), metav1.ListOptions{})
+	ams, err := h.appmgrLister.List(labels.Everything())
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -236,7 +234,7 @@ func (h *Handler) appsOperate(req *restful.Request, resp *restful.Response) {
 
 	// filter by application's owner
 	filteredOperates := make([]appinstaller.Operate, 0)
-	for _, am := range ams.Items {
+	for _, am := range ams {
 		if am.Spec.Type != v1alpha1.App {
 			continue
 		}
@@ -329,15 +327,14 @@ func (h *Handler) allOperateHistory(req *restful.Request, resp *restful.Response
 		}
 	}
 
-	var ams v1alpha1.ApplicationManagerList
-	err := h.ctrlClient.List(req.Request.Context(), &ams)
+	ams, err := h.appmgrLister.List(labels.Everything())
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
 	ops := make([]appinstaller.OperateHistory, 0)
 
-	for _, am := range ams.Items {
+	for _, am := range ams {
 		if !filteredResourceTypes.Has(am.Spec.Type.String()) {
 			continue
 		}
@@ -442,7 +439,6 @@ func (h *Handler) getApp(req *restful.Request, resp *restful.Response) {
 }
 
 func (h *Handler) apps(req *restful.Request, resp *restful.Response) {
-	client := req.Attribute(constants.KubeSphereClientAttribute).(*clientset.ClientSet)
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 	isSysApp := req.QueryParameter("issysapp")
 	state := req.QueryParameter("state")
@@ -462,8 +458,13 @@ func (h *Handler) apps(req *restful.Request, resp *restful.Response) {
 	appsMap := make(map[string]v1alpha1.Application)
 
 	// get pending app's from app managers
-	ams, err := client.AppClient.AppV1alpha1().ApplicationManagers().List(req.Request.Context(), metav1.ListOptions{})
-	for _, am := range ams.Items {
+	ams, err := h.appmgrLister.List(labels.Everything())
+	if err != nil {
+		klog.Infof("appmgr list failed %v", err)
+		api.HandleError(resp, req, err)
+		return
+	}
+	for _, am := range ams {
 		if am.Spec.Type != v1alpha1.App {
 			continue
 		}
@@ -510,15 +511,14 @@ func (h *Handler) apps(req *restful.Request, resp *restful.Response) {
 		}
 	}
 
-	// run with request context for incoming client
-	allApps, err := client.AppClient.AppV1alpha1().Applications().List(req.Request.Context(), metav1.ListOptions{})
+	allApps, err := h.appLister.List(labels.Everything())
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
 
 	// filter by application's owner
-	for _, a := range allApps.Items {
+	for _, a := range allApps {
 		if a.Spec.Owner == owner {
 			if !stateSet.Has(a.Status.State) {
 				continue
@@ -526,7 +526,7 @@ func (h *Handler) apps(req *restful.Request, resp *restful.Response) {
 			if len(isSysApp) > 0 && strconv.FormatBool(a.Spec.IsSysApp) != isSysApp {
 				continue
 			}
-			appsMap[a.Name] = a
+			appsMap[a.Name] = *a
 		}
 	}
 
@@ -613,16 +613,15 @@ func (h *Handler) operateRecommend(req *restful.Request, resp *restful.Response)
 }
 
 func (h *Handler) operateRecommendList(req *restful.Request, resp *restful.Response) {
-	client := req.Attribute(constants.KubeSphereClientAttribute).(*clientset.ClientSet)
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 
-	ams, err := client.AppClient.AppV1alpha1().ApplicationManagers().List(req.Request.Context(), metav1.ListOptions{})
+	ams, err := h.appmgrLister.List(labels.Everything())
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
 	filteredOperates := make([]appinstaller.Operate, 0)
-	for _, am := range ams.Items {
+	for _, am := range ams {
 		if am.Spec.AppOwner == owner && am.Spec.Type == v1alpha1.Recommend {
 			operate := appinstaller.Operate{
 				AppName:           am.Spec.AppName,
@@ -691,15 +690,15 @@ func (h *Handler) operateRecommendHistory(req *restful.Request, resp *restful.Re
 func (h *Handler) allOperateRecommendHistory(req *restful.Request, resp *restful.Response) {
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 
-	var ams v1alpha1.ApplicationManagerList
-	err := h.ctrlClient.List(req.Request.Context(), &ams)
+	ams, err := h.appmgrLister.List(labels.Everything())
+
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
 	ops := make([]appinstaller.OperateHistory, 0)
 
-	for _, am := range ams.Items {
+	for _, am := range ams {
 		if am.Spec.AppOwner != owner || userspace.IsSysApp(am.Spec.AppName) || am.Spec.Type != v1alpha1.Recommend {
 			continue
 		}
@@ -730,7 +729,6 @@ func (h *Handler) allOperateRecommendHistory(req *restful.Request, resp *restful
 }
 
 func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
-	client := req.Attribute(constants.KubeSphereClientAttribute).(*clientset.ClientSet)
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 	isSysApp := req.QueryParameter("issysapp")
 	state := req.QueryParameter("state")
@@ -757,8 +755,9 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 	filteredApps := make([]v1alpha1.Application, 0)
 	appsMap := make(map[string]v1alpha1.Application)
 	// get pending app's from app managers
-	ams, err := client.AppClient.AppV1alpha1().ApplicationManagers().List(req.Request.Context(), metav1.ListOptions{})
-	for _, am := range ams.Items {
+	ams, err := h.appmgrLister.List(labels.Everything())
+
+	for _, am := range ams {
 		if am.Spec.Type != v1alpha1.App {
 			continue
 		}
@@ -807,15 +806,14 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 		}
 	}
 
-	// run with request context for incoming client
-	allApps, err := client.AppClient.AppV1alpha1().Applications().List(req.Request.Context(), metav1.ListOptions{})
+	allApps, err := h.appLister.List(labels.Everything())
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
 
 	// filter by application's owner
-	for _, a := range allApps.Items {
+	for _, a := range allApps {
 		if !stateSet.Has(a.Status.State) {
 			continue
 		}
@@ -825,7 +823,7 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 		if len(isSysApp) > 0 && strconv.FormatBool(a.Spec.IsSysApp) != isSysApp {
 			continue
 		}
-		appsMap[fmt.Sprintf("%s-%s", a.Spec.Name, a.Spec.Owner)] = a
+		appsMap[fmt.Sprintf("%s-%s", a.Spec.Name, a.Spec.Owner)] = *a
 	}
 
 	for _, app := range appsMap {

@@ -12,6 +12,7 @@ import (
 	"github.com/emicklei/go-restful/v3"
 	"github.com/go-openapi/spec"
 	"k8s.io/client-go/rest"
+	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -54,7 +55,7 @@ func New(ctx context.Context) (*APIServer, error) {
 }
 
 // PrepareRun do prepares for API server.
-func (s *APIServer) PrepareRun(ksHost string, kubeConfig *rest.Config, client client.Client) (err error) {
+func (s *APIServer) PrepareRun(ksHost string, kubeConfig *rest.Config, client client.Client, stopCh <-chan struct{}) (err error) {
 	s.container.Filter(logRequestAndResponse)
 	s.container.Router(restful.CurlyRouter{})
 	s.container.RecoverHandler(func(panicReason interface{}, httpWriter http.ResponseWriter) {
@@ -66,9 +67,15 @@ func (s *APIServer) PrepareRun(ksHost string, kubeConfig *rest.Config, client cl
 	apiHandlerBuilder.WithContext(s.serverCtx).
 		WithKubesphereConfig(ksHost).
 		WithKubernetesConfig(kubeConfig).
-		WithCtrlClient(client)
+		WithCtrlClient(client).
+		WithAppInformer()
 	apiHandler, err = apiHandlerBuilder.Build()
 	if err != nil {
+		return err
+	}
+	err = apiHandler.Run(stopCh)
+	if err != nil {
+		klog.Infof("wait for cache sync failed %v", err)
 		return err
 	}
 	err = addServiceToContainer(s.container, apiHandler)
