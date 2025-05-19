@@ -279,6 +279,10 @@ func (c *Creator) installSysApps(ctx context.Context, bflPod *corev1.Pod) error 
 	}
 	vals["gpu"] = gpuType
 
+	vals["terminusGlobalEnvs"] = map[string]interface{}{
+		"COREDNS_SVC": os.Getenv("COREDNS_SVC"),
+	}
+
 	sysApps, err := userspace.GetAppsFromDirectory(constants.UserChartsPath + "/apps")
 	if err != nil {
 		return err
