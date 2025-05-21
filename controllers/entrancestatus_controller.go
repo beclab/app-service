@@ -62,7 +62,7 @@ func (r *EntranceStatusManagerController) SetUpWithManager(mgr ctrl.Manager) err
 			}),
 		predicate.Funcs{
 			CreateFunc: func(e event.CreateEvent) bool {
-				return false
+				return true
 			},
 			UpdateFunc: func(e event.UpdateEvent) bool {
 				return r.preEnqueueCheckForUpdate(e.ObjectOld, e.ObjectNew)
