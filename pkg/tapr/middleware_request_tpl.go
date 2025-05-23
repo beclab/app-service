@@ -2,6 +2,7 @@ package tapr
 
 import (
 	"bytes"
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"text/template"
 )
 
@@ -154,7 +155,7 @@ spec:
 `
 
 func GenMiddleRequest(middleware MiddlewareType, appName, appNamespace, namespace, username, password string,
-	databases []Database, natsConfig *NatsConfig, ownerName string) ([]byte, error) {
+	databases []appcfg.Database, natsConfig *appcfg.NatsConfig, ownerName string) ([]byte, error) {
 	switch middleware {
 	case TypePostgreSQL:
 		return genPostgresRequest(appName, appNamespace, namespace, username, password, databases)
@@ -169,7 +170,7 @@ func GenMiddleRequest(middleware MiddlewareType, appName, appNamespace, namespac
 	}
 }
 
-func genPostgresRequest(appName, appNamespace, namespace, username, password string, databases []Database) ([]byte, error) {
+func genPostgresRequest(appName, appNamespace, namespace, username, password string, databases []appcfg.Database) ([]byte, error) {
 	tpl, err := template.New("postgresRequest").Parse(postgresRequest)
 	if err != nil {
 		return []byte{}, err
@@ -179,12 +180,12 @@ func genPostgresRequest(appName, appNamespace, namespace, username, password str
 		AppName      string
 		AppNamespace string
 		Namespace    string
-		Middleware   *PostgresConfig
+		Middleware   *appcfg.PostgresConfig
 	}{
 		AppName:      appName,
 		AppNamespace: appNamespace,
 		Namespace:    namespace,
-		Middleware: &PostgresConfig{
+		Middleware: &appcfg.PostgresConfig{
 			Username:  username,
 			Password:  password,
 			Databases: databases,
@@ -197,7 +198,7 @@ func genPostgresRequest(appName, appNamespace, namespace, username, password str
 	return middlewareRequest.Bytes(), nil
 }
 
-func genRedisRequest(appName, appNamespace, namespace, password string, databases []Database) ([]byte, error) {
+func genRedisRequest(appName, appNamespace, namespace, password string, databases []appcfg.Database) ([]byte, error) {
 	tpl, err := template.New("redisRequest").Parse(redisRequest)
 	if err != nil {
 		return []byte{}, err
@@ -207,12 +208,12 @@ func genRedisRequest(appName, appNamespace, namespace, password string, database
 		AppName      string
 		AppNamespace string
 		Namespace    string
-		Middleware   *RedisConfig
+		Middleware   *appcfg.RedisConfig
 	}{
 		AppName:      appName,
 		AppNamespace: appNamespace,
 		Namespace:    namespace,
-		Middleware: &RedisConfig{
+		Middleware: &appcfg.RedisConfig{
 			Password:  password,
 			Namespace: databases[0].Name,
 		},
@@ -224,7 +225,7 @@ func genRedisRequest(appName, appNamespace, namespace, password string, database
 	return middlewareRequest.Bytes(), nil
 }
 
-func genMongodbRequest(appName, appNamespace, namespace, username, password string, databases []Database) ([]byte, error) {
+func genMongodbRequest(appName, appNamespace, namespace, username, password string, databases []appcfg.Database) ([]byte, error) {
 	tpl, err := template.New("mongodbRequest").Parse(mongodbRequest)
 	if err != nil {
 		return []byte{}, err
@@ -234,12 +235,12 @@ func genMongodbRequest(appName, appNamespace, namespace, username, password stri
 		AppName      string
 		AppNamespace string
 		Namespace    string
-		Middleware   *MongodbConfig
+		Middleware   *appcfg.MongodbConfig
 	}{
 		AppName:      appName,
 		AppNamespace: appNamespace,
 		Namespace:    namespace,
-		Middleware: &MongodbConfig{
+		Middleware: &appcfg.MongodbConfig{
 			Username:  username,
 			Password:  password,
 			Databases: databases,
@@ -252,7 +253,7 @@ func genMongodbRequest(appName, appNamespace, namespace, username, password stri
 	return middlewareRequest.Bytes(), nil
 }
 
-func genNatsRequest(appName, appNamespace, namespace, username, password string, natsConfig *NatsConfig, ownerName string) ([]byte, error) {
+func genNatsRequest(appName, appNamespace, namespace, username, password string, natsConfig *appcfg.NatsConfig, ownerName string) ([]byte, error) {
 	tpl, err := template.New("natsRequest").Parse(natsRequest)
 	if err != nil {
 		return []byte{}, err
@@ -266,7 +267,7 @@ func genNatsRequest(appName, appNamespace, namespace, username, password string,
 		AppName      string
 		AppNamespace string
 		Namespace    string
-		Middleware   *NatsConfig
+		Middleware   *appcfg.NatsConfig
 	}{
 		AppName:      appName,
 		AppNamespace: appNamespace,

@@ -2,6 +2,7 @@ package tapr
 
 import (
 	"bytes"
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"testing"
 )
 
@@ -15,7 +16,7 @@ func TestGenMiddleRequest(t *testing.T) {
 		password                    = "mypassword"
 	)
 	// test genPostgresRequest function
-	databases := []Database{{Name: "mydb", Distributed: true,
+	databases := []appcfg.Database{{Name: "mydb", Distributed: true,
 		Extensions: []string{"vectors", "postgis"}, Scripts: []string{"BEGIN", "COMMIT"}}}
 
 	result, err := GenMiddleRequest(middleware, appName, appNamespace, namespace, username, password, databases, nil, "")
@@ -104,15 +105,15 @@ spec:
 
 	// test genNatsRequest function
 	middleware = "nats"
-	result, err = GenMiddleRequest(middleware, appName, appNamespace, namespace, username, password, databases, &NatsConfig{
+	result, err = GenMiddleRequest(middleware, appName, appNamespace, namespace, username, password, databases, &appcfg.NatsConfig{
 		Username: "user1",
-		Subjects: []Subject{{
+		Subjects: []appcfg.Subject{{
 			Name: "subject1",
-			Permission: Permission{
+			Permission: appcfg.PermissionCfg{
 				Pub: "allow",
 				Sub: "allow",
 			},
-			Export: []Permission{
+			Export: []appcfg.PermissionCfg{
 				{
 					AppName: "gitlab",
 					Pub:     "allow",
@@ -125,10 +126,10 @@ spec:
 				},
 			},
 		}},
-		Refs: []Ref{
+		Refs: []appcfg.Ref{
 			{
 				AppName: "myapp",
-				Subjects: []RefSubject{
+				Subjects: []appcfg.RefSubject{
 					{
 						Name: "refsubject2",
 						Perm: []string{"pub", "sub"},

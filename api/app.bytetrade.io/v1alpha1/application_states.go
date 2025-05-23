@@ -5,24 +5,12 @@ type ApplicationState string
 
 // These ar the valid states of applications
 const (
-	// AppPending means that the application has been accepted by the system, but system has
-	// at least one application is still at 'installing'/'upgrading' state.
-	AppPending ApplicationState = "pending"
-	// AppInstalling means that the application has been start to install by the system.
-	AppInstalling ApplicationState = "installing"
 	// AppRunning means that the application is installed success and ready for serve.
 	AppRunning ApplicationState = "running"
-	// AppSuspend means that the application's deployment/statefulset replicas has been set to zero.
-	AppSuspend ApplicationState = "suspend"
-	// AppUninstalling means that an uninstall operation is underway.
-	AppUninstalling ApplicationState = "uninstalling"
-	// AppUpgrading means that an upgrade operation is underway.
-	AppUpgrading ApplicationState = "upgrading"
-	// AppResuming means that a resume operation is underway.
-	AppResuming ApplicationState = "resuming"
-	// AppDownloading in that state cr app not yet been created
-	AppDownloading  ApplicationState = "downloading"
-	AppInitializing ApplicationState = "initializing"
+	// AppStopped means that the application's deployment/statefulset replicas has been set to zero.
+	AppStopped ApplicationState = "stopped"
+	// AppNotReady means that the application's not ready to serve
+	AppNotReady ApplicationState = "notReady"
 )
 
 func (a ApplicationState) String() string {

@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"context"
 	"encoding/json"
 	"errors"
@@ -747,7 +748,7 @@ func (h *Handler) getApplicationSubject(req *restful.Request, resp *restful.Resp
 		api.HandleError(resp, req, err)
 		return
 	}
-	ret := make([]tapr.NatsConfig, 0)
+	ret := make([]appcfg.NatsConfig, 0)
 	klog.Infof("get Application Subject...............")
 	klog.Infof("mrs.Items:len: %v", len(mrs.Items))
 	if len(mrs.Items) > 0 {
@@ -767,29 +768,29 @@ func (h *Handler) getApplicationSubject(req *restful.Request, resp *restful.Resp
 			username, _, _ := unstructured.NestedString(mr.Object, "spec", "nats", "user")
 
 			klog.Infof("appName: %v", appName)
-			natsCfg := tapr.NatsConfig{}
+			natsCfg := appcfg.NatsConfig{}
 			natsCfg.Username = username
 			nats, _, _ := unstructured.NestedMap(mr.Object, "spec", "nats")
 			subjects, _, _ := unstructured.NestedSlice(nats, "subjects")
 			klog.Infof("subjects: %v", subjects)
-			natsCfg.Subjects = make([]tapr.Subject, 0)
+			natsCfg.Subjects = make([]appcfg.Subject, 0)
 			for _, s := range subjects {
-				subject := tapr.Subject{}
+				subject := appcfg.Subject{}
 				subjectMap := s.(map[string]interface{})
 				subject.Name, _, _ = unstructured.NestedString(subjectMap, "name")
 
 				permission, _, _ := unstructured.NestedMap(subjectMap, "permission")
-				subject.Permission = tapr.Permission{
+				subject.Permission = appcfg.PermissionCfg{
 					Pub: permission["pub"].(string),
 					Sub: permission["sub"].(string),
 				}
-				subject.Export = make([]tapr.Permission, 0)
+				subject.Export = make([]appcfg.PermissionCfg, 0)
 				export, found, _ := unstructured.NestedSlice(subjectMap, "export")
 				if found {
 					for _, e := range export {
 						exportMap := e.(map[string]interface{})
 						subject.Export = append(subject.Export,
-							tapr.Permission{
+							appcfg.PermissionCfg{
 								AppName: exportMap["appName"].(string),
 								Pub:     exportMap["pub"].(string),
 								Sub:     exportMap["sub"].(string),
@@ -799,17 +800,17 @@ func (h *Handler) getApplicationSubject(req *restful.Request, resp *restful.Resp
 				}
 				natsCfg.Subjects = append(natsCfg.Subjects, subject)
 			}
-			natsCfg.Refs = make([]tapr.Ref, 0)
+			natsCfg.Refs = make([]appcfg.Ref, 0)
 			refs, _, _ := unstructured.NestedSlice(nats, "refs")
 			for _, r := range refs {
-				ref := tapr.Ref{}
+				ref := appcfg.Ref{}
 				refMap := r.(map[string]interface{})
 				ref.AppName, _, _ = unstructured.NestedString(refMap, "appName")
 				ref.AppNamespace, _, _ = unstructured.NestedString(refMap, "appNamespace")
 
 				refSubjects, _, _ := unstructured.NestedSlice(refMap, "subjects")
 				for _, rs := range refSubjects {
-					refSubject := tapr.RefSubject{}
+					refSubject := appcfg.RefSubject{}
 					rsMap := rs.(map[string]interface{})
 					refSubject.Name, _, _ = unstructured.NestedString(rsMap, "name")
 					refSubject.Perm, _, _ = unstructured.NestedStringSlice(rsMap, "perm")
