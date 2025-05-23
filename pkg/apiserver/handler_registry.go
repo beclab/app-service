@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -20,7 +21,7 @@ func (h *Handler) listRegistry(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	var appList []*appinstaller.AppConfiguration
+	var appList []*appcfg.AppConfiguration
 
 	for _, c := range charts {
 		if c.IsDir() {

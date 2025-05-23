@@ -1,7 +1,7 @@
-package tapr
+package appcfg
 
 // Middleware describe middleware config.
-type Middleware struct {
+type MiddlewareCfg struct {
 	Postgres *PostgresConfig `yaml:"postgres,omitempty"`
 	Redis    *RedisConfig    `yaml:"redis,omitempty"`
 	MongoDB  *MongodbConfig  `yaml:"mongodb,omitempty"`
@@ -46,8 +46,8 @@ type NatsConfig struct {
 type Subject struct {
 	Name string `yaml:"name" json:"name"`
 	// Permissions indicates the permission that app can perform on this subject
-	Permission Permission   `yaml:"permission" json:"permission"`
-	Export     []Permission `yaml:"export" json:"export"`
+	Permission PermissionCfg   `yaml:"permission" json:"permission"`
+	Export     []PermissionCfg `yaml:"export" json:"export"`
 }
 
 type Export struct {
@@ -68,7 +68,7 @@ type RefSubject struct {
 	Perm []string `yaml:"perm" json:"perm"`
 }
 
-type Permission struct {
+type PermissionCfg struct {
 	AppName string `yaml:"appName,omitempty" json:"appName,omitempty"`
 	// default is deny
 	Pub string `yaml:"pub" json:"pub"`

@@ -7,30 +7,75 @@ type ApplicationManagerState string
 const (
 	// Pending means that the operation is waiting to be processed.
 	Pending ApplicationManagerState = "pending"
-	// Installing means that the install operation is underway.
-	Installing ApplicationManagerState = "installing"
-	// Upgrading means that the upgrade operation is underway.
-	Upgrading ApplicationManagerState = "upgrading"
-	// Uninstalling means that the uninstall operation is underway.
-	Uninstalling ApplicationManagerState = "uninstalling"
-	// Canceled means that the install operation has been canceled.
-	Canceled ApplicationManagerState = "canceled"
-	// Failed means that the operation has failed
-	Failed ApplicationManagerState = "failed"
-	// Completed means that the operation has been successfully completed.
-	Completed ApplicationManagerState = "completed"
-	// Resuming means that the resume operation is underway.
-	Resuming ApplicationManagerState = "resuming"
-	// Canceling means that the cancel operation is underway.
-	Canceling ApplicationManagerState = "canceling"
-	// Stopping means that the suspend operation is underway.
-	Stopping ApplicationManagerState = "stopping"
 
 	Downloading ApplicationManagerState = "downloading"
 
-	// Processing means that the intermediate state of an operation, include
-	// installing,upgrading,uninstalling,resuming,canceling,stopping.
-	Processing ApplicationManagerState = "processing"
+	// Installing means that the installation operation is underway.
+	Installing ApplicationManagerState = "installing"
+
+	Initializing ApplicationManagerState = "initializing"
+
+	Running ApplicationManagerState = "running"
+
+	// Upgrading means that the upgrade operation is underway.
+	Upgrading ApplicationManagerState = "upgrading"
+
+	Stopping ApplicationManagerState = "stopping"
+
+	Stopped ApplicationManagerState = "stopped"
+
+	// Resuming means that the resume operation is underway.
+	Resuming ApplicationManagerState = "resuming"
+
+	// Uninstalling means that the uninstallation operation is underway.
+	Uninstalling ApplicationManagerState = "uninstalling"
+
+	UninstallFailed ApplicationManagerState = "uninstallFailed"
+
+	ResumeFailed ApplicationManagerState = "resumeFailed"
+
+	UpgradeFailed ApplicationManagerState = "upgradeFailed"
+
+	StopFailed ApplicationManagerState = "stopFailed"
+
+	DownloadFailed ApplicationManagerState = "downloadFailed"
+
+	InstallFailed ApplicationManagerState = "installFailed"
+
+	//InitialFailed ApplicationManagerState = "initialFailed"
+
+	Uninstalled ApplicationManagerState = "uninstalled"
+
+	// PendingCanceled means that the installation operation has been canceled.
+	PendingCanceled      ApplicationManagerState = "pendingCanceled"
+	DownloadingCanceled  ApplicationManagerState = "downloadingCanceled"
+	InstallingCanceled   ApplicationManagerState = "installingCanceled"
+	InitializingCanceled ApplicationManagerState = "initializingCanceled"
+	UpgradingCanceled    ApplicationManagerState = "upgradingCanceled"
+	ResumingCanceled     ApplicationManagerState = "resumingCanceled"
+
+	// PendingCanceling means that the installation operation is under canceling operation.
+	PendingCanceling      ApplicationManagerState = "pendingCanceling"
+	DownloadingCanceling  ApplicationManagerState = "downloadingCanceling"
+	InstallingCanceling   ApplicationManagerState = "installingCanceling"
+	InitializingCanceling ApplicationManagerState = "initializingCanceling"
+	UpgradingCanceling    ApplicationManagerState = "upgradingCanceling"
+	ResumingCanceling     ApplicationManagerState = "resumingCanceling"
+	//SuspendingCanceling   ApplicationManagerState = "suspendingCanceling"
+
+	PendingCancelFailed     ApplicationManagerState = "pendingCancelFailed"
+	DownloadingCancelFailed ApplicationManagerState = "downloadingCancelFailed"
+	InstallingCancelFailed  ApplicationManagerState = "installingCancelFailed"
+	//InitializingCancelFailed ApplicationManagerState = "initializingCancelFailed"
+	UpgradingCancelFailed ApplicationManagerState = "upgradingCancelFailed"
+	//ResumingCancelFailed  ApplicationManagerState = "resumingCancelFailed"
+
+	//SuspendingCancelFailed ApplicationManagerState = "suspendingCancelFailed"
+
+	// Canceling means that the cancel operation is underway.
+	Canceling ApplicationManagerState = "canceling"
+	Failed    ApplicationManagerState = "failed"
+	Canceled  ApplicationManagerState = "canceled"
 )
 
 func (a ApplicationManagerState) String() string {
@@ -42,14 +87,14 @@ type OpType string
 
 // Describe the supported operation types.
 const (
-	// InstallOp means an install operation.
+	// InstallOp means an installation operation.
 	InstallOp OpType = "install"
-	// UninstallOp means an uninstall operation.
+	// UninstallOp means an uninstallation operation.
 	UninstallOp OpType = "uninstall"
 	// UpgradeOp means an upgrade operation.
 	UpgradeOp OpType = "upgrade"
-	// SuspendOp means a suspend operation.
-	SuspendOp OpType = "suspend"
+	// StopOp means a suspend operation.
+	StopOp OpType = "stop"
 	// ResumeOp means a resume operation.
 	ResumeOp OpType = "resume"
 	// CancelOp means a cancel operation that operation can cancel an operation at pending or installing.

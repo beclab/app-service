@@ -33,7 +33,8 @@ type ImageManagerController struct {
 // SetupWithManager sets up the ImageManagerController with the provided controller manager
 func (r *ImageManagerController) SetupWithManager(mgr ctrl.Manager) error {
 	c, err := controller.New("image-controller", mgr, controller.Options{
-		Reconciler: r,
+		MaxConcurrentReconciles: 2,
+		Reconciler:              r,
 	})
 	if err != nil {
 		return err
@@ -91,12 +92,16 @@ func (r *ImageManagerController) Reconcile(ctx context.Context, req ctrl.Request
 		// unexpected error, retry after 5s
 		return ctrl.Result{}, err
 	}
-	r.reconcile(&im)
+
+	err = r.reconcile(&im)
+	if err != nil {
+		ctrl.Log.Error(err, "download image error", "name", req.Name)
+	}
 
 	return reconcile.Result{}, nil
 }
 
-func (r *ImageManagerController) reconcile(instance *appv1alpha1.ImageManager) {
+func (r *ImageManagerController) reconcile(instance *appv1alpha1.ImageManager) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -109,44 +114,62 @@ func (r *ImageManagerController) reconcile(instance *appv1alpha1.ImageManager) {
 	err = r.Get(ctx, types.NamespacedName{Name: instance.Name}, &cur)
 	if err != nil {
 		klog.Errorf("Failed to get imagemanagers name=%s err=%v", instance.Name, err)
+		return err
 	}
 
 	if imageManager == nil {
 		imageManager = make(map[string]context.CancelFunc)
 	}
 	if _, ok := imageManager[instance.Name]; ok {
-		return
+		return nil
 	}
 	imageManager[instance.Name] = cancel
-	if cur.Status.State != appv1alpha1.Downloading.String() {
-		err = r.updateStatus(ctx, &cur, appv1alpha1.Downloading.String(), "downloading")
+	if cur.Status.State != appv1alpha1.ImDownloading.String() {
+		err = r.updateStatus(ctx, &cur, appv1alpha1.ImDownloading.String(), "downloading")
 		if err != nil {
 			klog.Infof("Failed to update imagemanager status name=%v, err=%v", cur.Name, err)
+			return err
 		}
 	}
 	err = r.download(ctx, cur.Spec.Refs, images.PullOptions{AppName: instance.Spec.AppName, OwnerName: instance.Spec.AppOwner, AppNamespace: instance.Spec.AppNamespace})
 	if err != nil {
 		klog.Infof("download failed err=%v", err)
 
-		state := appv1alpha1.Failed.String()
+		state := "failed"
 		if errors.Is(err, context.Canceled) {
-			state = appv1alpha1.Canceled.String()
+			state = appv1alpha1.ImCanceled.String()
 		}
-		err = r.updateStatus(ctx, instance, state, err.Error())
+		err = r.updateStatus(context.TODO(), instance, state, err.Error())
 		if err != nil {
 			klog.Infof("Failed to update status err=%v", err)
 		}
-		return
+		return err
 	}
 
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		err = r.Get(ctx, types.NamespacedName{Name: instance.Name}, &cur)
+		if err != nil {
+			return err
+		}
+		err = r.updateStatus(ctx, &cur, appv1alpha1.ImCompleted.String(), "download success")
+		if err != nil {
+			return err
+		}
+		return err
+	})
+
+	if err != nil {
+		return err
+	}
 	klog.Infof("download image success")
-	return
+	return nil
 }
 
 func (r *ImageManagerController) preEnqueueCheckForCreate(obj client.Object) bool {
 	im, _ := obj.(*appv1alpha1.ImageManager)
 	klog.Infof("enqueue check: %v", im.Status.State)
-	if im.Status.State == appv1alpha1.Failed.String() || im.Status.State == appv1alpha1.Canceled.String() || im.Status.State == appv1alpha1.Completed.String() {
+	if im.Status.State == appv1alpha1.ImFailed.String() || im.Status.State == appv1alpha1.ImCanceled.String() ||
+		im.Status.State == appv1alpha1.ImCompleted.String() {
 		return false
 	}
 	return true
@@ -154,13 +177,10 @@ func (r *ImageManagerController) preEnqueueCheckForCreate(obj client.Object) boo
 
 func (r *ImageManagerController) preEnqueueCheckForUpdate(old, new client.Object) bool {
 	im, _ := new.(*appv1alpha1.ImageManager)
-	if im.Status.State == "canceled" {
-		go r.reconcile2(im)
+	if im.Status.State == appv1alpha1.ImCanceled.String() {
+		go r.cancel(im)
 	}
 	return false
-}
-func (r *ImageManagerController) reconcile2(cur *appv1alpha1.ImageManager) {
-	r.cancel(cur)
 }
 
 func (r *ImageManagerController) download(ctx context.Context, refs []appv1alpha1.Ref, opts images.PullOptions) (err error) {

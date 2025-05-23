@@ -1,6 +1,8 @@
 package middlewareinstaller
 
-import "bytetrade.io/web3os/app-service/pkg/appinstaller"
+import (
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
+)
 
 // MiddlewareConfig contains details of a workflow.
 type MiddlewareConfig struct {
@@ -11,5 +13,5 @@ type MiddlewareConfig struct {
 	Version        string
 	MiddlewareName string // name of application displayed on shortcut
 	OwnerName      string // name of owner who installed application
-	Cfg            *appinstaller.AppConfiguration
+	Cfg            *appcfg.AppConfiguration
 }

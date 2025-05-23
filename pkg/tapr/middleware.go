@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 
 	"github.com/emicklei/go-restful/v3"
@@ -51,11 +52,11 @@ type MetaInfo struct {
 // MiddlewareRequestInfo contains information for middlewarerequest.
 type MiddlewareRequestInfo struct {
 	MetaInfo
-	App       MetaInfo   `json:"app"`
-	UserName  string     `json:"username,omitempty"`
-	Password  string     `json:"password"`
-	Type      string     `json:"type"`
-	Databases []Database `json:"databases,omitempty"`
+	App       MetaInfo          `json:"app"`
+	UserName  string            `json:"username,omitempty"`
+	Password  string            `json:"password"`
+	Type      string            `json:"type"`
+	Databases []appcfg.Database `json:"databases,omitempty"`
 }
 
 type MiddlewareRequestResp struct {
@@ -74,7 +75,7 @@ type Resp struct {
 }
 
 // Apply middlewarerequest, get response and set values.
-func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespace,
+func Apply(middleware *appcfg.MiddlewareCfg, kubeConfig *rest.Config, appName, appNamespace,
 	namespace, token, chartPath, ownerName string, vals map[string]interface{}) error {
 	if middleware == nil {
 		return nil
@@ -144,7 +145,7 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 	if middleware.Redis != nil {
 		username := ""
 		err := process(kubeConfig, appName, appNamespace, namespace, username,
-			middleware.Redis.Password, []Database{{Name: middleware.Redis.Namespace}}, TypeRedis, nil, ownerName)
+			middleware.Redis.Password, []appcfg.Database{{Name: middleware.Redis.Namespace}}, TypeRedis, nil, ownerName)
 		if err != nil {
 			return err
 		}
@@ -183,7 +184,7 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 	if middleware.Nats != nil {
 		username := fmt.Sprintf("%s-%s", middleware.Nats.Username, appNamespace)
 		err := process(kubeConfig, appName, appNamespace, namespace, username,
-			"", []Database{}, TypeNats, middleware.Nats, ownerName)
+			"", []appcfg.Database{}, TypeNats, middleware.Nats, ownerName)
 		klog.Infof("middleware.Nats: %#v\n", middleware.Nats)
 		if err != nil {
 			return err
@@ -206,7 +207,7 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 }
 
 func process(kubeConfig *rest.Config, appName, appNamespace, namespace, username, password string,
-	databases []Database, middleware MiddlewareType, natsConfig *NatsConfig, ownerName string) error {
+	databases []appcfg.Database, middleware MiddlewareType, natsConfig *appcfg.NatsConfig, ownerName string) error {
 	request, err := GenMiddleRequest(middleware, appName,
 		appNamespace, namespace, username, password, databases, natsConfig, ownerName)
 	klog.Infof("nats: request: %s", string(request))

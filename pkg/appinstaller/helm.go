@@ -1,6 +1,8 @@
 package appinstaller
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
+	"bytetrade.io/web3os/app-service/pkg/errcode"
 	"context"
 	"encoding/json"
 	"errors"
@@ -13,6 +15,8 @@ import (
 	"strconv"
 	"time"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
@@ -21,7 +25,6 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/helm"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/tapr"
-	"bytetrade.io/web3os/app-service/pkg/task"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	userspacev1 "bytetrade.io/web3os/app-service/pkg/users/userspace/v1"
 	"bytetrade.io/web3os/app-service/pkg/utils"
@@ -41,8 +44,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 var (
@@ -65,6 +66,9 @@ type HelmOpsInterface interface {
 	Upgrade() error
 	// RollBack is the action for rollback a release.
 	RollBack() error
+	WaitForLaunch() (bool, error)
+
+	// Install2() error
 }
 
 // Opt options for helm ops.
@@ -72,13 +76,15 @@ type Opt struct {
 	Source string
 }
 
+var _ HelmOpsInterface = &HelmOps{}
+
 // HelmOps implements HelmOpsInterface.
 type HelmOps struct {
 	HelmOpsInterface
 	ctx          context.Context
 	kubeConfig   *rest.Config
 	actionConfig *action.Configuration
-	app          *ApplicationConfig
+	app          *appcfg.ApplicationConfig
 	settings     *cli.EnvSettings
 	token        string
 	//client       *kubernetes.Clientset
@@ -99,7 +105,7 @@ func (h *HelmOps) install(values map[string]interface{}) error {
 }
 
 // Install makes install operation for an application.
-func (h *HelmOps) Install() error {
+func (h *HelmOps) Install_deprecated() error {
 	values, err := h.setValues()
 	if err != nil {
 		return err
@@ -164,7 +170,7 @@ func (h *HelmOps) Install() error {
 }
 
 // NewHelmOps constructs a new helmOps.
-func NewHelmOps(ctx context.Context, kubeConfig *rest.Config, app *ApplicationConfig, token string, options Opt) (*HelmOps, error) {
+func NewHelmOps(ctx context.Context, kubeConfig *rest.Config, app *appcfg.ApplicationConfig, token string, options Opt) (HelmOpsInterface, error) {
 	actionConfig, settings, err := helm.InitConfig(kubeConfig, app.Namespace)
 	if err != nil {
 		return nil, err
@@ -327,7 +333,7 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 	h.app.Permission = parseAppPermission(h.app.Permission)
 	for _, p := range h.app.Permission {
 		switch perm := p.(type) {
-		case AppDataPermission, AppCachePermission, UserDataPermission:
+		case appcfg.AppDataPermission, appcfg.AppCachePermission, appcfg.UserDataPermission:
 
 			// app requests app data permission
 			// set .Values.schedule.nodeName and .Values.userspace.appCache to app
@@ -344,16 +350,16 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 			// appData = userspacePath + /Data
 			// userData = userspacePath + /Home
 
-			if perm == AppCacheRW {
+			if perm == appcfg.AppCacheRW {
 				userspace["appCache"] = appCachePath
 				if h.options.Source == "devbox" {
 					userspace["appCache"] = filepath.Join(appCachePath, "studio")
 				}
 			}
-			if perm == UserDataRW {
+			if perm == appcfg.UserDataRW {
 				userspace["userData"] = fmt.Sprintf("%s/Home", userspacePath)
 			}
-			if perm == AppDataRW {
+			if perm == appcfg.AppDataRW {
 				appData := fmt.Sprintf("%s/Data", userspacePath)
 				userspace["appData"] = appData
 				if h.options.Source == "devbox" {
@@ -361,7 +367,7 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 				}
 			}
 
-		case []SysDataPermission:
+		case []appcfg.SysDataPermission:
 			appReg, err := h.registerAppPerm(perm)
 			if err != nil {
 				klog.Errorf("Failed to register err=%v", err)
@@ -459,6 +465,10 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 
 	if h.app.OIDC.Enabled {
 		err = h.createOIDCClient(values, zone, h.app.Namespace)
+		if err != nil {
+			klog.Errorf("Failed to create OIDCClient err=%v", err)
+			return values, err
+		}
 	}
 
 	sharedLibPath := os.Getenv("SHARED_LIB_PATH")
@@ -485,8 +495,8 @@ func (h *HelmOps) userZone() (string, error) {
 	return kubesphere.GetUserZone(h.ctx, h.kubeConfig, h.app.OwnerName)
 }
 
-func (h *HelmOps) registerAppPerm(perm []SysDataPermission) (*RegisterResp, error) {
-	register := PermissionRegister{
+func (h *HelmOps) registerAppPerm(perm []appcfg.SysDataPermission) (*appcfg.RegisterResp, error) {
+	register := appcfg.PermissionRegister{
 		App:   h.app.AppName,
 		AppID: h.app.AppID,
 		Perm:  perm,
@@ -519,7 +529,7 @@ func (h *HelmOps) registerAppPerm(perm []SysDataPermission) (*RegisterResp, erro
 		return nil, errors.New(string(resp.Body()))
 	}
 
-	var regResp RegisterResp
+	var regResp appcfg.RegisterResp
 	err = json.Unmarshal(resp.Body(), &regResp)
 	if err != nil {
 		klog.Error("Failed to unmarshal response body=%s err=%v", string(resp.Body()), err)
@@ -607,7 +617,7 @@ func (h *HelmOps) ownerNamespace() string {
 }
 
 func (h *HelmOps) unregisterAppPerm() error {
-	register := PermissionRegister{
+	register := appcfg.PermissionRegister{
 		App:   h.app.AppName,
 		AppID: h.app.AppID,
 	}
@@ -656,7 +666,7 @@ func (h *HelmOps) Uninstall() error {
 
 	appCacheDirs, err := utils.TryToGetAppdataDirFromDeployment(context.TODO(), h.app.Namespace, h.app.AppName, h.app.OwnerName)
 	if err != nil {
-		klog.Warning("get app cache error, ", err, ", ", h.app.AppName)
+		klog.Warningf("get app %s cache dir failed %v", h.app.AppName, err)
 	}
 
 	err = helm.UninstallCharts(h.actionConfig, h.app.AppName)
@@ -665,7 +675,7 @@ func (h *HelmOps) Uninstall() error {
 	}
 	err = h.unregisterAppPerm()
 	if err != nil {
-		klog.Errorf("Failed to unregister app err=%v", err)
+		klog.Warningf("Failed to unregister app err=%v", err)
 	}
 
 	// delete middleware requests crd
@@ -679,7 +689,7 @@ func (h *HelmOps) Uninstall() error {
 	}
 
 	if len(appCacheDirs) > 0 {
-		klog.Info("clear app cache dirs, ", appCacheDirs)
+		klog.Infof("clear app cache dirs: %v", appCacheDirs)
 		terminusNonce, e := utils.GenTerminusNonce()
 		if e != nil {
 			klog.Errorf("Failed to generate terminus nonce err=%v", e)
@@ -710,7 +720,11 @@ func (h *HelmOps) Uninstall() error {
 	}
 
 	if !utils.IsProtectedNamespace(h.app.Namespace) {
-		return client.CoreV1().Namespaces().Delete(context.TODO(), h.app.Namespace, metav1.DeleteOptions{})
+		err = client.CoreV1().Namespaces().Delete(context.TODO(), h.app.Namespace, metav1.DeleteOptions{})
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return err
 	}
 	return nil
 }
@@ -719,6 +733,7 @@ func (h *HelmOps) Uninstall() error {
 func (h *HelmOps) Upgrade() error {
 	status, err := h.status()
 	if err != nil {
+		klog.Errorf("get release status failed %v", err)
 		return err
 	}
 	if status.Info.Status == helmrelease.StatusDeployed {
@@ -745,7 +760,7 @@ func (h *HelmOps) upgrade() error {
 	}
 	err = h.addApplicationLabelsToDeployment()
 	if err != nil {
-		h.rollBack()
+		//h.rollBack()
 		return err
 	}
 
@@ -774,7 +789,7 @@ func (h *HelmOps) upgrade() error {
 	if isDepClusterScopedApp {
 		err = h.addLabelToNamespaceForDependClusterApp()
 		if err != nil {
-			h.rollBack()
+			//h.rollBack()
 			return err
 		}
 	}
@@ -829,7 +844,7 @@ func (h *HelmOps) upgrade() error {
 	} else {
 		// sys applications.
 		type Policies struct {
-			Policies []Policy `json:"policies"`
+			Policies []appcfg.Policy `json:"policies"`
 		}
 		applicationPoliciesFromAnnotation, ok := deployment.GetAnnotations()[constants.ApplicationPolicies]
 
@@ -842,10 +857,10 @@ func (h *HelmOps) upgrade() error {
 		}
 
 		// transform from Policy to AppPolicy
-		var appPolicies []AppPolicy
+		var appPolicies []appcfg.AppPolicy
 		for _, p := range policy.Policies {
 			d, _ := time.ParseDuration(p.Duration)
-			appPolicies = append(appPolicies, AppPolicy{
+			appPolicies = append(appPolicies, appcfg.AppPolicy{
 				EntranceName: p.EntranceName,
 				URIRegex:     p.URIRegex,
 				Level:        p.Level,
@@ -886,7 +901,7 @@ func (h *HelmOps) upgrade() error {
 	ok, err := h.waitForLaunch()
 	if !ok {
 		// canceled
-		h.rollBack()
+		//h.rollBack()
 		return err
 	}
 
@@ -995,24 +1010,14 @@ func (h *HelmOps) createOIDCClient(values map[string]interface{}, userZone, name
 }
 
 func (h *HelmOps) waitForLaunch() (bool, error) {
-	if h.options.Source == "devbox" {
-		req := reconcile.Request{NamespacedName: types.NamespacedName{
-			Namespace: h.app.OwnerName,
-		}}
-		task.WQueue.(*task.Type).SetCompleted(req)
-		return true, nil
+	for i := 0; i < 20; i++ {
+		klog.Infof("wait for launch ..........xxxxx")
+		time.Sleep(time.Second)
 	}
-	ok := h.waitForStartUp()
+	ok, _ := h.waitForStartUp()
 	if !ok {
 		return false, api.ErrStartUpFailed
 	}
-
-	req := reconcile.Request{NamespacedName: types.NamespacedName{
-		Namespace: h.app.OwnerName,
-	}}
-	task.WQueue.(*task.Type).SetCompleted(req)
-
-	klog.Infof("dequeue username:%s,appname:%s", h.app.OwnerName, h.app.AppName)
 
 	timer := time.NewTicker(2 * time.Second)
 	entrances := h.app.Entrances
@@ -1038,40 +1043,33 @@ func (h *HelmOps) waitForLaunch() (bool, error) {
 		}
 	}
 }
-func (h *HelmOps) waitForStartUp() bool {
+func (h *HelmOps) waitForStartUp() (bool, error) {
 	timer := time.NewTicker(1 * time.Second)
 	for {
 		select {
 		case <-timer.C:
-			startedUp := h.isStartUp()
+			startedUp, err := h.isStartUp()
+			klog.Infof("wait for app %s start up", h.app.AppName)
 			if startedUp {
 				name, _ := utils.FmtAppMgrName(h.app.AppName, h.app.OwnerName, h.app.Namespace)
-				appMgr := &appv1alpha1.ApplicationManager{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: name,
-					},
-					Spec: appv1alpha1.ApplicationManagerSpec{
-						AppName:  h.app.AppName,
-						AppOwner: h.app.OwnerName,
-					},
-				}
-				err := utils.UpdateAppState(h.ctx, appMgr, appv1alpha1.AppInitializing)
+				err := utils.UpdateAppMgrState(h.ctx, name, appv1alpha1.Initializing)
 				if err != nil {
-					klog.Errorf("update app state err=%v", err)
+					klog.Errorf("update appmgr state failed %v", err)
 				}
-
-				klog.Infof("time: %v, appState: %v", time.Now(), appv1alpha1.AppInitializing)
-				return true
+				return true, nil
+			}
+			if errors.Is(err, errcode.ErrPodPending) {
+				return false, err
 			}
 
 		case <-h.ctx.Done():
 			klog.Infof("Waiting for app startup canceled appName=%s", h.app.AppName)
-			return false
+			return false, nil
 		}
 	}
 }
 
-func (h *HelmOps) isStartUp() bool {
+func (h *HelmOps) isStartUp() (bool, error) {
 	var labelSelector string
 	deployment, err := h.client.KubeClient.Kubernetes().AppsV1().Deployments(h.app.Namespace).
 		Get(h.ctx, h.app.AppName, metav1.GetOptions{})
@@ -1084,29 +1082,41 @@ func (h *HelmOps) isStartUp() bool {
 		sts, err := h.client.KubeClient.Kubernetes().AppsV1().StatefulSets(h.app.Namespace).
 			Get(h.ctx, h.app.AppName, metav1.GetOptions{})
 		if err != nil {
-			return false
+			return false, err
 		}
 		labelSelector = metav1.FormatLabelSelector(sts.Spec.Selector)
 	}
 	pods, err := h.client.KubeClient.Kubernetes().CoreV1().Pods(h.app.Namespace).
 		List(h.ctx, metav1.ListOptions{LabelSelector: labelSelector})
+
+	if err != nil {
+		klog.Errorf("app %s get pods err %v", h.app.AppName, err)
+		return false, err
+	}
+
 	if len(pods.Items) == 0 {
-		return false
+		return false, errors.New("no pod found")
 	}
 	for _, pod := range pods.Items {
+		creationTime := pod.GetCreationTimestamp()
+		pendingDuration := time.Since(creationTime.Time)
+
+		if pod.Status.Phase == corev1.PodPending && pendingDuration > time.Minute*2 {
+			return false, errcode.ErrPodPending
+		}
 		totalContainers := len(pod.Spec.Containers)
 		startedContainers := 0
 		for i := len(pod.Status.ContainerStatuses) - 1; i >= 0; i-- {
 			container := pod.Status.ContainerStatuses[i]
-			if *container.Started == true {
+			if *container.Started {
 				startedContainers++
 			}
 		}
 		if startedContainers == totalContainers {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
 type applicationSettingsSubPolicy struct {
@@ -1123,7 +1133,7 @@ type applicationSettingsPolicy struct {
 	Duration      int32                           `json:"valid_duration"`
 }
 
-func getApplicationPolicy(policies []AppPolicy, entrances []appv1alpha1.Entrance) (string, error) {
+func getApplicationPolicy(policies []appcfg.AppPolicy, entrances []appv1alpha1.Entrance) (string, error) {
 	subPolicy := make(map[string][]*applicationSettingsSubPolicy)
 
 	for _, p := range policies {
@@ -1158,33 +1168,33 @@ func getApplicationPolicy(policies []AppPolicy, entrances []appv1alpha1.Entrance
 	return string(policyStr), nil
 }
 
-func parseAppPermission(data []AppPermission) []AppPermission {
-	permissions := make([]AppPermission, 0)
+func parseAppPermission(data []appcfg.AppPermission) []appcfg.AppPermission {
+	permissions := make([]appcfg.AppPermission, 0)
 	for _, p := range data {
 		switch perm := p.(type) {
 		case string:
 			if perm == "appdata-perm" {
-				permissions = append(permissions, AppDataRW)
+				permissions = append(permissions, appcfg.AppDataRW)
 			}
 			if perm == "appcache-perm" {
-				permissions = append(permissions, AppCacheRW)
+				permissions = append(permissions, appcfg.AppCacheRW)
 			}
 			if perm == "userdata-perm" {
-				permissions = append(permissions, UserDataRW)
+				permissions = append(permissions, appcfg.UserDataRW)
 			}
-		case AppDataPermission:
-			permissions = append(permissions, AppDataRW)
-		case AppCachePermission:
-			permissions = append(permissions, AppCacheRW)
-		case UserDataPermission:
-			permissions = append(permissions, UserDataRW)
-		case []SysDataPermission:
+		case appcfg.AppDataPermission:
+			permissions = append(permissions, appcfg.AppDataRW)
+		case appcfg.AppCachePermission:
+			permissions = append(permissions, appcfg.AppCacheRW)
+		case appcfg.UserDataPermission:
+			permissions = append(permissions, appcfg.UserDataRW)
+		case []appcfg.SysDataPermission:
 			permissions = append(permissions, p)
 		case []interface{}:
-			var sps []SysDataPermission
+			var sps []appcfg.SysDataPermission
 			for _, item := range perm {
 				if m, ok := item.(map[string]interface{}); ok {
-					var sp SysDataPermission
+					var sp appcfg.SysDataPermission
 					if appName, ok := m["appName"].(string); ok {
 						sp.AppName = appName
 					}
@@ -1222,4 +1232,106 @@ func parseAppPermission(data []AppPermission) []AppPermission {
 		}
 	}
 	return permissions
+}
+
+func (h *HelmOps) Install() error {
+	var err error
+	values, err := h.setValues()
+	if err != nil {
+		klog.Errorf("set values err %v", err)
+		return err
+	}
+	namespace := fmt.Sprintf("%s-%s", "user-system", h.app.OwnerName)
+	if err := tapr.Apply(h.app.Middleware, h.kubeConfig, h.app.AppName, h.app.Namespace,
+		namespace, h.token, h.app.ChartsName, h.app.OwnerName, values); err != nil {
+		klog.Errorf("Failed to apply middleware err=%v", err)
+		return err
+	}
+	err = h.install(values)
+	if err != nil && !errors.Is(err, driver.ErrReleaseExists) {
+		klog.Errorf("Failed to install chart err=%v", err)
+		return err
+	}
+	err = h.addApplicationLabelsToDeployment()
+	if err != nil {
+		h.Uninstall()
+		return err
+	}
+
+	isDepClusterScopedApp := false
+	client, err := versioned.NewForConfig(h.kubeConfig)
+	if err != nil {
+		return err
+	}
+	apps, err := client.AppV1alpha1().Applications().List(h.ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+
+	for _, dep := range h.app.Dependencies {
+		if dep.Type == constants.DependencyTypeSystem {
+			continue
+		}
+		for _, app := range apps.Items {
+			if app.Spec.Name == dep.Name && app.Spec.Settings["clusterScoped"] == "true" {
+				isDepClusterScopedApp = true
+				break
+			}
+		}
+
+	}
+	if isDepClusterScopedApp {
+		err = h.addLabelToNamespaceForDependClusterApp()
+		if err != nil {
+			h.Uninstall()
+			return err
+		}
+	}
+
+	ok, err := h.waitForStartUp()
+	if err != nil && errors.Is(err, errcode.ErrPodPending) {
+		return err
+	}
+	if !ok {
+		h.Uninstall()
+		return err
+	}
+	return nil
+}
+
+func (h *HelmOps) isPending() error {
+	return nil
+}
+
+func (h *HelmOps) WaitForLaunch() (bool, error) {
+	//req := reconcile.Request{NamespacedName: types.NamespacedName{
+	//	Namespace: h.app.OwnerName,
+	//}}
+	//task.WQueue.(*task.Type).SetCompleted(req)
+	//
+	//klog.Infof("dequeue username:%s,appname:%s", h.app.OwnerName, h.app.AppName)
+
+	timer := time.NewTicker(2 * time.Second)
+	entrances := h.app.Entrances
+	entranceCount := len(entrances)
+	for {
+		select {
+		case <-timer.C:
+			count := 0
+			for _, e := range entrances {
+				klog.Info("Waiting service for launch :", e.Host)
+				host := fmt.Sprintf("%s.%s", e.Host, h.app.Namespace)
+				if utils.TryConnect(host, strconv.Itoa(int(e.Port))) {
+					count++
+				}
+			}
+			if entranceCount == count {
+				return true, nil
+			}
+
+		case <-h.ctx.Done():
+			klog.Infof("Waiting for launch canceled appName=%s", h.app.AppName)
+			return false, h.ctx.Err()
+		}
+	}
 }

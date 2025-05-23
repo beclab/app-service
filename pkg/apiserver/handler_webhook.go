@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,7 +9,6 @@ import (
 	"strings"
 
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
-	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/provider"
 	"bytetrade.io/web3os/app-service/pkg/upgrade"
@@ -105,7 +105,7 @@ func (h *Handler) mutate(ctx context.Context, req *admissionv1.AdmissionRequest,
 		return h.sidecarWebhook.AdmissionError(req.UID, errors.New("HostNetwork Enabled Unsupported"))
 	}
 	var injectPolicy, injectWs, injectUpload bool
-	var perms []appinstaller.SysDataPermission
+	var perms []appcfg.SysDataPermission
 	if injectPolicy, injectWs, injectUpload, perms, err = h.sidecarWebhook.MustInject(ctx, &pod, req.Namespace); err != nil {
 		return h.sidecarWebhook.AdmissionError(req.UID, err)
 	}

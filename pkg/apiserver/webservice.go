@@ -434,10 +434,10 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 
 	ws.Route(ws.GET("/apps/status").
 		To(handler.appsStatus).
-		Doc("get specified app status").
+		Doc("get app status list").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
-		Returns(http.StatusOK, "Success to get a apps status", nil))
+		Returns(http.StatusOK, "Success to get apps status list", nil))
 
 	ws.Route(ws.GET("/apps/{"+ParamAppName+"}/operate").
 		To(handler.operate).

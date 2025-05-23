@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"fmt"
 	"io/fs"
 	"io/ioutil"
@@ -31,7 +32,7 @@ metadata:
   title: <app title>
 */
 
-func (h *Handler) readAppInfo(dir fs.FileInfo) (*appinstaller.AppConfiguration, error) {
+func (h *Handler) readAppInfo(dir fs.FileInfo) (*appcfg.AppConfiguration, error) {
 	cfgFileName := fmt.Sprintf("%s/%s/%s", appinstaller.ChartsPath, dir.Name(), AppCfgFileName)
 
 	f, err := os.Open(cfgFileName)
@@ -45,7 +46,7 @@ func (h *Handler) readAppInfo(dir fs.FileInfo) (*appinstaller.AppConfiguration, 
 		return nil, err
 	}
 
-	var appCfg appinstaller.AppConfiguration
+	var appCfg appcfg.AppConfiguration
 	if err = yaml.Unmarshal(info, &appCfg); err != nil {
 		return nil, err
 	}
