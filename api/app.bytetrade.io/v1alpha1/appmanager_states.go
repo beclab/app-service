@@ -10,7 +10,7 @@ const (
 
 	Downloading ApplicationManagerState = "downloading"
 
-	// Installing means that the install operation is underway.
+	// Installing means that the installation operation is underway.
 	Installing ApplicationManagerState = "installing"
 
 	Initializing ApplicationManagerState = "initializing"
@@ -20,17 +20,15 @@ const (
 	// Upgrading means that the upgrade operation is underway.
 	Upgrading ApplicationManagerState = "upgrading"
 
-	Suspending ApplicationManagerState = "suspending"
+	Stopping ApplicationManagerState = "stopping"
 
-	Suspended ApplicationManagerState = "suspended"
+	Stopped ApplicationManagerState = "stopped"
 
 	// Resuming means that the resume operation is underway.
 	Resuming ApplicationManagerState = "resuming"
 
-	// Uninstalling means that the uninstall operation is underway.
+	// Uninstalling means that the uninstallation operation is underway.
 	Uninstalling ApplicationManagerState = "uninstalling"
-
-	CancelFailed ApplicationManagerState = "cancelFailed"
 
 	UninstallFailed ApplicationManagerState = "uninstallFailed"
 
@@ -38,7 +36,7 @@ const (
 
 	UpgradeFailed ApplicationManagerState = "upgradeFailed"
 
-	SuspendFailed ApplicationManagerState = "suspendFailed"
+	StopFailed ApplicationManagerState = "stopFailed"
 
 	DownloadFailed ApplicationManagerState = "downloadFailed"
 
@@ -49,16 +47,35 @@ const (
 	Uninstalled ApplicationManagerState = "uninstalled"
 
 	// PendingCanceled means that the installation operation has been canceled.
-	PendingCanceled ApplicationManagerState = "pendingCanceled"
-
+	PendingCanceled      ApplicationManagerState = "pendingCanceled"
 	DownloadingCanceled  ApplicationManagerState = "downloadingCanceled"
 	InstallingCanceled   ApplicationManagerState = "installingCanceled"
 	InitializingCanceled ApplicationManagerState = "initializingCanceled"
 	UpgradingCanceled    ApplicationManagerState = "upgradingCanceled"
 	ResumingCanceled     ApplicationManagerState = "resumingCanceled"
 
+	// PendingCanceling means that the installation operation is under canceling operation.
+	PendingCanceling      ApplicationManagerState = "pendingCanceling"
+	DownloadingCanceling  ApplicationManagerState = "downloadingCanceling"
+	InstallingCanceling   ApplicationManagerState = "installingCanceling"
+	InitializingCanceling ApplicationManagerState = "initializingCanceling"
+	UpgradingCanceling    ApplicationManagerState = "upgradingCanceling"
+	ResumingCanceling     ApplicationManagerState = "resumingCanceling"
+	//SuspendingCanceling   ApplicationManagerState = "suspendingCanceling"
+
+	PendingCancelFailed     ApplicationManagerState = "pendingCancelFailed"
+	DownloadingCancelFailed ApplicationManagerState = "downloadingCancelFailed"
+	InstallingCancelFailed  ApplicationManagerState = "installingCancelFailed"
+	//InitializingCancelFailed ApplicationManagerState = "initializingCancelFailed"
+	UpgradingCancelFailed ApplicationManagerState = "upgradingCancelFailed"
+	//ResumingCancelFailed  ApplicationManagerState = "resumingCancelFailed"
+
+	//SuspendingCancelFailed ApplicationManagerState = "suspendingCancelFailed"
+
 	// Canceling means that the cancel operation is underway.
 	Canceling ApplicationManagerState = "canceling"
+	Failed    ApplicationManagerState = "failed"
+	Canceled  ApplicationManagerState = "canceled"
 )
 
 func (a ApplicationManagerState) String() string {
@@ -70,14 +87,14 @@ type OpType string
 
 // Describe the supported operation types.
 const (
-	// InstallOp means an install operation.
+	// InstallOp means an installation operation.
 	InstallOp OpType = "install"
-	// UninstallOp means an uninstall operation.
+	// UninstallOp means an uninstallation operation.
 	UninstallOp OpType = "uninstall"
 	// UpgradeOp means an upgrade operation.
 	UpgradeOp OpType = "upgrade"
-	// SuspendOp means a suspend operation.
-	SuspendOp OpType = "suspend"
+	// StopOp means a suspend operation.
+	StopOp OpType = "stop"
 	// ResumeOp means a resume operation.
 	ResumeOp OpType = "resume"
 	// CancelOp means a cancel operation that operation can cancel an operation at pending or installing.

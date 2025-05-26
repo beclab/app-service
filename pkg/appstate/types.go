@@ -13,18 +13,26 @@ import (
 type StatefulApp interface {
 	GetApp() *appsv1.Application
 	GetManager() *appsv1.ApplicationManager
-	IsOperating() bool
+	IsOperation() bool
+	IsCancelOperation() bool
 	IsAppCreated() bool
 	State() string
 	IsTimeout() bool
-	Cancel(ctx context.Context) error
-	Exec(ctx context.Context) error
+	Exec(ctx context.Context) (StatefulInProgressApp, error)
 }
 
 type baseStatefulApp struct {
 	app     *appsv1.Application
 	manager *appsv1.ApplicationManager
 	client  client.Client
+}
+
+func (b *baseStatefulApp) GetManager() *appsv1.ApplicationManager {
+	return b.manager
+}
+
+func (b *baseStatefulApp) GetApp() *appsv1.Application {
+	return b.app
 }
 
 func (b *baseStatefulApp) updateStatus(ctx context.Context, am *appsv1.ApplicationManager, state appsv1.ApplicationManagerState,
@@ -67,4 +75,18 @@ func (b *baseStatefulApp) updateStatus(ctx context.Context, am *appsv1.Applicati
 		}
 	}
 	return nil
+}
+
+type StatefulInProgressApp interface {
+	StatefulApp
+	Cancel(ctx context.Context) error
+	Cleanup(ctx context.Context)
+	Done() <-chan struct{}
+}
+
+type PollableStatefulInProgressApp interface {
+	StatefulInProgressApp
+	poll(ctx context.Context) error
+	stopPolling()
+	WaitAsync(ctx context.Context)
 }

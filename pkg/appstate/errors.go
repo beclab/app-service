@@ -5,13 +5,13 @@ import "context"
 type StateError interface {
 	error
 	StateReconcile() func(ctx context.Context) error
-	CleanUp() error
+	CleanUp(ctx context.Context) error
 }
 
 type baseStateError struct {
 	StateError
 	stateReconcile func() func(ctx context.Context) error
-	cleanUp        func() error
+	cleanUp        func(ctx context.Context) error
 }
 
 func (b *baseStateError) StateReconcile() func(ctx context.Context) error {
@@ -22,12 +22,12 @@ func (b *baseStateError) StateReconcile() func(ctx context.Context) error {
 	return b.stateReconcile()
 }
 
-func (b *baseStateError) CleanUp() error {
+func (b *baseStateError) CleanUp(ctx context.Context) error {
 	if b.cleanUp == nil {
 		return nil
 	}
 
-	return b.cleanUp()
+	return b.cleanUp(ctx)
 }
 
 var _ StateError = (*ErrorUnknownState)(nil)
@@ -47,11 +47,41 @@ func IsUnknownState(err StateError) bool {
 
 func NewErrorUnknownState(
 	stateReconcile func() func(ctx context.Context) error,
-	cleanUp func() error,
+	cleanUp func(ctx context.Context) error,
 ) StateError {
 	return &ErrorUnknownState{
 		baseStateError: baseStateError{
 			stateReconcile: stateReconcile,
+			cleanUp:        cleanUp,
+		},
+	}
+}
+
+var _ StateError = (*ErrorUnknownInProgressApp)(nil)
+
+type ErrorUnknownInProgressApp struct {
+	baseStateError
+}
+
+func (e *ErrorUnknownInProgressApp) Error() string {
+	return "unknown in-progress app"
+}
+
+func IsUnknownInProgressApp(err StateError) bool {
+	_, ok := err.(*ErrorUnknownInProgressApp)
+	return ok
+}
+
+/**
+ * @param cleanUp: a function to clean up the in-progress app,
+ * e.g., cancel the in-progress operating from the running map
+ */
+func NewErrorUnknownInProgressApp(
+	cleanUp func(ctx context.Context) error,
+) StateError {
+	return &ErrorUnknownInProgressApp{
+		baseStateError: baseStateError{
+			stateReconcile: nil,
 			cleanUp:        cleanUp,
 		},
 	}

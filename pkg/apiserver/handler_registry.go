@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 
 	"github.com/emicklei/go-restful/v3"
@@ -20,7 +21,7 @@ func (h *Handler) listRegistry(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	var appList []*appinstaller.AppConfiguration
+	var appList []*appcfg.AppConfiguration
 
 	for _, c := range charts {
 		if c.IsDir() {

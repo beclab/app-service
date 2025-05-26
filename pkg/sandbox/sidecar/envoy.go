@@ -11,7 +11,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/sets"
 
-	"bytetrade.io/web3os/app-service/pkg/appinstaller"
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/provider"
 	"bytetrade.io/web3os/app-service/pkg/utils"
@@ -160,7 +160,7 @@ func getEnvoyContainerPorts() []corev1.ContainerPort {
 	return containerPorts
 }
 
-func getEnvoyConfig(appcfg *appinstaller.ApplicationConfig, injectPolicy, injectWs, injectUpload bool, appDomains []string, pod *corev1.Pod, perms []appinstaller.SysDataPermission) string {
+func getEnvoyConfig(appcfg *appcfg.ApplicationConfig, injectPolicy, injectWs, injectUpload bool, appDomains []string, pod *corev1.Pod, perms []appcfg.SysDataPermission) string {
 	setCookieInlineCode, err := genEnvoySetCookieScript(appDomains)
 	if err != nil {
 		klog.Errorf("Failed to get setCookieInlineCode err=%v", err)
@@ -205,7 +205,7 @@ func getEnvoyConfig(appcfg *appinstaller.ApplicationConfig, injectPolicy, inject
 	return string(bootstrap)
 }
 
-func getEnvoyConfigOnlyForOutBound(appcfg *appinstaller.ApplicationConfig, perms []appinstaller.SysDataPermission) string {
+func getEnvoyConfigOnlyForOutBound(appcfg *appcfg.ApplicationConfig, perms []appcfg.SysDataPermission) string {
 	ec := &envoyConfig{
 		username: appcfg.OwnerName,
 		opts: options{
@@ -297,7 +297,7 @@ func getEnvoyConfigOnlyForOutBound(appcfg *appinstaller.ApplicationConfig, perms
 }
 
 // GetInitContainerSpec returns init container spec.
-func GetInitContainerSpec(appcfg *appinstaller.ApplicationConfig) corev1.Container {
+func GetInitContainerSpec(appcfg *appcfg.ApplicationConfig) corev1.Container {
 	iptablesInitCommand := generateIptablesCommands(appcfg)
 	enablePrivilegedInitContainer := true
 
@@ -335,7 +335,7 @@ func GetInitContainerSpec(appcfg *appinstaller.ApplicationConfig) corev1.Contain
 	}
 }
 
-func generateIptablesCommands(appcfg *appinstaller.ApplicationConfig) string {
+func generateIptablesCommands(appcfg *appcfg.ApplicationConfig) string {
 	cmd := fmt.Sprintf(`iptables-restore --noflush <<EOF
 # sidecar interception rules
 *nat
@@ -396,7 +396,7 @@ EOF
 }
 
 // GetWebSocketSideCarContainerSpec returns the container specification for the WebSocket sidecar.
-func GetWebSocketSideCarContainerSpec(wsConfig *appinstaller.WsConfig) corev1.Container {
+func GetWebSocketSideCarContainerSpec(wsConfig *appcfg.WsConfig) corev1.Container {
 	return corev1.Container{
 		Name:            constants.WsContainerName,
 		Image:           os.Getenv(constants.WsContainerImage),
@@ -416,7 +416,7 @@ func GetWebSocketSideCarContainerSpec(wsConfig *appinstaller.WsConfig) corev1.Co
 }
 
 // GetUploadSideCarContainerSpec returns the container specification for the upload sidecar.
-func GetUploadSideCarContainerSpec(pod *corev1.Pod, upload *appinstaller.Upload) *corev1.Container {
+func GetUploadSideCarContainerSpec(pod *corev1.Pod, upload *appcfg.Upload) *corev1.Container {
 	dest := filepath.Clean(upload.Dest)
 	volumeName := ""
 	for _, c := range pod.Spec.Containers {
@@ -1051,7 +1051,7 @@ func (ec *envoyConfig) WithUpload() *envoyConfig {
 	return ec
 }
 
-func (ec *envoyConfig) WithProxyOutBound(appcfg *appinstaller.ApplicationConfig, perms []appinstaller.SysDataPermission) (*envoyConfig, error) {
+func (ec *envoyConfig) WithProxyOutBound(appcfg *appcfg.ApplicationConfig, perms []appcfg.SysDataPermission) (*envoyConfig, error) {
 	if len(perms) == 0 {
 		ec.bs.StaticResources.Listeners = append(ec.bs.StaticResources.Listeners, &envoy_listener.Listener{
 			Name:    "listener_outbound",

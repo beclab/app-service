@@ -11,7 +11,7 @@ import (
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
-	"bytetrade.io/web3os/app-service/pkg/appinstaller"
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
@@ -31,7 +31,7 @@ import (
 )
 
 type depRequest struct {
-	Data []appinstaller.Dependency `json:"data"`
+	Data []appcfg.Dependency `json:"data"`
 }
 
 func (h *Handler) install(req *restful.Request, resp *restful.Response) {
@@ -376,13 +376,13 @@ func (h *Handler) checkDependencies(req *restful.Request, resp *restful.Response
 }
 
 // GetAppConfig get app installation configuration from app store
-func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, token, admin string) (*appinstaller.ApplicationConfig, string, error) {
+func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, token, admin string) (*appcfg.ApplicationConfig, string, error) {
 	if repoURL == "" {
 		return nil, "", fmt.Errorf("url info is empty, cfg [%s], repo [%s]", cfgURL, repoURL)
 	}
 
 	var (
-		appcfg    *appinstaller.ApplicationConfig
+		appcfg    *appcfg.ApplicationConfig
 		chartPath string
 		err       error
 	)
@@ -413,13 +413,13 @@ func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, tok
 	return appcfg, chartPath, nil
 }
 
-func getAppConfigFromConfigurationFile(app, chart, owner, admin string) (*appinstaller.ApplicationConfig, string, error) {
+func getAppConfigFromConfigurationFile(app, chart, owner, admin string) (*appcfg.ApplicationConfig, string, error) {
 	data, err := utils.RenderManifest(filepath.Join(chart, AppCfgFileName), owner, admin)
 	if err != nil {
 		return nil, chart, err
 	}
 
-	var cfg appinstaller.AppConfiguration
+	var cfg appcfg.AppConfiguration
 	if err := yaml.Unmarshal([]byte(data), &cfg); err != nil {
 		return nil, chart, err
 	}
@@ -427,7 +427,7 @@ func getAppConfigFromConfigurationFile(app, chart, owner, admin string) (*appins
 	return toApplicationConfig(app, chart, &cfg)
 }
 
-func getAppConfigFromURL(ctx context.Context, app, url string) (*appinstaller.ApplicationConfig, string, error) {
+func getAppConfigFromURL(ctx context.Context, app, url string) (*appcfg.ApplicationConfig, string, error) {
 	client := resty.New().SetTimeout(2 * time.Second)
 	resp, err := client.R().Get(url)
 	if err != nil {
@@ -438,7 +438,7 @@ func getAppConfigFromURL(ctx context.Context, app, url string) (*appinstaller.Ap
 		return nil, "", fmt.Errorf("app config url returns unexpected status code, %d", resp.StatusCode())
 	}
 
-	var cfg appinstaller.AppConfiguration
+	var cfg appcfg.AppConfiguration
 	if err := yaml.Unmarshal(resp.Body(), &cfg); err != nil {
 		return nil, "", err
 	}
@@ -446,7 +446,7 @@ func getAppConfigFromURL(ctx context.Context, app, url string) (*appinstaller.Ap
 	return toApplicationConfig(app, app, &cfg)
 }
 
-func getAppConfigFromRepo(ctx context.Context, app, repoURL, version, token, owner, admin string) (*appinstaller.ApplicationConfig, string, error) {
+func getAppConfigFromRepo(ctx context.Context, app, repoURL, version, token, owner, admin string) (*appcfg.ApplicationConfig, string, error) {
 	chartPath, err := GetIndexAndDownloadChart(ctx, app, repoURL, version, token)
 	if err != nil {
 		return nil, chartPath, err
@@ -454,22 +454,22 @@ func getAppConfigFromRepo(ctx context.Context, app, repoURL, version, token, own
 	return getAppConfigFromConfigurationFile(app, chartPath, owner, admin)
 }
 
-func toApplicationConfig(app, chart string, cfg *appinstaller.AppConfiguration) (*appinstaller.ApplicationConfig, string, error) {
-	var permission []appinstaller.AppPermission
+func toApplicationConfig(app, chart string, cfg *appcfg.AppConfiguration) (*appcfg.ApplicationConfig, string, error) {
+	var permission []appcfg.AppPermission
 	if cfg.Permission.AppData {
-		permission = append(permission, appinstaller.AppDataRW)
+		permission = append(permission, appcfg.AppDataRW)
 	}
 	if cfg.Permission.AppCache {
-		permission = append(permission, appinstaller.AppCacheRW)
+		permission = append(permission, appcfg.AppCacheRW)
 	}
 	if len(cfg.Permission.UserData) > 0 {
-		permission = append(permission, appinstaller.UserDataRW)
+		permission = append(permission, appcfg.UserDataRW)
 	}
 
 	if len(cfg.Permission.SysData) > 0 {
-		var perm []appinstaller.SysDataPermission
+		var perm []appcfg.SysDataPermission
 		for _, s := range cfg.Permission.SysData {
-			perm = append(perm, appinstaller.SysDataPermission{
+			perm = append(perm, appcfg.SysDataPermission{
 				AppName:   s.AppName,
 				Svc:       s.Svc,
 				Namespace: s.Namespace,
@@ -512,10 +512,10 @@ func toApplicationConfig(app, chart string, cfg *appinstaller.AppConfiguration) 
 	}
 
 	// transform from Policy to AppPolicy
-	var policies []appinstaller.AppPolicy
+	var policies []appcfg.AppPolicy
 	for _, p := range cfg.Options.Policies {
 		d, _ := time.ParseDuration(p.Duration)
-		policies = append(policies, appinstaller.AppPolicy{
+		policies = append(policies, appcfg.AppPolicy{
 			EntranceName: p.EntranceName,
 			URIRegex:     p.URIRegex,
 			Level:        p.Level,
@@ -543,7 +543,7 @@ func toApplicationConfig(app, chart string, cfg *appinstaller.AppConfiguration) 
 		appid = utils.Md5String(app)[:8]
 	}
 
-	return &appinstaller.ApplicationConfig{
+	return &appcfg.ApplicationConfig{
 		AppID:          appid,
 		CfgFileVersion: cfg.ConfigVersion,
 		AppName:        app,
@@ -556,7 +556,7 @@ func toApplicationConfig(app, chart string, cfg *appinstaller.AppConfiguration) 
 		TailScale:      cfg.TailScale,
 		Icon:           cfg.Metadata.Icon,
 		Permission:     permission,
-		Requirement: appinstaller.AppRequirement{
+		Requirement: appcfg.AppRequirement{
 			Memory: mem,
 			CPU:    cpu,
 			Disk:   disk,

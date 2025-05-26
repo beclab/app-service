@@ -10,6 +10,7 @@ import (
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
@@ -625,7 +626,7 @@ func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, app
 	} else {
 		// sys applications.
 		type Policies struct {
-			Policies []appinstaller.Policy `json:"policies"`
+			Policies []appcfg.Policy `json:"policies"`
 		}
 		applicationPoliciesFromAnnotation, ok := deployment.GetAnnotations()[constants.ApplicationPolicies]
 
@@ -647,10 +648,10 @@ func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, app
 		}
 
 		// transform from Policy to AppPolicy
-		var appPolicies []appinstaller.AppPolicy
+		var appPolicies []appcfg.AppPolicy
 		for _, p := range policy.Policies {
 			d, _ := time.ParseDuration(p.Duration)
-			appPolicies = append(appPolicies, appinstaller.AppPolicy{
+			appPolicies = append(appPolicies, appcfg.AppPolicy{
 				EntranceName: p.EntranceName,
 				URIRegex:     p.URIRegex,
 				Level:        p.Level,
@@ -776,7 +777,7 @@ func isWorkflow(obs ...metav1.Object) bool {
 	return true
 }
 
-func getApplicationPolicy(policies []appinstaller.AppPolicy, entrances []appv1alpha1.Entrance) (string, error) {
+func getApplicationPolicy(policies []appcfg.AppPolicy, entrances []appv1alpha1.Entrance) (string, error) {
 	subPolicy := make(map[string][]*applicationSettingsSubPolicy)
 
 	for _, p := range policies {

@@ -6,6 +6,9 @@ import (
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/constants"
+	"bytetrade.io/web3os/app-service/pkg/utils"
+	k8sappv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -22,8 +25,12 @@ type PendingApp struct {
 	ttl time.Duration
 }
 
-func (p *PendingApp) IsOperating() bool {
+func (p *PendingApp) IsOperation() bool {
 	return true
+}
+
+func (p *PendingApp) IsCancelOperation() bool {
+	return false
 }
 
 func (p *PendingApp) IsAppCreated() bool {
@@ -49,12 +56,12 @@ func (p *PendingApp) IsTimeout() bool {
 	return p.manager.Status.StatusTime.Add(p.ttl).Before(time.Now())
 }
 
-func NewPendingApp(ctx context.Context, client client.Client,
+func NewPendingApp(ctx context.Context, c client.Client,
 	manager *appsv1.ApplicationManager, ttl time.Duration) (StatefulApp, StateError) {
 
 	// Application's meta.name == ApplicationMannager's meta.name
 	var app appsv1.Application
-	err := client.Get(ctx, types.NamespacedName{Name: manager.Name}, &app)
+	err := c.Get(ctx, types.NamespacedName{Name: manager.Name}, &app)
 	if err != nil && !apierrors.IsNotFound(err) {
 		klog.Error("get application error: ", err)
 		return nil, NewStateError(err.Error())
@@ -65,23 +72,26 @@ func NewPendingApp(ctx context.Context, client client.Client,
 		return nil, NewErrorUnknownState(
 			func() func(ctx context.Context) error {
 				return func(ctx context.Context) error {
-					return removeUnknownApplication(client, manager.Name)(ctx)
+					return removeUnknownApplication(c, manager.Name)(ctx)
 				}
 			},
 			nil, // TODO: clean up, delete all, application and application manager
 		)
 	}
 
-	return &PendingApp{
-		baseStatefulApp: baseStatefulApp{
-			manager: manager,
-			client:  client,
-		},
-		ttl: ttl,
-	}, nil
+	return appFactory.New(c, manager, ttl,
+		func(c client.Client, manager *appsv1.ApplicationManager, ttl time.Duration) StatefulApp {
+			return &PendingApp{
+				baseStatefulApp: baseStatefulApp{
+					manager: manager,
+					client:  c,
+				},
+				ttl: ttl,
+			}
+		})
 }
 
-func (p *PendingApp) Exec(ctx context.Context) error {
+func (p *PendingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
 
 	p.manager.Status.State = appsv1.Downloading
 	now := metav1.Now()
@@ -92,7 +102,7 @@ func (p *PendingApp) Exec(ctx context.Context) error {
 		klog.Error("update app manager status error, ", err, ", ", p.manager.Name)
 	}
 
-	return err
+	return nil, err
 }
 
 func (p *PendingApp) Cancel(ctx context.Context) error {
@@ -117,10 +127,38 @@ func removeUnknownApplication(client client.Client, name string) func(ctx contex
 			return nil
 		}
 
-		err = client.Delete(ctx, &app)
-		if err != nil {
-			klog.Error("delete application error: ", err, ", ", name)
-			return err
+		// delete the whole namespace if the namespace is not system namespace
+		if !utils.IsProtectedNamespace(app.Spec.Namespace) {
+			ns := corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: app.Spec.Namespace,
+				},
+			}
+
+			// application will be removed automatically when the ns is removed
+			err = client.Delete(ctx, &ns)
+			if err != nil {
+				klog.Error("delete namespace error: ", err, ", ", app.Spec.Namespace)
+				return err
+			}
+
+		} else {
+			// delete the deployment of application
+			var deploy k8sappv1.Deployment
+			if err := client.Get(ctx, types.NamespacedName{Name: app.Spec.Name}, &deploy); err == nil {
+				klog.Info("delete deployment of application: %s", app.Spec.Name)
+				if err = client.Delete(ctx, &deploy); err != nil {
+					klog.Error("delete deployment error: ", err, ", ", name)
+				}
+			} else {
+				var sts k8sappv1.StatefulSet
+				if err := client.Get(ctx, types.NamespacedName{Name: name}, &sts); err == nil {
+					klog.Info("delete statefulset of application: %s", name)
+					if err = client.Delete(ctx, &sts); err != nil {
+						klog.Error("delete statefulset error: ", err, ", ", name)
+					}
+				}
+			}
 		}
 
 		return nil

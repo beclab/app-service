@@ -10,6 +10,7 @@ import (
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/utils"
@@ -31,7 +32,7 @@ func AppChartPath(app string) string {
 }
 
 // GetAppInstallationConfig get app installation configuration from app store
-func GetAppInstallationConfig(app, owner string) (*ApplicationConfig, error) {
+func GetAppInstallationConfig(app, owner string) (*appcfg.ApplicationConfig, error) {
 	chart := AppChartPath(app)
 	appcfg, err := getAppConfigFromConfigurationFile(app, chart, owner)
 	if err != nil {
@@ -52,7 +53,7 @@ func GetAppInstallationConfig(app, owner string) (*ApplicationConfig, error) {
 	return appcfg, nil
 }
 
-func getAppConfigFromConfigurationFile(app, chart, owner string) (*ApplicationConfig, error) {
+func getAppConfigFromConfigurationFile(app, chart, owner string) (*appcfg.ApplicationConfig, error) {
 	//f, err := os.Open(filepath.Join(chart, "OlaresManifest.yaml"))
 	//if err != nil {
 	//	return nil, err
@@ -74,26 +75,26 @@ func getAppConfigFromConfigurationFile(app, chart, owner string) (*ApplicationCo
 	if err != nil {
 		return nil, err
 	}
-	var cfg AppConfiguration
+	var cfg appcfg.AppConfiguration
 	if err := yaml.Unmarshal([]byte(data), &cfg); err != nil {
 		return nil, err
 	}
 
-	var permission []AppPermission
+	var permission []appcfg.AppPermission
 	if cfg.Permission.AppData {
-		permission = append(permission, AppDataRW)
+		permission = append(permission, appcfg.AppDataRW)
 	}
 	if cfg.Permission.AppCache {
-		permission = append(permission, AppCacheRW)
+		permission = append(permission, appcfg.AppCacheRW)
 	}
 	if len(cfg.Permission.UserData) > 0 {
-		permission = append(permission, UserDataRW)
+		permission = append(permission, appcfg.UserDataRW)
 	}
 
 	if len(cfg.Permission.SysData) > 0 {
-		var perm []SysDataPermission
+		var perm []appcfg.SysDataPermission
 		for _, s := range cfg.Permission.SysData {
-			perm = append(perm, SysDataPermission{
+			perm = append(perm, appcfg.SysDataPermission{
 				AppName:   s.AppName,
 				Svc:       s.Svc,
 				Namespace: s.Namespace,
@@ -134,14 +135,14 @@ func getAppConfigFromConfigurationFile(app, chart, owner string) (*ApplicationCo
 		return nil, err
 	}
 
-	var polices []AppPolicy
+	var polices []appcfg.AppPolicy
 	if len(cfg.Options.Policies) > 0 {
 		for _, p := range cfg.Options.Policies {
 			duration, err := time.ParseDuration(p.Duration)
 			if err != nil {
 				klog.Errorf("Failed to parse app cfg options policy duration err=%v", err)
 			}
-			polices = append(polices, AppPolicy{
+			polices = append(polices, appcfg.AppPolicy{
 				EntranceName: p.EntranceName,
 				URIRegex:     p.URIRegex,
 				Level:        p.Level,
@@ -151,7 +152,7 @@ func getAppConfigFromConfigurationFile(app, chart, owner string) (*ApplicationCo
 		}
 	}
 
-	return &ApplicationConfig{
+	return &appcfg.ApplicationConfig{
 		AppID:          cfg.Metadata.AppID,
 		CfgFileVersion: cfg.ConfigVersion,
 		AppName:        app,
@@ -164,7 +165,7 @@ func getAppConfigFromConfigurationFile(app, chart, owner string) (*ApplicationCo
 		TailScale:      cfg.TailScale,
 		Icon:           cfg.Metadata.Icon,
 		Permission:     permission,
-		Requirement: AppRequirement{
+		Requirement: appcfg.AppRequirement{
 			Memory: mem,
 			CPU:    cpu,
 			Disk:   disk,
@@ -187,7 +188,7 @@ func getAppConfigFromConfigurationFile(app, chart, owner string) (*ApplicationCo
 
 // GetAppConfigFromCRD et app uninstallation config from crd
 func GetAppConfigFromCRD(app, owner string,
-	client *clientset.ClientSet, req *restful.Request) (*ApplicationConfig, error) {
+	client *clientset.ClientSet, req *restful.Request) (*appcfg.ApplicationConfig, error) {
 	// run with request context for incoming client
 	applist, err := client.AppClient.AppV1alpha1().Applications().List(req.Request.Context(), metav1.ListOptions{})
 	if err != nil {
@@ -198,7 +199,7 @@ func GetAppConfigFromCRD(app, owner string,
 	for _, a := range applist.Items {
 		if a.Spec.Owner == owner && a.Spec.Name == app {
 			// TODO: other configs
-			return &ApplicationConfig{
+			return &appcfg.ApplicationConfig{
 				AppName:   app,
 				Namespace: a.Spec.Namespace,
 				//ChartsName: "charts/apps",

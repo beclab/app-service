@@ -18,6 +18,7 @@ import (
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	v1alpha1client "bytetrade.io/web3os/app-service/pkg/client/clientset/v1alpha1"
@@ -91,8 +92,8 @@ func checkVersionFormat(constraint string) error {
 }
 
 // CheckDependencies check application dependencies, returns unsatisfied dependency.
-func CheckDependencies(ctx context.Context, deps []appinstaller.Dependency, ctrlClient client.Client, owner string, checkAll bool) ([]appinstaller.Dependency, error) {
-	unSatisfiedDeps := make([]appinstaller.Dependency, 0)
+func CheckDependencies(ctx context.Context, deps []appcfg.Dependency, ctrlClient client.Client, owner string, checkAll bool) ([]appcfg.Dependency, error) {
+	unSatisfiedDeps := make([]appcfg.Dependency, 0)
 	client, err := utils.GetClient()
 	if err != nil {
 		return unSatisfiedDeps, err
@@ -153,7 +154,7 @@ func CheckDependencies(ctx context.Context, deps []appinstaller.Dependency, ctrl
 }
 
 // CheckAppRequirement check if the cluster has enough resources for application install/upgrade.
-func CheckAppRequirement(kubeConfig *rest.Config, token string, appConfig *appinstaller.ApplicationConfig) (string, error) {
+func CheckAppRequirement(kubeConfig *rest.Config, token string, appConfig *appcfg.ApplicationConfig) (string, error) {
 	metrics, _, err := GetClusterResource(kubeConfig, token)
 	if err != nil {
 		return "", err
@@ -215,7 +216,7 @@ func CheckAppRequirement(kubeConfig *rest.Config, token string, appConfig *appin
 }
 
 // CheckUserResRequirement check if the user has enough resources for application install/upgrade.
-func CheckUserResRequirement(ctx context.Context, kubeConfig *rest.Config, appConfig *appinstaller.ApplicationConfig, username string) (string, error) {
+func CheckUserResRequirement(ctx context.Context, kubeConfig *rest.Config, appConfig *appcfg.ApplicationConfig, username string) (string, error) {
 	metrics, err := prometheus.GetCurUserResource(ctx, kubeConfig, username)
 	if err != nil {
 		return "", err
@@ -233,7 +234,7 @@ func CheckUserResRequirement(ctx context.Context, kubeConfig *rest.Config, appCo
 	return "", nil
 }
 
-func CheckConflicts(ctx context.Context, conflicts []appinstaller.Conflict, owner string) ([]string, error) {
+func CheckConflicts(ctx context.Context, conflicts []appcfg.Conflict, owner string) ([]string, error) {
 	installedConflictApp := make([]string, 0)
 	client, err := utils.GetClient()
 	if err != nil {
@@ -483,7 +484,7 @@ func getWorkflowConfigFromRepo(ctx context.Context, owner, app, repoURL, version
 		return nil, err
 	}
 
-	var cfg appinstaller.AppConfiguration
+	var cfg appcfg.AppConfiguration
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
@@ -634,7 +635,7 @@ func getMiddlewareConfigFromRepo(ctx context.Context, owner, app, repoURL, versi
 		return nil, err
 	}
 
-	var cfg appinstaller.AppConfiguration
+	var cfg appcfg.AppConfiguration
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
@@ -681,7 +682,7 @@ func CheckMiddlewareRequirement(ctx context.Context, kubeConfig *rest.Config, mi
 	return true, nil
 }
 
-func FormatDependencyError(deps []appinstaller.Dependency) error {
+func FormatDependencyError(deps []appcfg.Dependency) error {
 	var systemDeps, appDeps []string
 
 	for _, dep := range deps {

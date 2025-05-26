@@ -35,8 +35,8 @@ func (h *Handler) suspend(req *restful.Request, resp *restful.Response) {
 
 	now := metav1.Now()
 	status := v1alpha1.ApplicationManagerStatus{
-		OpType:     v1alpha1.SuspendOp,
-		State:      v1alpha1.Suspending,
+		OpType:     v1alpha1.StopOp,
+		State:      v1alpha1.Stopping,
 		StatusTime: &now,
 		UpdateTime: &now,
 	}

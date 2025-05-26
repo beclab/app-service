@@ -17,6 +17,7 @@ import (
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
@@ -86,7 +87,7 @@ type HelmOps struct {
 	ctx          context.Context
 	kubeConfig   *rest.Config
 	actionConfig *action.Configuration
-	app          *ApplicationConfig
+	app          *appcfg.ApplicationConfig
 	settings     *cli.EnvSettings
 	token        string
 	//client       *kubernetes.Clientset
@@ -172,7 +173,7 @@ func (h *HelmOps) Install_deprecated() error {
 }
 
 // NewHelmOps constructs a new helmOps.
-func NewHelmOps(ctx context.Context, kubeConfig *rest.Config, app *ApplicationConfig, token string, options Opt) (HelmOpsInterface, error) {
+func NewHelmOps(ctx context.Context, kubeConfig *rest.Config, app *appcfg.ApplicationConfig, token string, options Opt) (HelmOpsInterface, error) {
 	actionConfig, settings, err := helm.InitConfig(kubeConfig, app.Namespace)
 	if err != nil {
 		return nil, err
@@ -335,7 +336,7 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 	h.app.Permission = parseAppPermission(h.app.Permission)
 	for _, p := range h.app.Permission {
 		switch perm := p.(type) {
-		case AppDataPermission, AppCachePermission, UserDataPermission:
+		case appcfg.AppDataPermission, appcfg.AppCachePermission, appcfg.UserDataPermission:
 
 			// app requests app data permission
 			// set .Values.schedule.nodeName and .Values.userspace.appCache to app
@@ -352,16 +353,16 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 			// appData = userspacePath + /Data
 			// userData = userspacePath + /Home
 
-			if perm == AppCacheRW {
+			if perm == appcfg.AppCacheRW {
 				userspace["appCache"] = appCachePath
 				if h.options.Source == "devbox" {
 					userspace["appCache"] = filepath.Join(appCachePath, "studio")
 				}
 			}
-			if perm == UserDataRW {
+			if perm == appcfg.UserDataRW {
 				userspace["userData"] = fmt.Sprintf("%s/Home", userspacePath)
 			}
-			if perm == AppDataRW {
+			if perm == appcfg.AppDataRW {
 				appData := fmt.Sprintf("%s/Data", userspacePath)
 				userspace["appData"] = appData
 				if h.options.Source == "devbox" {
@@ -369,7 +370,7 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 				}
 			}
 
-		case []SysDataPermission:
+		case []appcfg.SysDataPermission:
 			appReg, err := h.registerAppPerm(perm)
 			if err != nil {
 				klog.Errorf("Failed to register err=%v", err)
@@ -497,8 +498,8 @@ func (h *HelmOps) userZone() (string, error) {
 	return kubesphere.GetUserZone(h.ctx, h.kubeConfig, h.app.OwnerName)
 }
 
-func (h *HelmOps) registerAppPerm(perm []SysDataPermission) (*RegisterResp, error) {
-	register := PermissionRegister{
+func (h *HelmOps) registerAppPerm(perm []appcfg.SysDataPermission) (*appcfg.RegisterResp, error) {
+	register := appcfg.PermissionRegister{
 		App:   h.app.AppName,
 		AppID: h.app.AppID,
 		Perm:  perm,
@@ -531,7 +532,7 @@ func (h *HelmOps) registerAppPerm(perm []SysDataPermission) (*RegisterResp, erro
 		return nil, errors.New(string(resp.Body()))
 	}
 
-	var regResp RegisterResp
+	var regResp appcfg.RegisterResp
 	err = json.Unmarshal(resp.Body(), &regResp)
 	if err != nil {
 		klog.Error("Failed to unmarshal response body=%s err=%v", string(resp.Body()), err)
@@ -619,7 +620,7 @@ func (h *HelmOps) ownerNamespace() string {
 }
 
 func (h *HelmOps) unregisterAppPerm() error {
-	register := PermissionRegister{
+	register := appcfg.PermissionRegister{
 		App:   h.app.AppName,
 		AppID: h.app.AppID,
 	}
@@ -841,7 +842,7 @@ func (h *HelmOps) upgrade() error {
 	} else {
 		// sys applications.
 		type Policies struct {
-			Policies []Policy `json:"policies"`
+			Policies []appcfg.Policy `json:"policies"`
 		}
 		applicationPoliciesFromAnnotation, ok := deployment.GetAnnotations()[constants.ApplicationPolicies]
 
@@ -854,10 +855,10 @@ func (h *HelmOps) upgrade() error {
 		}
 
 		// transform from Policy to AppPolicy
-		var appPolicies []AppPolicy
+		var appPolicies []appcfg.AppPolicy
 		for _, p := range policy.Policies {
 			d, _ := time.ParseDuration(p.Duration)
-			appPolicies = append(appPolicies, AppPolicy{
+			appPolicies = append(appPolicies, appcfg.AppPolicy{
 				EntranceName: p.EntranceName,
 				URIRegex:     p.URIRegex,
 				Level:        p.Level,
@@ -1141,7 +1142,7 @@ type applicationSettingsPolicy struct {
 	Duration      int32                           `json:"valid_duration"`
 }
 
-func getApplicationPolicy(policies []AppPolicy, entrances []appv1alpha1.Entrance) (string, error) {
+func getApplicationPolicy(policies []appcfg.AppPolicy, entrances []appv1alpha1.Entrance) (string, error) {
 	subPolicy := make(map[string][]*applicationSettingsSubPolicy)
 
 	for _, p := range policies {
@@ -1176,33 +1177,33 @@ func getApplicationPolicy(policies []AppPolicy, entrances []appv1alpha1.Entrance
 	return string(policyStr), nil
 }
 
-func parseAppPermission(data []AppPermission) []AppPermission {
-	permissions := make([]AppPermission, 0)
+func parseAppPermission(data []appcfg.AppPermission) []appcfg.AppPermission {
+	permissions := make([]appcfg.AppPermission, 0)
 	for _, p := range data {
 		switch perm := p.(type) {
 		case string:
 			if perm == "appdata-perm" {
-				permissions = append(permissions, AppDataRW)
+				permissions = append(permissions, appcfg.AppDataRW)
 			}
 			if perm == "appcache-perm" {
-				permissions = append(permissions, AppCacheRW)
+				permissions = append(permissions, appcfg.AppCacheRW)
 			}
 			if perm == "userdata-perm" {
-				permissions = append(permissions, UserDataRW)
+				permissions = append(permissions, appcfg.UserDataRW)
 			}
-		case AppDataPermission:
-			permissions = append(permissions, AppDataRW)
-		case AppCachePermission:
-			permissions = append(permissions, AppCacheRW)
-		case UserDataPermission:
-			permissions = append(permissions, UserDataRW)
-		case []SysDataPermission:
+		case appcfg.AppDataPermission:
+			permissions = append(permissions, appcfg.AppDataRW)
+		case appcfg.AppCachePermission:
+			permissions = append(permissions, appcfg.AppCacheRW)
+		case appcfg.UserDataPermission:
+			permissions = append(permissions, appcfg.UserDataRW)
+		case []appcfg.SysDataPermission:
 			permissions = append(permissions, p)
 		case []interface{}:
-			var sps []SysDataPermission
+			var sps []appcfg.SysDataPermission
 			for _, item := range perm {
 				if m, ok := item.(map[string]interface{}); ok {
-					var sp SysDataPermission
+					var sp appcfg.SysDataPermission
 					if appName, ok := m["appName"].(string); ok {
 						sp.AppName = appName
 					}
