@@ -50,7 +50,7 @@ func (p *InstallingApp) IsTimeout() bool {
 }
 
 func NewInstallingApp(c client.Client,
-	manager *appsv1.ApplicationManager, ttl time.Duration) (StatefulApp, error) {
+	manager *appsv1.ApplicationManager, ttl time.Duration) (StatefulApp, StateError) {
 	// TODO: check app state
 
 	return appFactory.New(c, manager, ttl,

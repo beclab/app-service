@@ -31,8 +31,8 @@ func LoadStatefulApp(ctx context.Context, appmgr *ApplicationManagerController, 
 			return appstate.NewDownloadingApp(appmgr, &am, 2*time.Hour)
 		case appv1alpha1.Installing:
 			return appstate.NewInstallingApp(appmgr, &am, 30*time.Minute)
-			// case appv1alpha1.Initializing:
-			// 	return appstate.NewInitializingApp(appmgr, &am), nil
+		case appv1alpha1.Initializing:
+			return appstate.NewInitializingApp(appmgr, &am, 30*time.Minute)
 			// case appv1alpha1.Running:
 			// 	return appstate.NewRunningApp(appmgr, &am), nil
 			// case appv1alpha1.Stopping:
