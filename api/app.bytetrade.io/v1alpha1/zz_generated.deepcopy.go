@@ -262,6 +262,10 @@ func (in *ApplicationStatus) DeepCopyInto(out *ApplicationStatus) {
 		in, out := &in.StartedTime, &out.StartedTime
 		*out = (*in).DeepCopy()
 	}
+	if in.LastTransitionTime != nil {
+		in, out := &in.LastTransitionTime, &out.LastTransitionTime
+		*out = (*in).DeepCopy()
+	}
 	if in.EntranceStatuses != nil {
 		in, out := &in.EntranceStatuses, &out.EntranceStatuses
 		*out = make([]EntranceStatus, len(*in))
@@ -301,6 +305,10 @@ func (in *EntranceStatus) DeepCopyInto(out *EntranceStatus) {
 	*out = *in
 	if in.StatusTime != nil {
 		in, out := &in.StatusTime, &out.StatusTime
+		*out = (*in).DeepCopy()
+	}
+	if in.LastTransitionTime != nil {
+		in, out := &in.LastTransitionTime, &out.LastTransitionTime
 		*out = (*in).DeepCopy()
 	}
 }

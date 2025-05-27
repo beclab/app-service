@@ -42,7 +42,7 @@ const (
 
 	InstallFailed ApplicationManagerState = "installFailed"
 
-	InitialFailed ApplicationManagerState = "initialFailed"
+	//InitialFailed ApplicationManagerState = "initialFailed"
 
 	Uninstalled ApplicationManagerState = "uninstalled"
 

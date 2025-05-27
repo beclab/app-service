@@ -10,6 +10,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/helm"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/utils"
+	"bytetrade.io/web3os/app-service/pkg/utils/config"
 
 	"github.com/emicklei/go-restful/v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -82,7 +83,7 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	appConfig, _, err := GetAppConfig(req.Request.Context(), app, owner, request.CfgURL, request.RepoURL, request.Version, token, admin)
+	appConfig, _, err := config.GetAppConfig(req.Request.Context(), app, owner, request.CfgURL, request.RepoURL, request.Version, token, admin)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -93,8 +94,8 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	if !utils.MatchVersion(appConfig.CfgFileVersion, MinCfgFileVersion) {
-		api.HandleBadRequest(resp, req, fmt.Errorf("olaresManifest.version must %s", MinCfgFileVersion))
+	if !utils.MatchVersion(appConfig.CfgFileVersion, config.MinCfgFileVersion) {
+		api.HandleBadRequest(resp, req, fmt.Errorf("olaresManifest.version must %s", config.MinCfgFileVersion))
 		return
 	}
 

@@ -94,8 +94,10 @@ func (p *InitializingApp) Exec(ctx context.Context) (StatefulInProgressApp, erro
 		func(c context.Context) (StatefulInProgressApp, error) {
 			in := initializingInProgressApp{
 				InitializingApp: p,
-				done:            c.Done,
-				cancel:          cancel,
+				baseStatefulInProgressApp: &baseStatefulInProgressApp{
+					done:   c.Done,
+					cancel: cancel,
+				},
 			}
 
 			go func() {
@@ -133,27 +135,12 @@ var _ StatefulInProgressApp = &initializingInProgressApp{}
 
 type initializingInProgressApp struct {
 	*InitializingApp
-	done   func() <-chan struct{}
-	cancel context.CancelFunc
+	*baseStatefulInProgressApp
 }
 
 // override to avoid duplicate exec
 func (p *initializingInProgressApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
 	return nil, nil
-}
-
-func (p *initializingInProgressApp) Done() <-chan struct{} {
-	if p.done != nil {
-		return p.done()
-	}
-
-	return nil
-}
-
-func (p *initializingInProgressApp) Cleanup(ctx context.Context) {
-	if p.cancel != nil {
-		p.cancel()
-	}
 }
 
 func (p *initializingInProgressApp) Cancel(ctx context.Context) error {

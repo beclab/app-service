@@ -8,14 +8,13 @@ import (
 
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
-	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 
 	"github.com/emicklei/go-restful/v3"
 	"k8s.io/klog/v2"
 )
 
 func (h *Handler) listRegistry(req *restful.Request, resp *restful.Response) {
-	charts, err := ioutil.ReadDir(appinstaller.ChartsPath)
+	charts, err := ioutil.ReadDir(appcfg.ChartsPath)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -51,7 +50,7 @@ func (h *Handler) listRegistry(req *restful.Request, resp *restful.Response) {
 func (h *Handler) registryGet(req *restful.Request, resp *restful.Response) {
 	app := req.PathParameter(ParamAppName)
 
-	charts, err := os.Open(appinstaller.AppChartPath(app))
+	charts, err := os.Open(appcfg.AppChartPath(app))
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return

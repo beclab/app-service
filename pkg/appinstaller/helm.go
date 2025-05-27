@@ -831,7 +831,7 @@ func (h *HelmOps) upgrade() error {
 
 	var policyStr string
 	if !userspace.IsSysApp(h.app.AppName) {
-		if appCfg, err := GetAppInstallationConfig(h.app.AppName, h.app.OwnerName); err != nil {
+		if appCfg, err := appcfg.GetAppInstallationConfig(h.app.AppName, h.app.OwnerName); err != nil {
 			klog.Infof("Failed to get app configuration appName=%s owner=%s err=%v", h.app.AppName, h.app.OwnerName, err)
 		} else {
 			policyStr, err = getApplicationPolicy(appCfg.Policies, h.app.Entrances)

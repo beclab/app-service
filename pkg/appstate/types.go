@@ -4,9 +4,13 @@ import (
 	"context"
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
+	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/klog/v2"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -77,6 +81,37 @@ func (b *baseStatefulApp) updateStatus(ctx context.Context, am *appsv1.Applicati
 	return nil
 }
 
+func (p *baseStatefulApp) forceDeleteApp(ctx context.Context) error {
+	token := p.manager.Status.Payload["token"]
+	appCfg := &appcfg.ApplicationConfig{
+		AppName:   p.manager.Spec.AppName,
+		Namespace: p.manager.Spec.AppNamespace,
+		OwnerName: p.manager.Spec.AppOwner,
+	}
+
+	kubeConfig, err := ctrl.GetConfig()
+	if err != nil {
+		klog.Errorf("get kube config failed %v", err)
+		return err
+	}
+	ops, err := appinstaller.NewHelmOps(ctx, kubeConfig, appCfg, token, appinstaller.Opt{})
+	if err != nil {
+		klog.Errorf("make helm ops failed %v", err)
+		return err
+	}
+	err = ops.Uninstall()
+	if err != nil {
+		klog.Errorf("uninstall app %s failed err %v", appCfg.AppName, err)
+		return err
+	}
+	err = p.updateStatus(ctx, p.manager, appsv1.Uninstalled, nil, appsv1.Uninstalled.String())
+	if err != nil {
+		klog.Errorf("update app manager %s to state %s failed", p.manager.Name, appsv1.Uninstalled)
+		return err
+	}
+	return nil
+}
+
 type StatefulInProgressApp interface {
 	StatefulApp
 	Cancel(ctx context.Context) error
@@ -84,9 +119,58 @@ type StatefulInProgressApp interface {
 	Done() <-chan struct{}
 }
 
+type baseStatefulInProgressApp struct {
+	done   func() <-chan struct{}
+	cancel context.CancelFunc
+}
+
+func (p *baseStatefulInProgressApp) Done() <-chan struct{} {
+	if p.done != nil {
+		return p.done()
+	}
+
+	return nil
+}
+
+func (p *baseStatefulInProgressApp) Cleanup(ctx context.Context) {
+	if p.cancel != nil {
+		p.cancel()
+	}
+}
+
 type PollableStatefulInProgressApp interface {
 	StatefulInProgressApp
 	poll(ctx context.Context) error
 	stopPolling()
 	WaitAsync(ctx context.Context)
+}
+
+type basePollableStatefulInProgressApp struct {
+	cancelPoll context.CancelFunc
+	ctxPoll    context.Context
+}
+
+// Cleanup implements PollableStatefulInProgressApp.
+func (r *basePollableStatefulInProgressApp) Cleanup(ctx context.Context) {
+	r.stopPolling()
+}
+
+func (r *basePollableStatefulInProgressApp) stopPolling() {
+	r.cancelPoll()
+}
+
+func (p *basePollableStatefulInProgressApp) Done() <-chan struct{} {
+	if p.ctxPoll == nil {
+		return nil
+	}
+
+	return p.ctxPoll.Done()
+}
+
+func (p *basePollableStatefulInProgressApp) createPollContext(ctx context.Context) context.Context {
+	pollCtx, cancel := context.WithCancel(ctx)
+	p.cancelPoll = cancel
+	p.ctxPoll = pollCtx
+
+	return pollCtx
 }

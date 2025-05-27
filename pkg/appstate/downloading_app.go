@@ -22,23 +22,11 @@ var _ PollableStatefulInProgressApp = &downloadingInProgressApp{}
 
 type downloadingInProgressApp struct {
 	*DownloadingApp
-	cancelPoll context.CancelFunc
-	ctxPoll    context.Context
-}
-
-// Cleanup implements PollableStatefulInProgressApp.
-func (r *downloadingInProgressApp) Cleanup(ctx context.Context) {
-	r.stopPolling()
-}
-
-func (r *downloadingInProgressApp) stopPolling() {
-	r.cancelPoll()
+	*basePollableStatefulInProgressApp
 }
 
 func (r *downloadingInProgressApp) poll(ctx context.Context) error {
-	pollCtx, cancel := context.WithCancel(ctx)
-	r.cancelPoll = cancel
-	r.ctxPoll = pollCtx
+	pollCtx := r.createPollContext(ctx)
 	return r.imageClient.PollDownloadProgress(pollCtx, r.manager)
 }
 
@@ -56,14 +44,6 @@ func (r *downloadingInProgressApp) Exec(ctx context.Context) (StatefulInProgress
 	// do nothing here
 	// do not exec duplicately
 	return nil, nil
-}
-
-func (p *downloadingInProgressApp) Done() <-chan struct{} {
-	if p.ctxPoll == nil {
-		return nil
-	}
-
-	return p.ctxPoll.Done()
 }
 
 func (p *downloadingInProgressApp) Cancel(ctx context.Context) error {
@@ -159,7 +139,8 @@ func (p *DownloadingApp) Exec(ctx context.Context) (StatefulInProgressApp, error
 	}
 
 	return &downloadingInProgressApp{
-		DownloadingApp: p,
+		DownloadingApp:                    p,
+		basePollableStatefulInProgressApp: &basePollableStatefulInProgressApp{},
 	}, nil
 }
 

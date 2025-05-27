@@ -11,7 +11,6 @@ import (
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
-	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
 	"bytetrade.io/web3os/app-service/pkg/helm"
@@ -557,7 +556,7 @@ func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, app
 
 	// not sys applications.
 	if !userspace.IsSysApp(appName) {
-		if appCfg, err := appinstaller.GetAppInstallationConfig(appName, owner); err != nil {
+		if appCfg, err := appcfg.GetAppInstallationConfig(appName, owner); err != nil {
 			klog.Infof("Failed to get app configuration appName=%s owner=%s err=%v", appName, owner, err)
 		} else {
 			policyStr, err := getApplicationPolicy(appCfg.Policies, appCfg.Entrances)

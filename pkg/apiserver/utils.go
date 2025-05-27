@@ -1,16 +1,10 @@
 package apiserver
 
 import (
-	"bytes"
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -19,7 +13,6 @@ import (
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
-	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	v1alpha1client "bytetrade.io/web3os/app-service/pkg/client/clientset/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/constants"
@@ -30,16 +23,12 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/tapr"
 	"bytetrade.io/web3os/app-service/pkg/upgrade"
 	"bytetrade.io/web3os/app-service/pkg/utils"
-	"bytetrade.io/web3os/app-service/pkg/utils/files"
+	"bytetrade.io/web3os/app-service/pkg/utils/config"
+	"bytetrade.io/web3os/app-service/pkg/utils/download"
 	"bytetrade.io/web3os/app-service/pkg/workflowinstaller"
 
-	"github.com/Masterminds/semver/v3"
 	"github.com/emicklei/go-restful/v3"
-	"github.com/go-resty/resty/v2"
-	"github.com/hashicorp/go-getter"
 	"github.com/pkg/errors"
-	"helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/repo"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -81,14 +70,6 @@ func getAppByName(req *restful.Request, resp *restful.Response) (*v1alpha1.Appli
 
 	api.HandleNotFound(resp, req, fmt.Errorf("the application %s not found", appName))
 	return nil, err
-}
-
-func checkVersionFormat(constraint string) error {
-	_, err := semver.NewConstraint(constraint)
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 // CheckDependencies check application dependencies, returns unsatisfied dependency.
@@ -431,49 +412,13 @@ func getRequestResources() (map[string]resources, error) {
 	return allocatedResources, nil
 }
 
-func genTerminusNonce() (string, error) {
-	randomKey := os.Getenv("APP_RANDOM_KEY")
-	timestamp := getTimestamp()
-	cipherText, err := aesEncrypt([]byte(timestamp), []byte(randomKey))
-	if err != nil {
-		return "", err
-	}
-	b64CipherText := base64.StdEncoding.EncodeToString(cipherText)
-	terminusNonce := "appservice:" + b64CipherText
-	return terminusNonce, nil
-}
-
-func getTimestamp() string {
-	t := time.Now().Unix()
-	return strconv.Itoa(int(t))
-}
-
-func aesEncrypt(origin, key []byte) ([]byte, error) {
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, err
-	}
-	blockSize := block.BlockSize()
-	origin = pKCS7Padding(origin, blockSize)
-	blockMode := cipher.NewCBCEncrypter(block, key[:blockSize])
-	crypted := make([]byte, len(origin))
-	blockMode.CryptBlocks(crypted, origin)
-	return crypted, nil
-}
-
-func pKCS7Padding(ciphertext []byte, blockSize int) []byte {
-	padding := blockSize - len(ciphertext)%blockSize
-	padtext := bytes.Repeat([]byte{byte(padding)}, padding)
-	return append(ciphertext, padtext...)
-}
-
 func getWorkflowConfigFromRepo(ctx context.Context, owner, app, repoURL, version, token string) (*workflowinstaller.WorkflowConfig, error) {
-	chartPath, err := GetIndexAndDownloadChart(ctx, app, repoURL, version, token)
+	chartPath, err := download.GetIndexAndDownloadChart(ctx, app, repoURL, version, token)
 	if err != nil {
 		return nil, err
 	}
 
-	f, err := os.Open(chartPath + "/" + AppCfgFileName)
+	f, err := os.Open(chartPath + "/" + config.AppCfgFileName)
 	if err != nil {
 		return nil, err
 	}
@@ -500,126 +445,8 @@ func getWorkflowConfigFromRepo(ctx context.Context, owner, app, repoURL, version
 		Cfg:          &cfg}, nil
 }
 
-// GetIndexAndDownloadChart download a chart and returns download chart path.
-func GetIndexAndDownloadChart(ctx context.Context, app, repoURL, version, token string) (string, error) {
-	terminusNonce, err := genTerminusNonce()
-	if err != nil {
-		return "", err
-	}
-	client := resty.New().SetTimeout(10*time.Second).
-		SetHeader(constants.AuthorizationTokenKey, token).
-		SetHeader("Terminus-Nonce", terminusNonce)
-	indexFileURL := repoURL
-	if repoURL[len(repoURL)-1] != '/' {
-		indexFileURL += "/"
-	}
-	indexFileURL += "index.yaml"
-	resp, err := client.R().Get(indexFileURL)
-	if err != nil {
-		return "", err
-	}
-
-	if resp.StatusCode() >= 400 {
-		return "", fmt.Errorf("get app config from repo returns unexpected status code, %d", resp.StatusCode())
-	}
-
-	index, err := loadIndex(resp.Body())
-	if err != nil {
-		klog.Errorf("Failed to load chart index err=%v", err)
-		return "", err
-	}
-
-	klog.Infof("Success to find app chart from index app=%s version=%s", app, version)
-	// get specified version chart, if version is empty return the chart with the latest stable version
-	chartVersion, err := index.Get(app, version)
-
-	if err != nil {
-		klog.Errorf("Failed to get chart version err=%v", err)
-		return "", fmt.Errorf("app [%s-%s] not found in repo", app, version)
-	}
-
-	chartURL, err := repo.ResolveReferenceURL(repoURL, chartVersion.URLs[0])
-	if err != nil {
-		return "", err
-	}
-
-	url, err := url.Parse(chartURL)
-	if err != nil {
-		return "", err
-	}
-
-	// assume the chart path is app name
-	chartPath := appinstaller.ChartsPath + "/" + app
-	if files.IsExist(chartPath) {
-		if err := files.RemoveAll(chartPath); err != nil {
-			return "", err
-		}
-	}
-	_, err = downloadAndUnpack(ctx, url, token, terminusNonce)
-	if err != nil {
-		return "", err
-	}
-	return chartPath, nil
-}
-
-func downloadAndUnpack(ctx context.Context, tgz *url.URL, token, terminusNonce string) (string, error) {
-	dst := appinstaller.ChartsPath
-	g := new(getter.HttpGetter)
-	g.Header = make(http.Header)
-	g.Header.Set(constants.AuthorizationTokenKey, token)
-	g.Header.Set("Terminus-Nonce", terminusNonce)
-	downloader := &getter.Client{
-		Ctx:       ctx,
-		Dst:       dst,
-		Src:       tgz.String(),
-		Mode:      getter.ClientModeDir,
-		Detectors: getter.Detectors,
-		Getters: map[string]getter.Getter{
-			"http": g,
-			"file": new(getter.FileGetter),
-		},
-	}
-
-	//download the files
-	if err := downloader.Get(); err != nil {
-		klog.Errorf("Failed to get path=%s err=%v", downloader.Src, err)
-		return "", err
-	}
-
-	return dst, nil
-}
-
-func loadIndex(data []byte) (*repo.IndexFile, error) {
-	i := &repo.IndexFile{}
-
-	if len(data) == 0 {
-		return i, repo.ErrEmptyIndexYaml
-	}
-
-	if err := yaml.UnmarshalStrict(data, i); err != nil {
-		return i, err
-	}
-
-	for name, cvs := range i.Entries {
-		for idx := len(cvs) - 1; idx >= 0; idx-- {
-			if cvs[idx].APIVersion == "" {
-				cvs[idx].APIVersion = chart.APIVersionV1
-			}
-			if err := cvs[idx].Validate(); err != nil {
-				klog.Infof("Skipping loading invalid entry for chart name=%q version=%q err=%v", name, cvs[idx].Version, err)
-				cvs = append(cvs[:idx], cvs[idx+1:]...)
-			}
-		}
-	}
-	i.SortEntries()
-	if i.APIVersion == "" {
-		return i, repo.ErrNoAPIVersion
-	}
-	return i, nil
-}
-
 func getMiddlewareConfigFromRepo(ctx context.Context, owner, app, repoURL, version, token string) (*middlewareinstaller.MiddlewareConfig, error) {
-	chartPath, err := GetIndexAndDownloadChart(ctx, app, repoURL, version, token)
+	chartPath, err := download.GetIndexAndDownloadChart(ctx, app, repoURL, version, token)
 	if err != nil {
 		return nil, err
 	}

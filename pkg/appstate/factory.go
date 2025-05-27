@@ -133,3 +133,17 @@ func (f *statefulAppFactory) execAndWatch(
 
 	return newApp, nil
 }
+
+func (f *statefulAppFactory) cancelOperation(name string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if app, ok := f.running[name]; ok {
+		//
+		app.Cleanup(context.Background())
+		delete(f.running, name)
+		return true
+	}
+
+	return false
+}

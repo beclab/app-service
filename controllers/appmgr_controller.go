@@ -152,10 +152,12 @@ func (r *ApplicationManagerController) Reconcile(ctx context.Context, req ctrl.R
 			klog.Error("execute stateful app operation error, ", err, ", ", statefulApp.GetManager().Name, ", ", statefulApp.State())
 		}
 
-		if pollable, ok := inProgress.(appstate.PollableStatefulInProgressApp); ok {
-			// use background context to wait for the operation to finish
-			// current context `ctx` controlled by the controller-runtime
-			pollable.WaitAsync(context.Background())
+		if inProgress != nil {
+			if pollable, ok := inProgress.(appstate.PollableStatefulInProgressApp); ok {
+				// use background context to wait for the operation to finish
+				// current context `ctx` controlled by the controller-runtime
+				pollable.WaitAsync(context.Background())
+			}
 		}
 
 		return ctrl.Result{}, err

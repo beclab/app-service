@@ -7,16 +7,9 @@ import (
 	"os"
 
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
-	"bytetrade.io/web3os/app-service/pkg/appinstaller"
+	"bytetrade.io/web3os/app-service/pkg/utils/config"
 
 	"gopkg.in/yaml.v2"
-)
-
-const (
-	// AppCfgFileName config file name for application.
-	AppCfgFileName = "OlaresManifest.yaml"
-
-	MinCfgFileVersion = ">= 0.7.2"
 )
 
 /*
@@ -33,7 +26,7 @@ metadata:
 */
 
 func (h *Handler) readAppInfo(dir fs.FileInfo) (*appcfg.AppConfiguration, error) {
-	cfgFileName := fmt.Sprintf("%s/%s/%s", appinstaller.ChartsPath, dir.Name(), AppCfgFileName)
+	cfgFileName := fmt.Sprintf("%s/%s/%s", appcfg.ChartsPath, dir.Name(), config.AppCfgFileName)
 
 	f, err := os.Open(cfgFileName)
 	if err != nil {

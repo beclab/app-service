@@ -62,7 +62,7 @@ func (r *EntranceStatusManagerController) SetUpWithManager(mgr ctrl.Manager) err
 			}),
 		predicate.Funcs{
 			CreateFunc: func(e event.CreateEvent) bool {
-				return false
+				return true
 			},
 			UpdateFunc: func(e event.UpdateEvent) bool {
 				return r.preEnqueueCheckForUpdate(e.ObjectOld, e.ObjectNew)
@@ -101,8 +101,8 @@ func (r *EntranceStatusManagerController) Reconcile(ctx context.Context, req ctr
 
 func (r *EntranceStatusManagerController) preEnqueueCheckForUpdate(_, new client.Object) bool {
 	pod, _ := new.(*corev1.Pod)
-	klog.Infof("Pod.Name=%v, olares-app=%v", pod.Name, pod.Labels["io.bytetrade.app"])
 	if _, ok := pod.Labels["io.bytetrade.app"]; ok {
+		klog.Infof("Pod.Name=%v, olares-app=%v", pod.Name, pod.Labels["io.bytetrade.app"])
 		return true
 	}
 	return false
@@ -167,7 +167,6 @@ func (r *EntranceStatusManagerController) updateEntranceStatus(pod *corev1.Pod) 
 	if err != nil {
 		return err
 	}
-
 	type appInfo struct {
 		name         string
 		startedTime  *metav1.Time
@@ -196,9 +195,9 @@ func (r *EntranceStatusManagerController) updateEntranceStatus(pod *corev1.Pod) 
 	}
 
 	for _, a := range filteredApp {
-		if a.startedTime.IsZero() {
-			continue
-		}
+		//if a.startedTime.IsZero() {
+		//	continue
+		//}
 		var selectedApp v1alpha1.Application
 		err = r.Get(context.TODO(), types.NamespacedName{Name: a.name}, &selectedApp)
 		if err != nil {
@@ -211,6 +210,7 @@ func (r *EntranceStatusManagerController) updateEntranceStatus(pod *corev1.Pod) 
 		}
 		for i := len(appCopy.Status.EntranceStatuses) - 1; i >= 0; i-- {
 			if appCopy.Status.EntranceStatuses[i].Name == a.entranceName {
+
 				appCopy.Status.EntranceStatuses[i].State = entranceState
 				appCopy.Status.EntranceStatuses[i].Reason = rm.Reason
 				appCopy.Status.EntranceStatuses[i].Message = rm.Message
@@ -220,6 +220,8 @@ func (r *EntranceStatusManagerController) updateEntranceStatus(pod *corev1.Pod) 
 		}
 		patchApp := client.MergeFrom(&selectedApp)
 		err = r.Status().Patch(context.TODO(), appCopy, patchApp)
+		klog.Infof("updateEntrances ...:name: %v", appCopy.Name)
+
 		if err != nil {
 			klog.Errorf("failed to patch err=%v", err)
 			return err
@@ -253,8 +255,8 @@ func (r *EntranceStatusManagerController) calEntranceState(pod *corev1.Pod) (v1a
 		return "", ReasonedMessage{Reason: reason}, err
 	}
 	if replicas == 0 {
-		reason = "suspend"
-		return v1alpha1.EntranceSuspend, ReasonedMessage{
+		reason = "stopped"
+		return v1alpha1.EntranceStopped, ReasonedMessage{
 			Reason: reason,
 		}, nil
 	}
@@ -362,5 +364,5 @@ func makeEntranceState(pod *corev1.Pod) (v1alpha1.EntranceState, string, string)
 		return v1alpha1.EntranceRunning, reason, message
 	}
 
-	return v1alpha1.EntranceCrash, reason, message
+	return v1alpha1.EntranceNotReady, reason, message
 }

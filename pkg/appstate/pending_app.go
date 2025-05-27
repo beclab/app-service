@@ -17,10 +17,10 @@ import (
 	"k8s.io/klog/v2"
 )
 
-var _ StatefulApp = &PendingApp{}
+var _ StatefulInProgressApp = &PendingApp{}
 
 type PendingApp struct {
-	StatefulApp
+	StatefulInProgressApp
 	baseStatefulApp
 	ttl time.Duration
 }
@@ -113,6 +113,9 @@ func (p *PendingApp) Cancel(ctx context.Context) error {
 
 	return err
 }
+
+func (p *PendingApp) Cleanup(ctx context.Context) {}
+func (p *PendingApp) Done() <-chan struct{}       { return nil }
 
 func removeUnknownApplication(client client.Client, name string) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
