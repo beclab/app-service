@@ -1,4 +1,4 @@
-package appinstaller
+package appcfg
 
 import (
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"

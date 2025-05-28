@@ -38,6 +38,9 @@ type ApplicationManagerStatus struct {
 	Progress     string                  `json:"progress,omitempty"`
 	UpdateTime   *metav1.Time            `json:"updateTime"`
 	StatusTime   *metav1.Time            `json:"statusTime"`
+	Completed    bool                    `json:"completed,omitempty"`
+	OpTime       *metav1.Time            `json:"opTime,omitempty"`
+	LastState    ApplicationManagerState `json:"lastState,omitempty"`
 }
 
 // ApplicationManagerSpec defines the desired state of ApplicationManager
@@ -52,21 +55,13 @@ type ApplicationManagerSpec struct {
 
 // OpRecord contains details of an operation.
 type OpRecord struct {
-	OpType     OpType                  `json:"opType"`
-	Message    string                  `json:"message"`
-	Version    string                  `json:"version"`
-	Source     string                  `json:"source"`
-	Status     ApplicationManagerState `json:"status"`
-	StatusTime *metav1.Time            `json:"statusTime"`
+	OpType    OpType                  `json:"opType"`
+	Message   string                  `json:"message"`
+	Version   string                  `json:"version"`
+	Source    string                  `json:"source"`
+	Status    ApplicationManagerState `json:"status"`
+	StateTime *metav1.Time            `json:"statusTime"`
 }
-
-//type ImageProgress struct {
-//	AppName   string `json:"appName"`
-//	OwnerName string `json:"ownerName"`
-//	NodeName  string `json:"nodeName"`
-//	ImageRef  string `json:"imageRef"`
-//	Progress  string `json:"progress"`
-//}
 
 //+kubebuilder:object:root=true
 //+k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -81,11 +76,3 @@ type ApplicationManagerList struct {
 func init() {
 	SchemeBuilder.Register(&ApplicationManager{}, &ApplicationManagerList{})
 }
-
-//// AppNamespace returns application namespace.
-//func AppNamespace(app, owner string) string {
-//	if userspace.IsSysApp(app) {
-//		app = "user-space"
-//	}
-//	return fmt.Sprintf("%s-%s", app, owner)
-//}

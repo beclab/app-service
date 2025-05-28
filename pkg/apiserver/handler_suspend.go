@@ -2,12 +2,15 @@ package apiserver
 
 import (
 	"errors"
+	"fmt"
+
+	"bytetrade.io/web3os/app-service/pkg/appstate"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
-	"bytetrade.io/web3os/app-service/pkg/utils"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
 	"github.com/emicklei/go-restful/v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,25 +24,30 @@ func (h *Handler) suspend(req *restful.Request, resp *restful.Response) {
 		api.HandleBadRequest(resp, req, errors.New("sys app can not be suspend"))
 		return
 	}
-	var application v1alpha1.Application
-	name, err := utils.FmtAppMgrName(app, owner, "")
+	name, err := apputils.FmtAppMgrName(app, owner, "")
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
-	err = h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: name}, &application)
+	var am v1alpha1.ApplicationManager
+	err = h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: name}, &am)
 	if err != nil {
 		api.HandleError(resp, req, err)
+		return
+	}
+	if !appstate.IsOperationAllowed(am.Status.State, v1alpha1.StopOp) {
+		api.HandleBadRequest(resp, req, fmt.Errorf("%s operation is not allowed for %s state", v1alpha1.StopOp, am.Status.State))
 		return
 	}
 
 	now := metav1.Now()
 	status := v1alpha1.ApplicationManagerStatus{
-		OpType:     v1alpha1.SuspendOp,
+		OpType:     v1alpha1.StopOp,
+		State:      v1alpha1.Stopping,
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
-	_, err = utils.UpdateAppMgrStatus(name, status)
+	_, err = apputils.UpdateAppMgrStatus(name, status)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -53,39 +61,32 @@ func (h *Handler) suspend(req *restful.Request, resp *restful.Response) {
 func (h *Handler) resume(req *restful.Request, resp *restful.Response) {
 	app := req.PathParameter(ParamAppName)
 	owner := req.Attribute(constants.UserContextAttribute).(string)
-	var application v1alpha1.Application
 
-	name, err := utils.FmtAppMgrName(app, owner, "")
+	name, err := apputils.FmtAppMgrName(app, owner, "")
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
-	err = h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: name}, &application)
+	var am v1alpha1.ApplicationManager
+
+	err = h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: name}, &am)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
-
-	isSuspendByController := false
-	for _, e := range application.Status.EntranceStatuses {
-		if e.Name == app && e.State == "suspend" {
-			isSuspendByController = true
-			break
-		}
-	}
-
-	if application.Status.State != v1alpha1.AppSuspend.String() && !isSuspendByController {
-		api.HandleBadRequest(resp, req, api.ErrNotSupportOperation)
+	if !appstate.IsOperationAllowed(am.Status.State, v1alpha1.UpgradeOp) {
+		api.HandleBadRequest(resp, req, fmt.Errorf("%s operation is not allowed for %s state", v1alpha1.UpgradeOp, am.Status.State))
 		return
 	}
 
 	now := metav1.Now()
 	status := v1alpha1.ApplicationManagerStatus{
 		OpType:     v1alpha1.ResumeOp,
+		State:      v1alpha1.Resuming,
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
-	_, err = utils.UpdateAppMgrStatus(name, status)
+	_, err = apputils.UpdateAppMgrStatus(name, status)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return

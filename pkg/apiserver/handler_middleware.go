@@ -14,6 +14,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/middlewareinstaller"
 	"bytetrade.io/web3os/app-service/pkg/tapr"
 	"bytetrade.io/web3os/app-service/pkg/utils"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
 	"github.com/emicklei/go-restful/v3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -43,7 +44,13 @@ func (h *Handler) installMiddleware(req *restful.Request, resp *restful.Response
 		return
 	}
 
-	client, _ := utils.GetClient()
+	client, err := utils.GetClient()
+	if err != nil {
+		klog.Errorf("Failed to get client err=%v", err)
+		api.HandleError(resp, req, err)
+		return
+	}
+
 	role, err := kubesphere.GetUserRole(req.Request.Context(), h.kubeConfig, owner)
 	if err != nil {
 		api.HandleError(resp, req, err)
@@ -106,18 +113,18 @@ func (h *Handler) installMiddleware(req *restful.Request, resp *restful.Response
 	}
 	now := metav1.Now()
 	opRecord := v1alpha1.OpRecord{
-		OpType:     v1alpha1.InstallOp,
-		Message:    fmt.Sprintf(constants.InstallOperationCompletedTpl, a.Spec.Type.String(), a.Spec.AppName),
-		Version:    middlewareConfig.Cfg.Metadata.Version,
-		Source:     a.Spec.Source,
-		Status:     v1alpha1.Completed,
-		StatusTime: &now,
+		OpType:    v1alpha1.InstallOp,
+		Message:   fmt.Sprintf(constants.InstallOperationCompletedTpl, a.Spec.Type.String(), a.Spec.AppName),
+		Version:   middlewareConfig.Cfg.Metadata.Version,
+		Source:    a.Spec.Source,
+		Status:    v1alpha1.Running,
+		StateTime: &now,
 	}
 	defer func() {
 		if err != nil {
-			opRecord.Status = v1alpha1.Failed
+			opRecord.Status = "failed"
 			opRecord.Message = fmt.Sprintf(constants.OperationFailedTpl, a.Status.OpType, err.Error())
-			e := utils.UpdateStatus(a, opRecord.Status, &opRecord, "", opRecord.Message)
+			e := apputils.UpdateStatus(a, opRecord.Status, &opRecord, opRecord.Message)
 			if e != nil {
 				klog.Errorf("Failed to update applicationmanager status name=%s err=%v", a.Name, e)
 			}
@@ -134,7 +141,7 @@ func (h *Handler) installMiddleware(req *restful.Request, resp *restful.Response
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
-	a, err = utils.UpdateAppMgrStatus(a.Name, middlewareStatus)
+	a, err = apputils.UpdateAppMgrStatus(a.Name, middlewareStatus)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -187,8 +194,8 @@ func (h *Handler) installMiddleware(req *restful.Request, resp *restful.Response
 						}
 					}
 					opRecord.OpType = v1alpha1.CancelOp
-					opRecord.Status = v1alpha1.Canceled
-					err = utils.UpdateStatus(mgr, v1alpha1.Canceled, &opRecord, "", opRecord.Message)
+					opRecord.Status = v1alpha1.InstallingCanceled
+					err = apputils.UpdateStatus(mgr, v1alpha1.InstallingCanceled, &opRecord, opRecord.Message)
 					if err != nil {
 						klog.Infof("Failed to update status err=%v", err)
 					}
@@ -207,7 +214,7 @@ func (h *Handler) installMiddleware(req *restful.Request, resp *restful.Response
 				}
 				klog.Infof("middleware state=%v", state)
 				if state == "ready" {
-					e := utils.UpdateStatus(a, opRecord.Status, &opRecord, "", opRecord.Message)
+					e := apputils.UpdateStatus(a, opRecord.Status, &opRecord, opRecord.Message)
 					if e != nil {
 						klog.Error(e)
 					}
@@ -263,26 +270,26 @@ func (h *Handler) uninstallMiddleware(req *restful.Request, resp *restful.Respon
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
-	name, _ := utils.FmtAppMgrName(app, owner, namespace)
-	mgr, err = utils.UpdateAppMgrStatus(name, middlewareStatus)
+	name, _ := apputils.FmtAppMgrName(app, owner, namespace)
+	mgr, err = apputils.UpdateAppMgrStatus(name, middlewareStatus)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
 	now = metav1.Now()
 	opRecord := v1alpha1.OpRecord{
-		OpType:     v1alpha1.UninstallOp,
-		Message:    "",
-		Source:     mgr.Spec.Source,
-		Version:    mgr.Status.Payload["version"],
-		Status:     v1alpha1.Failed,
-		StatusTime: &now,
+		OpType:    v1alpha1.UninstallOp,
+		Message:   "",
+		Source:    mgr.Spec.Source,
+		Version:   mgr.Status.Payload["version"],
+		Status:    "failed",
+		StateTime: &now,
 	}
 	defer func() {
 		if err != nil {
 			opRecord.Message = fmt.Sprintf(constants.OperationFailedTpl, mgr.Status.OpType, err.Error())
 
-			e := utils.UpdateStatus(mgr, v1alpha1.Failed, &opRecord, "", opRecord.Message)
+			e := apputils.UpdateStatus(mgr, "failed", &opRecord, opRecord.Message)
 			if e != nil {
 				klog.Errorf("Failed to update applicationmanager status in uninstall middleware name=%s err=%v", mgr.Name, e)
 			}
@@ -294,8 +301,8 @@ func (h *Handler) uninstallMiddleware(req *restful.Request, resp *restful.Respon
 		return
 	}
 	opRecord.Message = fmt.Sprintf(constants.UninstallOperationCompletedTpl, mgr.Spec.Type.String(), mgr.Spec.AppName)
-	opRecord.Status = v1alpha1.Completed
-	err = utils.UpdateStatus(mgr, v1alpha1.Completed, &opRecord, "", opRecord.Message)
+	opRecord.Status = v1alpha1.Uninstalled
+	err = apputils.UpdateStatus(mgr, v1alpha1.Uninstalled, &opRecord, opRecord.Message)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -315,7 +322,7 @@ func (h *Handler) cancelMiddleware(req *restful.Request, resp *restful.Response)
 	if cancelType == "" {
 		cancelType = "operate"
 	}
-	name, err := utils.FmtAppMgrName(app, owner, "")
+	name, err := apputils.FmtAppMgrName(app, owner, "")
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -335,7 +342,7 @@ func (h *Handler) cancelMiddleware(req *restful.Request, resp *restful.Response)
 		UpdateTime: &now,
 	}
 
-	_, err = utils.UpdateAppMgrStatus(name, status)
+	_, err = apputils.UpdateAppMgrStatus(name, status)
 
 	if err != nil {
 		api.HandleError(resp, req, err)

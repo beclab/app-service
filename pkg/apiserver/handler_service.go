@@ -6,12 +6,13 @@ import (
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
-	"bytetrade.io/web3os/app-service/pkg/appinstaller"
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/utils"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
 	"github.com/emicklei/go-restful/v3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -40,7 +41,7 @@ func (h *Handler) get(req *restful.Request, resp *restful.Response) {
 			api.HandleError(resp, req, err)
 			return
 		}
-		var appconfig appinstaller.ApplicationConfig
+		var appconfig appcfg.ApplicationConfig
 		err = json.Unmarshal([]byte(am.Spec.Config), &appconfig)
 		if err != nil {
 			api.HandleError(resp, req, err)
@@ -54,7 +55,7 @@ func (h *Handler) get(req *restful.Request, resp *restful.Response) {
 			},
 			Spec: appv1alpha1.ApplicationSpec{
 				Name:      am.Spec.AppName,
-				Appid:     utils.GetAppID(am.Spec.AppName),
+				Appid:     apputils.GetAppID(am.Spec.AppName),
 				IsSysApp:  userspace.IsSysApp(am.Spec.AppName),
 				Namespace: am.Spec.AppNamespace,
 				Owner:     owner,
@@ -90,7 +91,7 @@ func (h *Handler) list(req *restful.Request, resp *restful.Response) {
 	//var pendingApplications []appv1alpha1.Application
 	appMgrs, err := client.AppClient.AppV1alpha1().ApplicationManagers().List(req.Request.Context(), metav1.ListOptions{})
 	for _, am := range appMgrs.Items {
-		var appconfig appinstaller.ApplicationConfig
+		var appconfig appcfg.ApplicationConfig
 		err = json.Unmarshal([]byte(am.Spec.Config), &appconfig)
 		if err != nil {
 			api.HandleError(resp, req, err)
@@ -105,7 +106,7 @@ func (h *Handler) list(req *restful.Request, resp *restful.Response) {
 				},
 				Spec: appv1alpha1.ApplicationSpec{
 					Name:      am.Spec.AppName,
-					Appid:     utils.GetAppID(am.Spec.AppName),
+					Appid:     apputils.GetAppID(am.Spec.AppName),
 					IsSysApp:  userspace.IsSysApp(am.Spec.AppName),
 					Namespace: am.Spec.AppNamespace,
 					Owner:     owner,
@@ -147,14 +148,14 @@ func (h *Handler) listBackend(req *restful.Request, resp *restful.Response) {
 			continue
 		}
 		if am.Spec.AppOwner == owner && (am.Status.State == appv1alpha1.Pending || am.Status.State == appv1alpha1.Downloading || am.Status.State == appv1alpha1.Installing) {
-			var appConfig appinstaller.ApplicationConfig
+			var appConfig appcfg.ApplicationConfig
 			err = json.Unmarshal([]byte(am.Spec.Config), &appConfig)
 			if err != nil {
 				api.HandleError(resp, req, err)
 				return
 			}
 			now := metav1.Now()
-			name, _ := utils.FmtAppMgrName(am.Spec.AppName, owner, appConfig.Namespace)
+			name, _ := apputils.FmtAppMgrName(am.Spec.AppName, owner, appConfig.Namespace)
 			app := appv1alpha1.Application{
 				TypeMeta: metav1.TypeMeta{},
 				ObjectMeta: metav1.ObjectMeta{
@@ -163,7 +164,7 @@ func (h *Handler) listBackend(req *restful.Request, resp *restful.Response) {
 				},
 				Spec: appv1alpha1.ApplicationSpec{
 					Name:      am.Spec.AppName,
-					Appid:     utils.GetAppID(am.Spec.AppName),
+					Appid:     apputils.GetAppID(am.Spec.AppName),
 					IsSysApp:  userspace.IsSysApp(am.Spec.AppName),
 					Namespace: am.Spec.AppNamespace,
 					Owner:     owner,

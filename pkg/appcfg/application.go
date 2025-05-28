@@ -1,4 +1,4 @@
-package appinstaller
+package appcfg
 
 import (
 	"time"

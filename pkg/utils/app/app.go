@@ -1,17 +1,33 @@
-package utils
+package app
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
 	"net/netip"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
+	"bytetrade.io/web3os/app-service/pkg/constants"
+	"bytetrade.io/web3os/app-service/pkg/middlewareinstaller"
+	"bytetrade.io/web3os/app-service/pkg/users/userspace"
+	"bytetrade.io/web3os/app-service/pkg/utils"
+	"bytetrade.io/web3os/app-service/pkg/utils/files"
+	"github.com/go-resty/resty/v2"
+	"github.com/hashicorp/go-getter"
+	"helm.sh/helm/v3/pkg/chart"
+	"helm.sh/helm/v3/pkg/repo"
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
-	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 
 	"github.com/Masterminds/semver/v3"
 	"helm.sh/helm/v3/pkg/action"
@@ -22,9 +38,11 @@ import (
 	"k8s.io/client-go/util/retry"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/yaml"
 )
 
 const expectedTokenItems = 2
+const AppCfgFileName = "OlaresManifest.yaml"
 
 var (
 	ErrInvalidAction     = errors.New("invalid action")
@@ -57,27 +75,14 @@ var forbidNamespace = []string{
 	"kubesphere-system",
 }
 
-// GetClient returns versioned ClientSet.
-func GetClient() (*versioned.Clientset, error) {
-	config, err := ctrl.GetConfig()
-	if err != nil {
-		return nil, err
-	}
-	client, err := versioned.NewForConfig(config)
-	if err != nil {
-		return nil, err
-	}
-	return client, nil
-}
-
 // UpdateAppState update application status state.
-func UpdateAppState(ctx context.Context, appmgr *v1alpha1.ApplicationManager, state v1alpha1.ApplicationState) error {
-	client, err := GetClient()
+func UpdateAppState(ctx context.Context, am *v1alpha1.ApplicationManager, state string) error {
+	client, err := utils.GetClient()
 	if err != nil {
 		return err
 	}
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		app, err := client.AppV1alpha1().Applications().Get(ctx, appmgr.Name, metav1.GetOptions{})
+		app, err := client.AppV1alpha1().Applications().Get(ctx, am.Name, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				// dev mode, try to find app in user-space
@@ -87,8 +92,8 @@ func UpdateAppState(ctx context.Context, appmgr *v1alpha1.ApplicationManager, st
 				}
 
 				for _, a := range apps.Items {
-					if a.Spec.Name == appmgr.Spec.AppName &&
-						a.Spec.Owner == appmgr.Spec.AppOwner &&
+					if a.Spec.Name == am.Spec.AppName &&
+						a.Spec.Owner == am.Spec.AppOwner &&
 						a.Spec.Namespace == "user-space-"+a.Spec.Owner {
 						app = &a
 
@@ -102,12 +107,12 @@ func UpdateAppState(ctx context.Context, appmgr *v1alpha1.ApplicationManager, st
 		}
 		now := metav1.Now()
 		appCopy := app.DeepCopy()
-		appCopy.Status.State = state.String()
+		appCopy.Status.State = state
 		appCopy.Status.StatusTime = &now
 		appCopy.Status.UpdateTime = &now
 
 		// set startedTime when app first become running
-		if state == v1alpha1.AppRunning && appCopy.Status.StartedTime.IsZero() {
+		if state == v1alpha1.AppRunning.String() && appCopy.Status.StartedTime.IsZero() {
 			appCopy.Status.StartedTime = &now
 			entranceStatues := make([]v1alpha1.EntranceStatus, 0, len(app.Spec.Entrances))
 			for _, e := range app.Spec.Entrances {
@@ -139,7 +144,7 @@ func UpdateAppState(ctx context.Context, appmgr *v1alpha1.ApplicationManager, st
 
 // UpdateAppMgrStatus update applicationmanager status, if filed in parameter status is empty that field will not be set.
 func UpdateAppMgrStatus(name string, status v1alpha1.ApplicationManagerStatus) (*v1alpha1.ApplicationManager, error) {
-	client, err := GetClient()
+	client, err := utils.GetClient()
 	if err != nil {
 		return nil, err
 	}
@@ -191,32 +196,13 @@ func GetDeployedReleaseVersion(actionConfig *action.Configuration, appName strin
 	return release.Chart.Metadata.Version, release.Version, nil
 }
 
-// MatchVersion check if the version satisfies the constraint.
-func MatchVersion(version, constraint string) bool {
-	if len(version) == 0 {
-		return true
-	}
-	c, err := semver.NewConstraint(constraint)
-	if err != nil {
-		klog.Errorf("Invalid constraint=%s err=%v, ", constraint, err)
-		return false
-	}
-	v, err := semver.NewVersion(version)
-	if err != nil {
-		klog.Errorf("Invalid version=%s err=%v", version, err)
-		return false
-	}
-
-	return c.Check(v)
-}
-
 // CreateSysAppMgr create an applicationmanager for the system application.
 func CreateSysAppMgr(app, owner string) error {
-	client, err := GetClient()
+	client, err := utils.GetClient()
 	if err != nil {
 		return err
 	}
-	appNamespace, _ := AppNamespace(app, owner, "user-space")
+	appNamespace, _ := utils.AppNamespace(app, owner, "user-space")
 	now := metav1.Now()
 	appMgr := &v1alpha1.ApplicationManager{
 		ObjectMeta: metav1.ObjectMeta{
@@ -245,7 +231,7 @@ func CreateSysAppMgr(app, owner string) error {
 	appMgrCopy := a.DeepCopy()
 	status := v1alpha1.ApplicationManagerStatus{
 		OpType:       v1alpha1.InstallOp,
-		State:        v1alpha1.Completed,
+		State:        v1alpha1.Running,
 		OpGeneration: int64(0),
 		Message:      "sys app install completed",
 		UpdateTime:   &now,
@@ -258,7 +244,7 @@ func CreateSysAppMgr(app, owner string) error {
 
 // GetAppMgrStatus returns status of an applicationmanager.
 func GetAppMgrStatus(name string) (*v1alpha1.ApplicationManagerStatus, error) {
-	client, err := GetClient()
+	client, err := utils.GetClient()
 	if err != nil {
 		return nil, err
 	}
@@ -270,43 +256,9 @@ func GetAppMgrStatus(name string) (*v1alpha1.ApplicationManagerStatus, error) {
 	return &appMgr.Status, nil
 }
 
-// AppNamespace returns the namespace of an application.
-func AppNamespace(app, owner, ns string) (string, error) {
-	if userspace.IsSysApp(app) {
-		app = "user-space"
-	}
-	// can not get app namespace info, so have to list
-	if len(ns) == 0 {
-		client, err := GetClient()
-		if err != nil {
-			return "", err
-		}
-		appMgr, err := client.AppV1alpha1().ApplicationManagers().List(context.TODO(), metav1.ListOptions{})
-		if err != nil {
-			return "", err
-		}
-		for _, a := range appMgr.Items {
-			if a.Spec.AppName == app && a.Spec.AppOwner == owner {
-				return a.Spec.AppNamespace, nil
-			}
-		}
-	}
-
-	if strings.HasPrefix(ns, "user-space") {
-		app = "user-space"
-	} else if strings.HasPrefix(ns, "user-system") {
-		app = "user-system"
-	} else {
-		if ns != "" {
-			return ns, nil
-		}
-	}
-	return fmt.Sprintf("%s-%s", app, owner), nil
-}
-
 // FmtAppMgrName returns applicationmanager name for application.
 func FmtAppMgrName(app, owner, ns string) (string, error) {
-	namespace, err := AppNamespace(app, owner, ns)
+	namespace, err := utils.AppNamespace(app, owner, ns)
 	if err != nil {
 		return "", err
 	}
@@ -335,13 +287,13 @@ func GetAppID(name string) string {
 	if userspace.IsSysApp(name) {
 		return name
 	}
-	return Md5String(name)[:8]
+	return utils.Md5String(name)[:8]
 }
 
 // GetPendingOrRunningTask returns pending and running state applicationmanager.
 func GetPendingOrRunningTask(ctx context.Context) (ams []v1alpha1.ApplicationManager, err error) {
 	ams = make([]v1alpha1.ApplicationManager, 0)
-	client, err := GetClient()
+	client, err := utils.GetClient()
 	if err != nil {
 		return ams, err
 	}
@@ -361,8 +313,8 @@ func GetPendingOrRunningTask(ctx context.Context) (ams []v1alpha1.ApplicationMan
 
 // UpdateStatus update application state and applicationmanager state.
 func UpdateStatus(appMgr *v1alpha1.ApplicationManager, state v1alpha1.ApplicationManagerState,
-	opRecord *v1alpha1.OpRecord, appState v1alpha1.ApplicationState, message string) error {
-	client, _ := GetClient()
+	opRecord *v1alpha1.OpRecord, message string) error {
+	client, _ := utils.GetClient()
 	var err error
 	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		appMgr, err = client.AppV1alpha1().ApplicationManagers().Get(context.TODO(), appMgr.Name, metav1.GetOptions{})
@@ -387,12 +339,12 @@ func UpdateStatus(appMgr *v1alpha1.ApplicationManager, state v1alpha1.Applicatio
 		if err != nil {
 			return err
 		}
-		if len(appState) > 0 {
-			err = UpdateAppState(context.TODO(), appMgr, appState)
-			if err != nil {
-				return err
-			}
-		}
+		//if len(appState) > 0 {
+		//	err = UpdateAppState(context.TODO(), appMgr, appState.String())
+		//	if err != nil {
+		//		return err
+		//	}
+		//}
 		return err
 	})
 }
@@ -500,7 +452,7 @@ func parseDestination(dest string) (string, string, error) {
 }
 
 func TryToGetAppdataDirFromDeployment(ctx context.Context, namespace, name, owner string) (appdirs []string, err error) {
-	userspaceNs := UserspaceName(owner)
+	userspaceNs := utils.UserspaceName(owner)
 	config, err := ctrl.GetConfig()
 	if err != nil {
 		return
@@ -608,4 +560,394 @@ func GetFirstSubDir(fullPath, basePath string) string {
 		return ""
 	}
 	return parts[0]
+}
+
+// GetAppConfig get app installation configuration from app store
+func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, token, admin string) (*appcfg.ApplicationConfig, string, error) {
+	if repoURL == "" {
+		return nil, "", fmt.Errorf("url info is empty, cfg [%s], repo [%s]", cfgURL, repoURL)
+	}
+
+	var (
+		appcfg    *appcfg.ApplicationConfig
+		chartPath string
+		err       error
+	)
+
+	if cfgURL != "" {
+		appcfg, chartPath, err = getAppConfigFromURL(ctx, app, cfgURL)
+		if err != nil {
+			return nil, "", err
+		}
+	} else {
+		appcfg, chartPath, err = getAppConfigFromRepo(ctx, app, repoURL, version, token, owner, admin)
+		if err != nil {
+			return nil, chartPath, err
+		}
+	}
+
+	// set appcfg.Namespace to specified namespace by OlaresManifests.Spec
+	var namespace string
+	if appcfg.Namespace != "" {
+		namespace, _ = utils.AppNamespace(app, owner, appcfg.Namespace)
+	} else {
+		namespace = fmt.Sprintf("%s-%s", app, owner)
+	}
+
+	appcfg.Namespace = namespace
+	appcfg.OwnerName = owner
+	appcfg.RepoURL = repoURL
+	return appcfg, chartPath, nil
+}
+
+func getAppConfigFromURL(ctx context.Context, app, url string) (*appcfg.ApplicationConfig, string, error) {
+	client := resty.New().SetTimeout(2 * time.Second)
+	resp, err := client.R().Get(url)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if resp.StatusCode() >= 400 {
+		return nil, "", fmt.Errorf("app config url returns unexpected status code, %d", resp.StatusCode())
+	}
+
+	var cfg appcfg.AppConfiguration
+	if err := yaml.Unmarshal(resp.Body(), &cfg); err != nil {
+		return nil, "", err
+	}
+
+	return toApplicationConfig(app, app, &cfg)
+}
+
+func getAppConfigFromRepo(ctx context.Context, app, repoURL, version, token, owner, admin string) (*appcfg.ApplicationConfig, string, error) {
+	chartPath, err := GetIndexAndDownloadChart(ctx, app, repoURL, version, token)
+	if err != nil {
+		return nil, chartPath, err
+	}
+	return getAppConfigFromConfigurationFile(app, chartPath, owner, admin)
+}
+
+func toApplicationConfig(app, chart string, cfg *appcfg.AppConfiguration) (*appcfg.ApplicationConfig, string, error) {
+	var permission []appcfg.AppPermission
+	if cfg.Permission.AppData {
+		permission = append(permission, appcfg.AppDataRW)
+	}
+	if cfg.Permission.AppCache {
+		permission = append(permission, appcfg.AppCacheRW)
+	}
+	if len(cfg.Permission.UserData) > 0 {
+		permission = append(permission, appcfg.UserDataRW)
+	}
+
+	if len(cfg.Permission.SysData) > 0 {
+		var perm []appcfg.SysDataPermission
+		for _, s := range cfg.Permission.SysData {
+			perm = append(perm, appcfg.SysDataPermission{
+				AppName:   s.AppName,
+				Svc:       s.Svc,
+				Namespace: s.Namespace,
+				Port:      s.Port,
+				Group:     s.Group,
+				DataType:  s.DataType,
+				Version:   s.Version,
+				Ops:       s.Ops,
+			})
+		}
+		permission = append(permission, perm)
+	}
+
+	valuePtr := func(v resource.Quantity, err error) (*resource.Quantity, error) {
+		if errors.Is(err, resource.ErrFormatWrong) {
+			return nil, nil
+		}
+
+		return &v, nil
+	}
+
+	mem, err := valuePtr(resource.ParseQuantity(cfg.Spec.RequiredMemory))
+	if err != nil {
+		return nil, chart, err
+	}
+
+	disk, err := valuePtr(resource.ParseQuantity(cfg.Spec.RequiredDisk))
+	if err != nil {
+		return nil, chart, err
+	}
+
+	cpu, err := valuePtr(resource.ParseQuantity(cfg.Spec.RequiredCPU))
+	if err != nil {
+		return nil, chart, err
+	}
+
+	gpu, err := valuePtr(resource.ParseQuantity(cfg.Spec.RequiredGPU))
+	if err != nil {
+		return nil, chart, err
+	}
+
+	// transform from Policy to AppPolicy
+	var policies []appcfg.AppPolicy
+	for _, p := range cfg.Options.Policies {
+		d, _ := time.ParseDuration(p.Duration)
+		policies = append(policies, appcfg.AppPolicy{
+			EntranceName: p.EntranceName,
+			URIRegex:     p.URIRegex,
+			Level:        p.Level,
+			OneTime:      p.OneTime,
+			Duration:     d,
+		})
+	}
+
+	// check dependencies version format
+	for _, dep := range cfg.Options.Dependencies {
+		if err = checkVersionFormat(dep.Version); err != nil {
+			return nil, chart, err
+		}
+	}
+
+	if cfg.Middleware != nil && cfg.Middleware.Redis != nil {
+		if len(cfg.Middleware.Redis.Namespace) == 0 {
+			return nil, chart, errors.New("middleware of Redis namespace can not be empty")
+		}
+	}
+	var appid string
+	if userspace.IsSysApp(app) {
+		appid = app
+	} else {
+		appid = utils.Md5String(app)[:8]
+	}
+
+	return &appcfg.ApplicationConfig{
+		AppID:          appid,
+		CfgFileVersion: cfg.ConfigVersion,
+		AppName:        app,
+		Title:          cfg.Metadata.Title,
+		Version:        cfg.Metadata.Version,
+		Target:         cfg.Metadata.Target,
+		ChartsName:     chart,
+		Entrances:      cfg.Entrances,
+		Ports:          cfg.Ports,
+		TailScale:      cfg.TailScale,
+		Icon:           cfg.Metadata.Icon,
+		Permission:     permission,
+		Requirement: appcfg.AppRequirement{
+			Memory: mem,
+			CPU:    cpu,
+			Disk:   disk,
+			GPU:    gpu,
+		},
+		Policies:             policies,
+		Middleware:           cfg.Middleware,
+		AnalyticsEnabled:     cfg.Options.Analytics.Enabled,
+		ResetCookieEnabled:   cfg.Options.ResetCookie.Enabled,
+		Dependencies:         cfg.Options.Dependencies,
+		Conflicts:            cfg.Options.Conflicts,
+		AppScope:             cfg.Options.AppScope,
+		WsConfig:             cfg.Options.WsConfig,
+		Upload:               cfg.Options.Upload,
+		OnlyAdmin:            cfg.Spec.OnlyAdmin,
+		Namespace:            cfg.Spec.Namespace,
+		MobileSupported:      cfg.Options.MobileSupported,
+		OIDC:                 cfg.Options.OIDC,
+		ApiTimeout:           cfg.Options.ApiTimeout,
+		RunAsUser:            cfg.Spec.RunAsUser,
+		AllowedOutboundPorts: cfg.Options.AllowedOutboundPorts,
+	}, chart, nil
+}
+
+func getAppConfigFromConfigurationFile(app, chart, owner, admin string) (*appcfg.ApplicationConfig, string, error) {
+	data, err := utils.RenderManifest(filepath.Join(chart, AppCfgFileName), owner, admin)
+	if err != nil {
+		return nil, chart, err
+	}
+
+	var cfg appcfg.AppConfiguration
+	if err := yaml.Unmarshal([]byte(data), &cfg); err != nil {
+		return nil, chart, err
+	}
+
+	return toApplicationConfig(app, chart, &cfg)
+}
+
+func checkVersionFormat(constraint string) error {
+	_, err := semver.NewConstraint(constraint)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// GetIndexAndDownloadChart download a chart and returns download chart path.
+func GetIndexAndDownloadChart(ctx context.Context, app, repoURL, version, token string) (string, error) {
+	terminusNonce, err := utils.GenTerminusNonce()
+	if err != nil {
+		return "", err
+	}
+	client := resty.New().SetTimeout(10*time.Second).
+		SetHeader(constants.AuthorizationTokenKey, token).
+		SetHeader("Terminus-Nonce", terminusNonce)
+	indexFileURL := repoURL
+	if repoURL[len(repoURL)-1] != '/' {
+		indexFileURL += "/"
+	}
+	indexFileURL += "index.yaml"
+	resp, err := client.R().Get(indexFileURL)
+	if err != nil {
+		return "", err
+	}
+
+	if resp.StatusCode() >= 400 {
+		return "", fmt.Errorf("get app config from repo returns unexpected status code, %d", resp.StatusCode())
+	}
+
+	index, err := loadIndex(resp.Body())
+	if err != nil {
+		klog.Errorf("Failed to load chart index err=%v", err)
+		return "", err
+	}
+
+	klog.Infof("Success to find app chart from index app=%s version=%s", app, version)
+	// get specified version chart, if version is empty return the chart with the latest stable version
+	chartVersion, err := index.Get(app, version)
+
+	if err != nil {
+		klog.Errorf("Failed to get chart version err=%v", err)
+		return "", fmt.Errorf("app [%s-%s] not found in repo", app, version)
+	}
+
+	chartURL, err := repo.ResolveReferenceURL(repoURL, chartVersion.URLs[0])
+	if err != nil {
+		return "", err
+	}
+
+	url, err := url.Parse(chartURL)
+	if err != nil {
+		return "", err
+	}
+
+	// assume the chart path is app name
+	chartPath := appcfg.ChartsPath + "/" + app
+	if files.IsExist(chartPath) {
+		if err := files.RemoveAll(chartPath); err != nil {
+			return "", err
+		}
+	}
+	_, err = downloadAndUnpack(ctx, url, token, terminusNonce)
+	if err != nil {
+		return "", err
+	}
+	return chartPath, nil
+}
+
+func downloadAndUnpack(ctx context.Context, tgz *url.URL, token, terminusNonce string) (string, error) {
+	dst := appcfg.ChartsPath
+	g := new(getter.HttpGetter)
+	g.Header = make(http.Header)
+	g.Header.Set(constants.AuthorizationTokenKey, token)
+	g.Header.Set("Terminus-Nonce", terminusNonce)
+	downloader := &getter.Client{
+		Ctx:       ctx,
+		Dst:       dst,
+		Src:       tgz.String(),
+		Mode:      getter.ClientModeDir,
+		Detectors: getter.Detectors,
+		Getters: map[string]getter.Getter{
+			"http": g,
+			"file": new(getter.FileGetter),
+		},
+	}
+
+	//download the files
+	if err := downloader.Get(); err != nil {
+		klog.Errorf("Failed to get path=%s err=%v", downloader.Src, err)
+		return "", err
+	}
+
+	return dst, nil
+}
+
+func loadIndex(data []byte) (*repo.IndexFile, error) {
+	i := &repo.IndexFile{}
+
+	if len(data) == 0 {
+		return i, repo.ErrEmptyIndexYaml
+	}
+
+	if err := yaml.UnmarshalStrict(data, i); err != nil {
+		return i, err
+	}
+
+	for name, cvs := range i.Entries {
+		for idx := len(cvs) - 1; idx >= 0; idx-- {
+			if cvs[idx].APIVersion == "" {
+				cvs[idx].APIVersion = chart.APIVersionV1
+			}
+			if err := cvs[idx].Validate(); err != nil {
+				klog.Infof("Skipping loading invalid entry for chart name=%q version=%q err=%v", name, cvs[idx].Version, err)
+				cvs = append(cvs[:idx], cvs[idx+1:]...)
+			}
+		}
+	}
+	i.SortEntries()
+	if i.APIVersion == "" {
+		return i, repo.ErrNoAPIVersion
+	}
+	return i, nil
+}
+
+func GetMiddlewareConfigFromRepo(ctx context.Context, owner, app, repoURL, version, token string) (*middlewareinstaller.MiddlewareConfig, error) {
+	chartPath, err := GetIndexAndDownloadChart(ctx, app, repoURL, version, token)
+	if err != nil {
+		return nil, err
+	}
+
+	f, err := os.Open(chartPath + "/OlaresManifest.yaml")
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+
+	var cfg appcfg.AppConfiguration
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, err
+	}
+
+	namespace, _ := utils.AppNamespace(app, owner, cfg.Spec.Namespace)
+
+	return &middlewareinstaller.MiddlewareConfig{
+		MiddlewareName: app,
+		Title:          cfg.Metadata.Title,
+		Version:        cfg.Metadata.Version,
+		ChartsName:     chartPath,
+		RepoURL:        repoURL,
+		Namespace:      namespace,
+		OwnerName:      owner,
+		Cfg:            nil}, nil
+}
+
+func UpdateAppMgrState(ctx context.Context, name string, state v1alpha1.ApplicationManagerState) error {
+	client, err := utils.GetClient()
+	if err != nil {
+		return err
+	}
+	var am *v1alpha1.ApplicationManager
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		am, err = client.AppV1alpha1().ApplicationManagers().Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		now := metav1.Now()
+		amCopy := am.DeepCopy()
+		amCopy.Status.State = state
+		amCopy.Status.UpdateTime = &now
+		amCopy.Status.StatusTime = &now
+		amCopy.Status.OpGeneration += 1
+		_, err = client.AppV1alpha1().ApplicationManagers().UpdateStatus(ctx, amCopy, metav1.UpdateOptions{})
+		return err
+	})
+	return err
 }

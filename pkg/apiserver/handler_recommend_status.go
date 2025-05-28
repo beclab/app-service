@@ -1,15 +1,17 @@
 package apiserver
 
 import (
+	"context"
+	"errors"
+
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/argo"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/utils"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 	installerv1 "bytetrade.io/web3os/app-service/pkg/workflowinstaller/v1"
-	"context"
-	"errors"
 
 	"github.com/emicklei/go-restful/v3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -155,7 +157,7 @@ func getWorkflowStatus(ctx context.Context, kubeConfig *rest.Config, app, owner 
 	}
 	client, _ := utils.GetClient()
 
-	name, _ := utils.FmtAppMgrName(app, owner, namespace)
+	name, _ := apputils.FmtAppMgrName(app, owner, namespace)
 	recommendMgr, err := client.AppV1alpha1().ApplicationManagers().Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err

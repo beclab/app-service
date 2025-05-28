@@ -5,7 +5,7 @@ import (
 
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/appwatchers"
-	"bytetrade.io/web3os/app-service/pkg/utils"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
 	"github.com/emicklei/go-restful/v3"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -16,7 +16,7 @@ import (
 const backupCancelCode = 493
 
 func (h *Handler) backupNew(req *restful.Request, resp *restful.Response) {
-	pendingOrRunningTask, err := utils.GetPendingOrRunningTask(req.Request.Context())
+	pendingOrRunningTask, err := apputils.GetPendingOrRunningTask(req.Request.Context())
 	if err != nil {
 		api.HandleError(resp, req, &errors.StatusError{
 			ErrStatus: metav1.Status{Code: backupCancelCode, Message: "can not get pending/running task"},

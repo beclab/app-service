@@ -80,6 +80,7 @@ func (is *imageService) PullImage(ctx context.Context, ref appv1alpha1.Ref, opts
 	imageName, err := is.GetExistsImage(originNamed.String())
 	if err != nil && !errors.Is(err, errdefs.ErrNotFound) {
 		klog.Infof("Failed to get image status err=%v", err)
+		return "", err
 	}
 	present := imageName != ""
 

@@ -1,9 +1,7 @@
-package apiserver
+package utils
 
 import (
 	"testing"
-
-	"bytetrade.io/web3os/app-service/pkg/utils"
 )
 
 func TestAesEncryptDecrypt(t *testing.T) {
@@ -11,12 +9,12 @@ func TestAesEncryptDecrypt(t *testing.T) {
 
 	plaintext := []byte("Hello, bytetrade!")
 
-	ciphertext, err := utils.AesEncrypt(plaintext, key)
+	ciphertext, err := AesEncrypt(plaintext, key)
 	if err != nil {
 		t.Fatalf("Encryption error: %v", err)
 	}
 
-	decrypted, err := utils.AesDecrypt(ciphertext, key)
+	decrypted, err := AesDecrypt(ciphertext, key)
 	if err != nil {
 		t.Fatalf("Decryption error: %v", err)
 	}
@@ -47,7 +45,7 @@ func TestMatchVersion(t *testing.T) {
 		{"0.4.1-20220124", ">=0.3.0-0", true},
 	}
 	for _, testCase := range testCases {
-		matched := utils.MatchVersion(testCase.version, testCase.constraint)
+		matched := MatchVersion(testCase.version, testCase.constraint)
 		if matched != testCase.expected {
 			t.Errorf("Version: %s,RangeVersion: %s, Expected: %v, Got: %v",
 				testCase.version, testCase.constraint, testCase.expected, matched)

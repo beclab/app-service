@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"bytetrade.io/web3os/app-service/pkg/utils"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/content"
@@ -271,7 +272,7 @@ func updateProgress(statuses []StatusInfo, ongoing *jobs, seen map[string]int64,
 	klog.Infof("#######################################")
 
 	err = retry.RetryOnConflict(retryStrategy, func() error {
-		name, _ := utils.FmtAppMgrName(opts.AppName, opts.OwnerName, opts.AppNamespace)
+		name, _ := apputils.FmtAppMgrName(opts.AppName, opts.OwnerName, opts.AppNamespace)
 		im, err := client.AppV1alpha1().ImageManagers().Get(context.TODO(), name, metav1.GetOptions{})
 		if err != nil {
 			klog.Infof("cannot found image manager err=%v", err)
@@ -322,7 +323,7 @@ func setPulledImageStatus(imageRef string, opts PullOptions) error {
 		return err
 	}
 	thisNode := os.Getenv("NODE_NAME")
-	imageManagerName, _ := utils.FmtAppMgrName(opts.AppName, opts.OwnerName, opts.AppNamespace)
+	imageManagerName, _ := apputils.FmtAppMgrName(opts.AppName, opts.OwnerName, opts.AppNamespace)
 	err = retry.RetryOnConflict(retryStrategy, func() error {
 		im, err := client.AppV1alpha1().ImageManagers().Get(context.TODO(), imageManagerName, metav1.GetOptions{})
 		if err != nil {

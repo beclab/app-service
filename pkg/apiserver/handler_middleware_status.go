@@ -11,7 +11,10 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/middlewareinstaller"
 	"bytetrade.io/web3os/app-service/pkg/utils"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 	installerv1 "bytetrade.io/web3os/app-service/pkg/workflowinstaller/v1"
+
+	"sort"
 
 	"github.com/emicklei/go-restful/v3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -19,7 +22,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
-	"sort"
 )
 
 func (h *Handler) statusMiddleware(req *restful.Request, resp *restful.Response) {
@@ -105,8 +107,15 @@ func getMiddlewareStatus(ctx context.Context, kubeConfig *rest.Config, app, owne
 		ResourceType:   v1alpha1.Middleware.String(),
 		Metadata:       metadata{Name: app},
 	}
-	client, _ := utils.GetClient()
-	name, _ := utils.FmtAppMgrName(app, owner, namespace)
+	client, err := utils.GetClient()
+	if err != nil {
+		return nil, err
+	}
+	name, err := apputils.FmtAppMgrName(app, owner, namespace)
+	if err != nil {
+		return nil, err
+	}
+
 	mgr, err := client.AppV1alpha1().ApplicationManagers().Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
@@ -114,7 +123,7 @@ func getMiddlewareStatus(ctx context.Context, kubeConfig *rest.Config, app, owne
 	if mgr.Status.OpType == v1alpha1.UninstallOp && mgr.Status.State == v1alpha1.Uninstalling {
 		res.ResourceStatus = v1alpha1.Uninstalling.String()
 	}
-	if mgr.Status.OpType == v1alpha1.InstallOp && mgr.Status.State == v1alpha1.Completed {
+	if mgr.Status.State == v1alpha1.Running {
 		res.ResourceStatus = v1alpha1.AppRunning.String()
 	}
 
@@ -147,7 +156,7 @@ func (h *Handler) operateMiddleware(req *restful.Request, resp *restful.Response
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 
 	var am v1alpha1.ApplicationManager
-	name, err := utils.FmtAppMgrName(app, owner, "")
+	name, err := apputils.FmtAppMgrName(app, owner, "")
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -167,7 +176,7 @@ func (h *Handler) operateMiddleware(req *restful.Request, resp *restful.Response
 		AppOwner:          am.Spec.AppOwner,
 		OpType:            am.Status.OpType,
 		ResourceType:      am.Spec.Type.String(),
-		State:             toProcessing(am.Status.State),
+		State:             am.Status.State,
 		Message:           am.Status.Message,
 		CreationTimestamp: am.CreationTimestamp,
 		Source:            am.Spec.Source,
@@ -190,7 +199,7 @@ func (h *Handler) operateMiddlewareList(req *restful.Request, resp *restful.Resp
 			operate := appinstaller.Operate{
 				AppName:           am.Spec.AppName,
 				AppOwner:          am.Spec.AppOwner,
-				State:             toProcessing(am.Status.State),
+				State:             am.Status.State,
 				OpType:            am.Status.OpType,
 				ResourceType:      am.Spec.Type.String(),
 				Message:           am.Status.Message,

@@ -74,6 +74,12 @@ spec:
           status:
             description: ApplicationManagerStatus defines the observed state of ApplicationManager
             properties:
+              completed:
+                type: boolean
+              lastState:
+                description: ApplicationManagerState is the state of an applicationmanager
+                  at current time
+                type: string
               message:
                 type: string
               opGeneration:
@@ -108,6 +114,9 @@ spec:
                   - version
                   type: object
                 type: array
+              opTime:
+                format: date-time
+                type: string
               opType:
                 description: OpType represents the type of operation being performed.
                 type: string

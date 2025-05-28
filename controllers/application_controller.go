@@ -8,15 +8,17 @@ import (
 	"strings"
 	"time"
 
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
+
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
-	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
 	"bytetrade.io/web3os/app-service/pkg/helm"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/utils"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
 	"github.com/thoas/go-funk"
 	"helm.sh/helm/v3/pkg/action"
@@ -28,7 +30,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -40,6 +41,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+)
+
+const (
+	applicationFinalizer = "finalizers.bytetrade.io/application"
 )
 
 // ApplicationReconciler reconciles a Application object
@@ -149,7 +154,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 					ctrl.Log.Info("create app from deployment watching", "name", validAppObject.GetName(), "namespace", validAppObject.GetNamespace(), "appname", name)
 					err = r.createApplication(ctx, req, validAppObject, name)
 					if err != nil {
-						ctrl.Log.Info("create app failed", "appname", name, "err", err)
+						ctrl.Log.Info("create app failed", "app", name, "err", err)
 						return ctrl.Result{}, err
 					}
 					continue
@@ -157,94 +162,76 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				return ctrl.Result{}, err
 			} // end if error
 
-			owner := validAppObject.GetLabels()[constants.ApplicationOwnerLabel]
-			analyticsEnabled := validAppObject.GetAnnotations()[constants.ApplicationAnalytics]
-			if analyticsEnabled == "" {
-				analyticsEnabled = "false"
-			}
-			actionConfig, _, err := helm.InitConfig(r.Kubeconfig, app.Spec.Namespace)
+			//owner := validAppObject.GetLabels()[constants.ApplicationOwnerLabel]
+			//analyticsEnabled := validAppObject.GetAnnotations()[constants.ApplicationAnalytics]
+			//if analyticsEnabled == "" {
+			//	analyticsEnabled = "false"
+			//}
+			//actionConfig, _, err := helm.InitConfig(r.Kubeconfig, app.Spec.Namespace)
+			//if err != nil {
+			//	ctrl.Log.Error(err, "init helm config error")
+			//	return ctrl.Result{}, err
+			//}
+			//versionChanged := false
+			//if !userspace.IsSysApp(app.Spec.Name) {
+			//	version, _, err := utils.GetDeployedReleaseVersion(actionConfig, name)
+			//	if err != nil {
+			//		ctrl.Log.Error(err, "get release version error")
+			//		return ctrl.Result{}, err
+			//	}
+			//	if app.Spec.Settings["version"] != version {
+			//		versionChanged = true
+			//	}
+			//}
+			//if app.Spec.Namespace != validAppObject.GetNamespace() ||
+			//	app.Spec.Name != name ||
+			//	app.Spec.Owner != owner ||
+			//	app.Spec.DeploymentName != validAppObject.GetName() ||
+			//	app.Spec.Settings["analyticsEnabled"] != analyticsEnabled ||
+			//	versionChanged {
+			ctrl.Log.Info("Application update", "name", app.Name, "spec.name", app.Spec.Name, "spec.owner", app.Spec.Owner)
+			err = r.updateApplication(ctx, req, validAppObject, app, name)
 			if err != nil {
-				ctrl.Log.Error(err, "init helm config error")
-				return ctrl.Result{}, err
+				return ctrl.Result{Requeue: true}, err
 			}
-			versionChanged := false
-			if !userspace.IsSysApp(app.Spec.Name) {
-				version, _, err := utils.GetDeployedReleaseVersion(actionConfig, name)
-				if err != nil {
-					ctrl.Log.Error(err, "get release version error")
-					return ctrl.Result{}, err
-				}
-				if app.Spec.Settings["version"] != version {
-					versionChanged = true
-				}
-			}
-			if app.Spec.Namespace != validAppObject.GetNamespace() ||
-				app.Spec.Name != name ||
-				app.Spec.Owner != owner ||
-				app.Spec.DeploymentName != validAppObject.GetName() ||
-				app.Spec.Settings["analyticsEnabled"] != analyticsEnabled ||
-				versionChanged {
-				ctrl.Log.Info("Application update", "name", app.Name, "spec.name", app.Spec.Name, "spec.owner", app.Spec.Owner)
-				err = r.updateApplication(ctx, req, validAppObject, app, name)
-				if err != nil {
-					return ctrl.Result{Requeue: true}, err
-				}
-			}
+			//}
 		} else {
 			// deployment or statefulset is nil, delete application
 			if err == nil && app != nil {
-				client, _ := kubernetes.NewForConfig(r.Kubeconfig)
-				if utils.IsProtectedNamespace(app.Spec.Namespace) {
-					_, err = client.CoreV1().Namespaces().Get(context.TODO(), "not exists namespace", metav1.GetOptions{})
-				} else {
-					_, err = client.CoreV1().Namespaces().Get(context.TODO(), app.Spec.Namespace, metav1.GetOptions{})
-				}
-				if err != nil {
-					if apierrors.IsNotFound(err) {
-						ctrl.Log.Info("Application delete", "name", app.Name, "spec.name", app.Spec.Name, "spec.owner", app.Spec.Owner)
-						err = r.Delete(ctx, app.DeepCopy())
-						if err != nil && !apierrors.IsNotFound(err) {
-							return ctrl.Result{}, err
-						}
-						var appMgr appv1alpha1.ApplicationManager
-						err = r.Get(ctx, types.NamespacedName{Name: app.Name}, &appMgr)
-						if err != nil {
-							return ctrl.Result{}, err
-						}
-						now := metav1.Now()
-						state := appv1alpha1.Completed
-						opRecord := appv1alpha1.OpRecord{
-							OpType:     appv1alpha1.UninstallOp,
-							Message:    fmt.Sprintf(constants.UninstallOperationCompletedTpl, appMgr.Spec.Type.String(), appMgr.Spec.AppName),
-							Source:     appMgr.Spec.Source,
-							Version:    appMgr.Status.Payload["version"],
-							Status:     appv1alpha1.Completed,
-							StatusTime: &now,
-						}
+				//client, _ := kubernetes.NewForConfig(r.Kubeconfig)
+				//if utils.IsProtectedNamespace(app.Spec.Namespace) {
+				//	_, err = client.CoreV1().Namespaces().Get(context.TODO(), "not exists namespace", metav1.GetOptions{})
+				//} else {
+				//	_, err = client.CoreV1().Namespaces().Get(context.TODO(), app.Spec.Namespace, metav1.GetOptions{})
+				//}
 
-						if appMgr.Status.OpType == appv1alpha1.CancelOp {
-							if appMgr.Status.Message == "timeout" {
-								opRecord.Message = constants.OperationCanceledByTerminusTpl
-							} else {
-								opRecord.Message = constants.OperationCanceledByUserTpl
-							}
-							opRecord.OpType = appv1alpha1.CancelOp
-							opRecord.Status = appv1alpha1.Canceled
-							state = appv1alpha1.Canceled
-						}
-						err = utils.UpdateStatus(&appMgr, state, &opRecord, "", opRecord.Message)
-						if err != nil {
-							klog.Errorf("Failed to update applicationmanagers err=%v", err)
-						}
-						err = r.clearHelmHistory(app.Spec.Name, app.Spec.Namespace)
-					} else {
-						// get namespace err, re-enqueue
-						return ctrl.Result{RequeueAfter: 2 * time.Second}, err
-					}
-				} else {
-					return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
-
+				ctrl.Log.Info("Application delete", "name", app.Name, "spec.name", app.Spec.Name, "spec.owner", app.Spec.Owner)
+				err = r.Delete(ctx, app.DeepCopy())
+				if err != nil && !apierrors.IsNotFound(err) {
+					return ctrl.Result{}, err
 				}
+				err = r.clearHelmHistory(app.Spec.Name, app.Spec.Namespace)
+				if err != nil && !errors.Is(err, driver.ErrReleaseNotFound) {
+					return ctrl.Result{RequeueAfter: 2 * time.Second}, err
+				}
+
+				//if err != nil {
+				//	if apierrors.IsNotFound(err) {
+				//		ctrl.Log.Info("Application delete", "name", app.Name, "spec.name", app.Spec.Name, "spec.owner", app.Spec.Owner)
+				//		err = r.Delete(ctx, app.DeepCopy())
+				//		if err != nil && !apierrors.IsNotFound(err) {
+				//			return ctrl.Result{}, err
+				//		}
+				//
+				//		err = r.clearHelmHistory(app.Spec.Name, app.Spec.Namespace)
+				//	} else {
+				//		// get namespace err, re-enqueue
+				//		return ctrl.Result{RequeueAfter: 2 * time.Second}, err
+				//	}
+				//} else {
+				//	return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+				//
+				//}
 			} else if apierrors.IsNotFound(err) {
 				// app not found, just return
 				return ctrl.Result{}, nil
@@ -373,43 +360,28 @@ func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.
 	}
 	now := metav1.Now()
 	appCopy := app.DeepCopy()
-	app.Status.State = appv1alpha1.AppInstalling.String()
 	if userspace.IsSysApp(app.Spec.Name) {
-		err = utils.CreateSysAppMgr(app.Spec.Name, app.Spec.Owner)
+		err = apputils.CreateSysAppMgr(app.Spec.Name, app.Spec.Owner)
 		if err != nil {
 			klog.Errorf("Failed to create applicationmanagers for system app=%s err=%v", app.Spec.Name, err)
-		}
-		app.Status.State = appv1alpha1.AppRunning.String()
-	}
-	appMgrName, _ := utils.FmtAppMgrName(app.Spec.Name, app.Spec.Owner, app.Spec.Namespace)
-	status, err := utils.GetAppMgrStatus(appMgrName)
-	if err != nil {
-		klog.Errorf("Failed to get applicationmanagers status err=%v", err)
-	} else {
-		if status.State == appv1alpha1.Completed {
-			app.Status.State = appv1alpha1.AppRunning.String()
 		}
 	}
 
 	app.Status.StatusTime = &now
 	app.Status.UpdateTime = &now
+	app.Status.State = appv1alpha1.AppNotReady.String()
 
-	// set startedTime when app first become running
-	klog.Infof("createApplication:name: %s, appState: %v", app.Spec.Name, app.Status.State)
-	klog.Infof("createApplication,startedTime: %v", appCopy.Status.StartedTime.IsZero())
-	if app.Status.State == appv1alpha1.AppRunning.String() && appCopy.Status.StartedTime.IsZero() {
-		app.Status.StartedTime = &now
-		entranceStatues := make([]appv1alpha1.EntranceStatus, 0, len(app.Spec.Entrances))
-		for _, e := range app.Spec.Entrances {
-			entranceStatues = append(entranceStatues, appv1alpha1.EntranceStatus{
-				Name:       e.Name,
-				State:      appv1alpha1.EntranceRunning,
-				StatusTime: &now,
-				Reason:     appv1alpha1.EntranceRunning.String(),
-			})
-		}
-		app.Status.EntranceStatuses = entranceStatues
+	entranceStatues := make([]appv1alpha1.EntranceStatus, 0, len(app.Spec.Entrances))
+
+	for _, e := range app.Spec.Entrances {
+		entranceStatues = append(entranceStatues, appv1alpha1.EntranceStatus{
+			Name:       e.Name,
+			State:      appv1alpha1.EntranceNotReady,
+			StatusTime: &now,
+			Reason:     appv1alpha1.EntranceNotReady.String(),
+		})
 	}
+	app.Status.EntranceStatuses = entranceStatues
 
 	err = r.Status().Patch(ctx, app, client.MergeFrom(appCopy))
 	if err != nil {
@@ -450,12 +422,36 @@ func (r *ApplicationReconciler) updateApplication(ctx context.Context, req ctrl.
 	}
 
 	if !userspace.IsSysApp(app.Spec.Name) {
-		version, _, err := utils.GetDeployedReleaseVersion(actionConfig, name)
+		version, _, err := apputils.GetDeployedReleaseVersion(actionConfig, name)
 		if err != nil && !errors.Is(err, driver.ErrReleaseNotFound) {
 			ctrl.Log.Error(err, "get deployed release version error")
 		}
 		if err == nil {
 			appCopy.Spec.Settings["version"] = version
+		}
+	}
+
+	err = r.Patch(ctx, appCopy, client.MergeFrom(app))
+	if err != nil {
+		klog.Infof("update spec failed %v", err)
+		return err
+	}
+
+	klog.Infof("appCopy.Status: %v", appCopy.Status)
+	newAppState := r.calAppState(&appCopy.Status)
+	klog.Infof("application controller newAppState: %v", newAppState)
+	klog.Infof("application controller oldAppState: %v", appCopy.Status.State)
+
+	if appCopy.Status.State != newAppState {
+		klog.Infof("set appCopy.State:.......new: %v", newAppState)
+		appCopy.Status.State = newAppState
+		now := metav1.Now()
+		appCopy.Status.LastTransitionTime = &now
+
+		err = r.Status().Patch(ctx, appCopy, client.MergeFrom(app))
+		if err != nil {
+			klog.Infof("update xxx error: %v", err)
+			return err
 		}
 	}
 
@@ -466,8 +462,14 @@ func (r *ApplicationReconciler) updateApplication(ctx context.Context, req ctrl.
 	//	}
 	//}
 
-	patchApp := client.MergeFrom(app)
-	return r.Patch(ctx, appCopy, patchApp)
+	//var a appv1alpha1.Application
+	//err = r.Get(ctx, types.NamespacedName{Name: app.Name}, &a)
+	//if err != nil {
+	//	klog.Infof("get app failed %v", err)
+	//	return err
+	//}
+	//klog.Infof("appState: ..%v", a.Status.State)
+	return err
 }
 
 func (r *ApplicationReconciler) getEntranceServiceAddress(ctx context.Context, deployment client.Object, isMultiApp bool) (map[string][]appv1alpha1.Entrance, error) {
@@ -556,7 +558,7 @@ func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, app
 
 	// not sys applications.
 	if !userspace.IsSysApp(appName) {
-		if appCfg, err := appinstaller.GetAppInstallationConfig(appName, owner); err != nil {
+		if appCfg, err := appcfg.GetAppInstallationConfig(appName, owner); err != nil {
 			klog.Infof("Failed to get app configuration appName=%s owner=%s err=%v", appName, owner, err)
 		} else {
 			policyStr, err := getApplicationPolicy(appCfg.Policies, appCfg.Entrances)
@@ -625,7 +627,7 @@ func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, app
 	} else {
 		// sys applications.
 		type Policies struct {
-			Policies []appinstaller.Policy `json:"policies"`
+			Policies []appcfg.Policy `json:"policies"`
 		}
 		applicationPoliciesFromAnnotation, ok := deployment.GetAnnotations()[constants.ApplicationPolicies]
 
@@ -647,10 +649,10 @@ func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, app
 		}
 
 		// transform from Policy to AppPolicy
-		var appPolicies []appinstaller.AppPolicy
+		var appPolicies []appcfg.AppPolicy
 		for _, p := range policy.Policies {
 			d, _ := time.ParseDuration(p.Duration)
-			appPolicies = append(appPolicies, appinstaller.AppPolicy{
+			appPolicies = append(appPolicies, appcfg.AppPolicy{
 				EntranceName: p.EntranceName,
 				URIRegex:     p.URIRegex,
 				Level:        p.Level,
@@ -708,7 +710,7 @@ func (r *ApplicationReconciler) getAppPorts(ctx context.Context, deployment clie
 	if isMultiApp {
 		err = json.Unmarshal([]byte(portsLabel), &portsMap)
 		if err != nil {
-			klog.Errorf("unmarshal portMap errro=%v", err)
+			klog.Errorf("unmarshal portMap err=%v", err)
 			return nil, err
 		}
 	} else {
@@ -732,6 +734,23 @@ func (r *ApplicationReconciler) getAppTailScale(deployment client.Object) (*appv
 		return nil, err
 	}
 	return &tailScale, nil
+}
+
+func (r *ApplicationReconciler) calAppState(status *appv1alpha1.ApplicationStatus) string {
+	entranceLen := len(status.EntranceStatuses)
+	klog.Infof("entranceLen: %v", entranceLen)
+	if entranceLen == 0 {
+		return "running"
+	}
+	for _, es := range status.EntranceStatuses {
+		if es.State == appv1alpha1.EntranceStopped {
+			return "stopped"
+		}
+		if es.State == appv1alpha1.EntranceNotReady {
+			return "notReady"
+		}
+	}
+	return "running"
 }
 
 func checkPortOfService(s *corev1.Service, port int32) bool {
@@ -776,7 +795,7 @@ func isWorkflow(obs ...metav1.Object) bool {
 	return true
 }
 
-func getApplicationPolicy(policies []appinstaller.AppPolicy, entrances []appv1alpha1.Entrance) (string, error) {
+func getApplicationPolicy(policies []appcfg.AppPolicy, entrances []appv1alpha1.Entrance) (string, error) {
 	subPolicy := make(map[string][]*applicationSettingsSubPolicy)
 
 	for _, p := range policies {
