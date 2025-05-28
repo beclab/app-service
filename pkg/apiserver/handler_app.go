@@ -446,6 +446,10 @@ func (h *Handler) apps(req *restful.Request, resp *restful.Response) {
 		if userspace.IsSysApp(am.Spec.AppName) {
 			continue
 		}
+		if !stateSet.Has(am.Status.State.String()) {
+			continue
+		}
+
 		var appconfig appcfg.ApplicationConfig
 		err = json.Unmarshal([]byte(am.Spec.Config), &appconfig)
 		if err != nil {

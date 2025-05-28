@@ -123,7 +123,7 @@ func LoadStatefulApp(ctx context.Context, appmgr *ApplicationManagerController, 
 	}()
 
 	if serr != nil {
-		klog.Info("LoadStatefulApp: unknown state: ", am.Status.State, ", ", err)
+		klog.Info("LoadStatefulApp: unknown state: ", am.Status.State, ", ", serr)
 		return nil, serr
 	}
 

@@ -13,18 +13,19 @@ import (
 	"strconv"
 	"time"
 
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
+	"bytetrade.io/web3os/app-service/pkg/errcode"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
-	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
 	"bytetrade.io/web3os/app-service/pkg/helm"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/tapr"
-	"bytetrade.io/web3os/app-service/pkg/task"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	userspacev1 "bytetrade.io/web3os/app-service/pkg/users/userspace/v1"
 	"bytetrade.io/web3os/app-service/pkg/utils"
@@ -45,9 +46,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
-
-	//"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 var (
@@ -670,7 +668,7 @@ func (h *HelmOps) Uninstall() error {
 
 	appCacheDirs, err := apputils.TryToGetAppdataDirFromDeployment(context.TODO(), h.app.Namespace, h.app.AppName, h.app.OwnerName)
 	if err != nil {
-		klog.Warning("get app cache error, ", err, ", ", h.app.AppName)
+		klog.Warningf("get app %s cache dir failed %v", h.app.AppName, err)
 	}
 
 	err = helm.UninstallCharts(h.actionConfig, h.app.AppName)
@@ -679,7 +677,7 @@ func (h *HelmOps) Uninstall() error {
 	}
 	err = h.unregisterAppPerm()
 	if err != nil {
-		klog.Errorf("Failed to unregister app err=%v", err)
+		klog.Warningf("Failed to unregister app err=%v", err)
 	}
 
 	// delete middleware requests crd
@@ -693,7 +691,7 @@ func (h *HelmOps) Uninstall() error {
 	}
 
 	if len(appCacheDirs) > 0 {
-		klog.Info("clear app cache dirs, ", appCacheDirs)
+		klog.Infof("clear app cache dirs: %v", appCacheDirs)
 		terminusNonce, e := utils.GenTerminusNonce()
 		if e != nil {
 			klog.Errorf("Failed to generate terminus nonce err=%v", e)
@@ -724,7 +722,11 @@ func (h *HelmOps) Uninstall() error {
 	}
 
 	if !apputils.IsProtectedNamespace(h.app.Namespace) {
-		return client.CoreV1().Namespaces().Delete(context.TODO(), h.app.Namespace, metav1.DeleteOptions{})
+		err = client.CoreV1().Namespaces().Delete(context.TODO(), h.app.Namespace, metav1.DeleteOptions{})
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return err
 	}
 	return nil
 }
@@ -733,6 +735,7 @@ func (h *HelmOps) Uninstall() error {
 func (h *HelmOps) Upgrade() error {
 	status, err := h.status()
 	if err != nil {
+		klog.Errorf("get release status failed %v", err)
 		return err
 	}
 	if status.Info.Status == helmrelease.StatusDeployed {
@@ -897,12 +900,12 @@ func (h *HelmOps) upgrade() error {
 		return err
 	}
 
-	//ok, err := h.waitForLaunch()
-	//if !ok {
-	//	// canceled
-	//	h.rollBack()
-	//	return err
-	//}
+	ok, err := h.waitForLaunch()
+	if !ok {
+		// canceled
+		//h.rollBack()
+		return err
+	}
 
 	return nil
 }
@@ -1009,24 +1012,14 @@ func (h *HelmOps) createOIDCClient(values map[string]interface{}, userZone, name
 }
 
 func (h *HelmOps) waitForLaunch() (bool, error) {
-	if h.options.Source == "devbox" {
-		req := reconcile.Request{NamespacedName: types.NamespacedName{
-			Namespace: h.app.OwnerName,
-		}}
-		task.WQueue.(*task.Type).SetCompleted(req)
-		return true, nil
+	for i := 0; i < 20; i++ {
+		klog.Infof("wait for launch ..........xxxxx")
+		time.Sleep(time.Second)
 	}
-	ok := h.waitForStartUp()
+	ok, _ := h.waitForStartUp()
 	if !ok {
 		return false, api.ErrStartUpFailed
 	}
-
-	req := reconcile.Request{NamespacedName: types.NamespacedName{
-		Namespace: h.app.OwnerName,
-	}}
-	task.WQueue.(*task.Type).SetCompleted(req)
-
-	klog.Infof("dequeue username:%s,appname:%s", h.app.OwnerName, h.app.AppName)
 
 	timer := time.NewTicker(2 * time.Second)
 	entrances := h.app.Entrances
@@ -1052,35 +1045,28 @@ func (h *HelmOps) waitForLaunch() (bool, error) {
 		}
 	}
 }
-func (h *HelmOps) waitForStartUp() bool {
+func (h *HelmOps) waitForStartUp() (bool, error) {
 	timer := time.NewTicker(1 * time.Second)
 	for {
 		select {
 		case <-timer.C:
-			startedUp, _ := h.isStartUp()
+			startedUp, err := h.isStartUp()
+			klog.Infof("wait for app %s start up", h.app.AppName)
 			if startedUp {
 				name, _ := apputils.FmtAppMgrName(h.app.AppName, h.app.OwnerName, h.app.Namespace)
-				appMgr := &appv1alpha1.ApplicationManager{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: name,
-					},
-					Spec: appv1alpha1.ApplicationManagerSpec{
-						AppName:  h.app.AppName,
-						AppOwner: h.app.OwnerName,
-					},
-				}
-				err := apputils.UpdateAppState(h.ctx, appMgr, appv1alpha1.AppInitializing.String())
+				err := apputils.UpdateAppMgrState(h.ctx, name, appv1alpha1.Initializing)
 				if err != nil {
-					klog.Errorf("update app state err=%v", err)
+					klog.Errorf("update appmgr state failed %v", err)
 				}
-
-				klog.Infof("time: %v, appState: %v", time.Now(), appv1alpha1.AppInitializing)
-				return true
+				return true, nil
+			}
+			if errors.Is(err, errcode.ErrPodPending) {
+				return false, err
 			}
 
 		case <-h.ctx.Done():
 			klog.Infof("Waiting for app startup canceled appName=%s", h.app.AppName)
-			return false
+			return false, nil
 		}
 	}
 }
@@ -1106,7 +1092,7 @@ func (h *HelmOps) isStartUp() (bool, error) {
 		List(h.ctx, metav1.ListOptions{LabelSelector: labelSelector})
 
 	if err != nil {
-		klog.Error("get pods err=", err, "appname=", h.app.AppName)
+		klog.Errorf("app %s get pods err %v", h.app.AppName, err)
 		return false, err
 	}
 
@@ -1114,6 +1100,12 @@ func (h *HelmOps) isStartUp() (bool, error) {
 		return false, errors.New("no pod found")
 	}
 	for _, pod := range pods.Items {
+		creationTime := pod.GetCreationTimestamp()
+		pendingDuration := time.Since(creationTime.Time)
+
+		if pod.Status.Phase == corev1.PodPending && pendingDuration > time.Minute*2 {
+			return false, errcode.ErrPodPending
+		}
 		totalContainers := len(pod.Spec.Containers)
 		startedContainers := 0
 		for i := len(pod.Status.ContainerStatuses) - 1; i >= 0; i-- {
@@ -1298,11 +1290,18 @@ func (h *HelmOps) Install() error {
 		}
 	}
 
-	ok := h.waitForStartUp()
+	ok, err := h.waitForStartUp()
+	if err != nil && errors.Is(err, errcode.ErrPodPending) {
+		return err
+	}
 	if !ok {
 		h.Uninstall()
 		return err
 	}
+	return nil
+}
+
+func (h *HelmOps) isPending() error {
 	return nil
 }
 

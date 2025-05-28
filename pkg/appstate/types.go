@@ -2,11 +2,11 @@ package appstate
 
 import (
 	"context"
+	"strings"
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
-	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
@@ -42,10 +42,7 @@ func (b *baseStatefulApp) GetApp() *appsv1.Application {
 func (b *baseStatefulApp) updateStatus(ctx context.Context, am *appsv1.ApplicationManager, state appsv1.ApplicationManagerState,
 	opRecord *appsv1.OpRecord, message string) error {
 	var err error
-	appState := ""
-	if appsv1.AppStateCollect.Has(am.Status.State.String()) {
-		appState = am.Status.State.String()
-	}
+
 	err = b.client.Get(ctx, types.NamespacedName{Name: am.Name}, am)
 	if err != nil {
 		return err
@@ -57,6 +54,7 @@ func (b *baseStatefulApp) updateStatus(ctx context.Context, am *appsv1.Applicati
 	amCopy.Status.Message = message
 	amCopy.Status.StatusTime = &now
 	amCopy.Status.UpdateTime = &now
+	amCopy.Status.OpGeneration += 1
 	if opRecord != nil {
 		amCopy.Status.OpRecords = append([]appsv1.OpRecord{*opRecord}, amCopy.Status.OpRecords...)
 	}
@@ -67,17 +65,15 @@ func (b *baseStatefulApp) updateStatus(ctx context.Context, am *appsv1.Applicati
 	if err != nil {
 		return err
 	}
-	var aa appsv1.ApplicationManager
-	err = b.client.Get(ctx, types.NamespacedName{Name: am.Name}, &aa)
+
+	//TODO: remove after
+	var nn appsv1.ApplicationManager
+	err = b.client.Get(context.TODO(), types.NamespacedName{Name: am.Name}, &nn)
 	if err != nil {
 		return err
 	}
-	if len(appState) > 0 {
-		err = apputils.UpdateAppState(ctx, am, appState)
-		if err != nil {
-			return err
-		}
-	}
+	klog.Infof("nnnn... %v", nn.Status)
+
 	return nil
 }
 
@@ -101,8 +97,10 @@ func (p *baseStatefulApp) forceDeleteApp(ctx context.Context) error {
 	}
 	err = ops.Uninstall()
 	if err != nil {
-		klog.Errorf("uninstall app %s failed err %v", appCfg.AppName, err)
-		return err
+		if !strings.Contains(err.Error(), "not found") {
+			klog.Errorf("uninstall app %s failed err %v", appCfg.AppName, err)
+			return err
+		}
 	}
 	err = p.updateStatus(ctx, p.manager, appsv1.Uninstalled, nil, appsv1.Uninstalled.String())
 	if err != nil {
