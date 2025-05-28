@@ -155,7 +155,7 @@ func (r *ApplicationManagerController) Reconcile(ctx context.Context, req ctrl.R
 		if inProgress != nil {
 			if pollable, ok := inProgress.(appstate.PollableStatefulInProgressApp); ok {
 				// use background context to wait for the operation to finish
-				// current context `ctx` controlled by the controller-runtime
+				// current context `ctx` controlled by the app mgr controller
 				pollable.WaitAsync(context.Background())
 			}
 		}

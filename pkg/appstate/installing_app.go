@@ -110,31 +110,40 @@ func (p *InstallingApp) Exec(ctx context.Context) (StatefulInProgressApp, error)
 				if err != nil {
 					klog.Errorf("install app %s failed %v", p.manager.Spec.AppName, err)
 					if errors.Is(err, errcode.ErrPodPending) {
-						updateErr := p.updateStatus(c, p.manager, appsv1.Stopping, nil, err.Error())
-						if updateErr != nil {
-							klog.Errorf("update status failed %v", updateErr)
+
+						p.finally = func() {
+							klog.Infof("app %s pods is still pending, update app state to stopping", p.manager.Spec.AppName)
+							updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.Stopping, nil, err.Error())
+							if updateErr != nil {
+								klog.Errorf("update status failed %v", updateErr)
+							}
 						}
 
 						return
 					}
 
-					updateErr := p.updateStatus(c, p.manager, appsv1.InstallFailed, nil, appsv1.InstallFailed.String())
-					if updateErr != nil {
-						klog.Errorf("update status failed %v", updateErr)
+					p.finally = func() {
+						klog.Errorf("app %s install failed, update app state to installFailed", p.manager.Spec.AppName)
+						updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.InstallFailed, nil, appsv1.InstallFailed.String())
+						if updateErr != nil {
+							klog.Errorf("update status failed %v", updateErr)
+						}
 					}
 
 					return
 				} // end of err != nil
 
-				updateErr := p.updateStatus(c, p.manager, appsv1.Initializing, nil, appsv1.Initializing.String())
-				if updateErr != nil {
-					klog.Errorf("update status failed %v", updateErr)
+				p.finally = func() {
+					klog.Infof("app %s install successfully, update app state to initializing", p.manager.Spec.AppName)
+					updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.Initializing, nil, appsv1.Initializing.String())
+					if updateErr != nil {
+						klog.Errorf("update status failed %v", updateErr)
+					}
 				}
 			}()
 
 			return &in, nil
 		},
-		nil,
 	)
 }
 

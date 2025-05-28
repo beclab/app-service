@@ -23,9 +23,11 @@ type StatefulApp interface {
 	State() string
 	IsTimeout() bool
 	Exec(ctx context.Context) (StatefulInProgressApp, error)
+	Finally()
 }
 
 type baseStatefulApp struct {
+	finallyApp
 	app     *appsv1.Application
 	manager *appsv1.ApplicationManager
 	client  client.Client
@@ -112,9 +114,23 @@ func (p *baseStatefulApp) forceDeleteApp(ctx context.Context) error {
 
 type StatefulInProgressApp interface {
 	StatefulApp
+
+	// update the app to cancel state, into the next phase phase
 	Cancel(ctx context.Context) error
+
+	// Stop the current operation immediately and clean up the resource if necessary.
 	Cleanup(ctx context.Context)
 	Done() <-chan struct{}
+}
+
+type finallyApp struct {
+	finally func()
+}
+
+func (f *finallyApp) Finally() {
+	if f.finally != nil {
+		f.finally()
+	}
 }
 
 type baseStatefulInProgressApp struct {
@@ -136,6 +152,7 @@ func (p *baseStatefulInProgressApp) Cleanup(ctx context.Context) {
 	}
 }
 
+// PollableStatefulInProgressApp is an interface for applications that can be polled for their state.
 type PollableStatefulInProgressApp interface {
 	StatefulInProgressApp
 	poll(ctx context.Context) error

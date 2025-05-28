@@ -76,23 +76,32 @@ func (p *UninstallingApp) Exec(ctx context.Context) (StatefulInProgressApp, erro
 				},
 			}
 
-			err := p.exec(c)
-			if err != nil {
-				updateErr := p.updateStatus(c, p.manager, appsv1.UninstallFailed, nil, appsv1.UninstallFailed.String())
-				if updateErr != nil {
-					klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.UninstallFailed.String(), err)
-					err = errors.Wrapf(err, "update status failed %v", updateErr)
+			go func() {
+				defer cancel()
+				err := p.exec(c)
+				if err != nil {
+					p.finally = func() {
+						klog.Info("uninstalling app failed,", p.manager.Name)
+						updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.UninstallFailed, nil, appsv1.UninstallFailed.String())
+						if updateErr != nil {
+							klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.UninstallFailed.String(), err)
+							err = errors.Wrapf(err, "update status failed %v", updateErr)
+						}
+					}
+					return
 				}
-				return nil, err
-			}
 
-			updateErr := p.updateStatus(c, p.manager, appsv1.Uninstalled, nil, appsv1.Uninstalled.String())
-			if updateErr != nil {
-				klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.Uninstalled.String(), err)
-			}
+				p.finally = func() {
+					klog.Info("uninstalling app success,", p.manager.Name)
+					updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.Uninstalled, nil, appsv1.Uninstalled.String())
+					if updateErr != nil {
+						klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.Uninstalled.String(), err)
+					}
+				}
+			}()
 
-			return &in, updateErr
-		}, nil)
+			return &in, nil
+		})
 }
 
 func (p *UninstallingApp) waitForDeleteNamespace(ctx context.Context) error {

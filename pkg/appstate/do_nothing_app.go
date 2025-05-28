@@ -19,7 +19,7 @@ func (p *DoNothingApp) State() string {
 }
 
 func (p *DoNothingApp) IsOperation() bool {
-	return true
+	return false
 }
 
 func (p *DoNothingApp) IsCancelOperation() bool {

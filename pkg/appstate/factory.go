@@ -11,8 +11,8 @@ import (
 )
 
 type statefulAppFactory struct {
-	running map[string]StatefulInProgressApp
-	mu      sync.Mutex
+	inProgress map[string]StatefulInProgressApp
+	mu         sync.Mutex
 }
 
 var once sync.Once
@@ -21,7 +21,7 @@ var appFactory statefulAppFactory
 func init() {
 	once.Do(func() {
 		appFactory = statefulAppFactory{
-			running: make(map[string]StatefulInProgressApp),
+			inProgress: make(map[string]StatefulInProgressApp),
 		}
 	})
 }
@@ -35,36 +35,36 @@ func (f *statefulAppFactory) New(
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	runningApp, ok := f.running[manager.Name]
+	inProgressApp, ok := f.inProgress[manager.Name]
 	if ok {
-		if runningApp.State() != manager.Status.State.String() {
+		if inProgressApp.State() != manager.Status.State.String() {
 			klog.Infof("app %s is doing something in progress, but state is not match, expected: %s, actual: %s",
-				manager.Name, manager.Status.State.String(), runningApp.State())
+				manager.Name, manager.Status.State.String(), inProgressApp.State())
 
 			return nil, NewErrorUnknownInProgressApp(func(ctx context.Context) error {
-				runningApp.Cleanup(ctx)
+				inProgressApp.Cleanup(ctx)
 
 				// remove the app from the running map
 				f.mu.Lock()
-				delete(f.running, runningApp.GetManager().Name)
+				delete(f.inProgress, inProgressApp.GetManager().Name)
 				f.mu.Unlock()
 
 				return nil
 			})
 		}
 
-		klog.Infof("app %s is already doing operation, state: %s", manager.Name, runningApp.State())
-		return runningApp, nil
+		klog.Infof("app %s is already doing operation, state: %s", manager.Name, inProgressApp.State())
+		return inProgressApp, nil
 	}
 
 	return create(client, manager, ttl), nil
 }
 
-func (f *statefulAppFactory) waitForPolling(ctx context.Context, app PollableStatefulInProgressApp, success func()) {
+func (f *statefulAppFactory) waitForPolling(ctx context.Context, app PollableStatefulInProgressApp, finally func()) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	_, ok := f.running[app.GetManager().Name]
+	_, ok := f.inProgress[app.GetManager().Name]
 	if !ok {
 
 		go func() {
@@ -79,15 +79,13 @@ func (f *statefulAppFactory) waitForPolling(ctx context.Context, app PollableSta
 
 			// remove the app from the running map
 			f.mu.Lock()
-			delete(f.running, app.GetManager().Name)
+			delete(f.inProgress, app.GetManager().Name)
 			f.mu.Unlock()
 
-			if err == nil {
-				success()
-			}
+			finally()
 		}()
 
-		f.running[app.GetManager().Name] = app
+		f.inProgress[app.GetManager().Name] = app
 	}
 }
 
@@ -95,13 +93,12 @@ func (f *statefulAppFactory) execAndWatch(
 	ctx context.Context,
 	app StatefulApp,
 	exec func(ctx context.Context) (StatefulInProgressApp, error),
-	success func(),
 ) (StatefulInProgressApp, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	// Check if the app is already running
-	if existingApp, ok := f.running[app.GetManager().Name]; ok {
+	if existingApp, ok := f.inProgress[app.GetManager().Name]; ok {
 		if existingApp.State() == app.GetManager().Status.State.String() {
 			klog.Infof("app %s is already doing operation, state: %s", app.GetManager().Name, existingApp.State())
 			return existingApp, nil
@@ -109,39 +106,41 @@ func (f *statefulAppFactory) execAndWatch(
 	}
 
 	// Execute the app and wait for it to complete
-	newApp, err := exec(ctx)
+	inProgressApp, err := exec(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	f.running[newApp.GetManager().Name] = newApp
+	f.inProgress[inProgressApp.GetManager().Name] = inProgressApp
 
 	go func() {
-		if done := newApp.Done(); done != nil {
+		if done := inProgressApp.Done(); done != nil {
 			<-done
-			klog.Infof("app %s has completed", newApp.GetManager().Name)
-		}
-
-		if success != nil {
-			success()
+			klog.Infof("app %s has completed", inProgressApp.GetManager().Name)
 		}
 
 		f.mu.Lock()
-		delete(f.running, newApp.GetManager().Name)
+		delete(f.inProgress, inProgressApp.GetManager().Name)
 		f.mu.Unlock()
+
+		// updating state whatever success or failure should be done in the finally block
+		// because of the new state will cause the new reconciling request,
+		// it will be confict of the current operation
+		inProgressApp.Finally()
+
 	}()
 
-	return newApp, nil
+	return inProgressApp, nil
 }
 
 func (f *statefulAppFactory) cancelOperation(name string) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if app, ok := f.running[name]; ok {
+	if app, ok := f.inProgress[name]; ok {
 		//
 		app.Cleanup(context.Background())
-		delete(f.running, name)
+		delete(f.inProgress, name)
 		return true
 	}
 

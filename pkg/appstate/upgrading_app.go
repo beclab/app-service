@@ -89,22 +89,29 @@ func (p *UpgradingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) 
 
 				err := p.exec(c)
 				if err != nil {
-					updateErr := p.updateStatus(c, p.manager, appsv1.UpgradeFailed, nil, appsv1.UpgradeFailed.String())
-					if updateErr != nil {
-						klog.Errorf("update appmgr state to upgradeFailed state failed %v", updateErr)
+					p.finally = func() {
+						klog.Info("upgrade app failed, update app status to upgradeFailed, ", p.manager.Name)
+
+						updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.UpgradeFailed, nil, appsv1.UpgradeFailed.String())
+						if updateErr != nil {
+							klog.Errorf("update appmgr state to upgradeFailed state failed %v", updateErr)
+						}
 					}
 					return
 				}
 
-				updateErr := p.updateStatus(c, p.manager, appsv1.Initializing, nil, appsv1.Initializing.String())
-				if updateErr != nil {
-					klog.Errorf("update appmgr state to initializing state failed %v", updateErr)
+				p.finally = func() {
+					klog.Info("upgrade app success, update app status to initializing, ", p.manager.Name)
+					updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.Initializing, nil, appsv1.Initializing.String())
+					if updateErr != nil {
+						klog.Errorf("update appmgr state to initializing state failed %v", updateErr)
+					}
 				}
 
 			}()
 
 			return &in, nil
-		}, nil)
+		})
 }
 
 func (p *UpgradingApp) exec(ctx context.Context) error {
