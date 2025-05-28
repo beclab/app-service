@@ -6,7 +6,7 @@ import (
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/constants"
-	"bytetrade.io/web3os/app-service/pkg/utils"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 	k8sappv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -131,7 +131,7 @@ func removeUnknownApplication(client client.Client, name string) func(ctx contex
 		}
 
 		// delete the whole namespace if the namespace is not system namespace
-		if !utils.IsProtectedNamespace(app.Spec.Namespace) {
+		if !apputils.IsProtectedNamespace(app.Spec.Namespace) {
 			ns := corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: app.Spec.Namespace,

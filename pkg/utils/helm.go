@@ -253,10 +253,13 @@ func GetRefFromResourceList(chartPath string, values map[string]interface{}) (re
 			if err == nil {
 				namedRef = named.String()
 			}
-			filteredRefs = append(filteredRefs, v1alpha1.Ref{
-				Name:            namedRef,
-				ImagePullPolicy: imageRef.ImagePullPolicy,
-			})
+			if _, exists := seen[namedRef]; !exists {
+				filteredRefs = append(filteredRefs, v1alpha1.Ref{
+					Name:            namedRef,
+					ImagePullPolicy: imageRef.ImagePullPolicy,
+				})
+			}
+
 			seen[namedRef] = struct{}{}
 		}
 	}

@@ -28,6 +28,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	userspacev1 "bytetrade.io/web3os/app-service/pkg/users/userspace/v1"
 	"bytetrade.io/web3os/app-service/pkg/utils"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
 	"github.com/emicklei/go-restful/v3"
 	"github.com/go-resty/resty/v2"
@@ -654,7 +655,7 @@ func (h *HelmOps) Uninstall() error {
 	if err != nil {
 		return err
 	}
-	if !utils.IsProtectedNamespace(h.app.Namespace) {
+	if !apputils.IsProtectedNamespace(h.app.Namespace) {
 		pvcs, err := client.CoreV1().PersistentVolumeClaims(h.app.Namespace).List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
 			return err
@@ -667,13 +668,13 @@ func (h *HelmOps) Uninstall() error {
 		}
 	}
 
-	appCacheDirs, err := utils.TryToGetAppdataDirFromDeployment(context.TODO(), h.app.Namespace, h.app.AppName, h.app.OwnerName)
+	appCacheDirs, err := apputils.TryToGetAppdataDirFromDeployment(context.TODO(), h.app.Namespace, h.app.AppName, h.app.OwnerName)
 	if err != nil {
 		klog.Warning("get app cache error, ", err, ", ", h.app.AppName)
 	}
 
 	err = helm.UninstallCharts(h.actionConfig, h.app.AppName)
-	if err != nil {
+	if err != nil && !errors.Is(err, driver.ErrReleaseNotFound) {
 		return err
 	}
 	err = h.unregisterAppPerm()
@@ -722,7 +723,7 @@ func (h *HelmOps) Uninstall() error {
 		}
 	}
 
-	if !utils.IsProtectedNamespace(h.app.Namespace) {
+	if !apputils.IsProtectedNamespace(h.app.Namespace) {
 		return client.CoreV1().Namespaces().Delete(context.TODO(), h.app.Namespace, metav1.DeleteOptions{})
 	}
 	return nil
@@ -890,7 +891,7 @@ func (h *HelmOps) upgrade() error {
 	if err != nil {
 		return err
 	}
-	name, _ := utils.FmtAppMgrName(h.app.AppName, h.app.OwnerName, h.app.Namespace)
+	name, _ := apputils.FmtAppMgrName(h.app.AppName, h.app.OwnerName, h.app.Namespace)
 	_, err = appClient.AppV1alpha1().Applications().Patch(h.ctx, name, types.MergePatchType, patchByte, metav1.PatchOptions{})
 	if err != nil {
 		return err
@@ -1037,7 +1038,7 @@ func (h *HelmOps) waitForLaunch() (bool, error) {
 			for _, e := range entrances {
 				klog.Info("Waiting service for launch :", e.Host)
 				host := fmt.Sprintf("%s.%s", e.Host, h.app.Namespace)
-				if utils.TryConnect(host, strconv.Itoa(int(e.Port))) {
+				if apputils.TryConnect(host, strconv.Itoa(int(e.Port))) {
 					count++
 				}
 			}
@@ -1058,7 +1059,7 @@ func (h *HelmOps) waitForStartUp() bool {
 		case <-timer.C:
 			startedUp, _ := h.isStartUp()
 			if startedUp {
-				name, _ := utils.FmtAppMgrName(h.app.AppName, h.app.OwnerName, h.app.Namespace)
+				name, _ := apputils.FmtAppMgrName(h.app.AppName, h.app.OwnerName, h.app.Namespace)
 				appMgr := &appv1alpha1.ApplicationManager{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: name,
@@ -1068,7 +1069,7 @@ func (h *HelmOps) waitForStartUp() bool {
 						AppOwner: h.app.OwnerName,
 					},
 				}
-				err := utils.UpdateAppState(h.ctx, appMgr, appv1alpha1.AppInitializing.String())
+				err := apputils.UpdateAppState(h.ctx, appMgr, appv1alpha1.AppInitializing.String())
 				if err != nil {
 					klog.Errorf("update app state err=%v", err)
 				}
@@ -1323,7 +1324,7 @@ func (h *HelmOps) WaitForLaunch() (bool, error) {
 			for _, e := range entrances {
 				klog.Info("Waiting service for launch :", e.Host)
 				host := fmt.Sprintf("%s.%s", e.Host, h.app.Namespace)
-				if utils.TryConnect(host, strconv.Itoa(int(e.Port))) {
+				if apputils.TryConnect(host, strconv.Itoa(int(e.Port))) {
 					count++
 				}
 			}

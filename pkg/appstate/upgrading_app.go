@@ -11,6 +11,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/utils"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 	"bytetrade.io/web3os/app-service/pkg/utils/config"
 	"bytetrade.io/web3os/app-service/pkg/utils/download"
 	"github.com/pkg/errors"
@@ -121,7 +122,7 @@ func (p *UpgradingApp) exec(ctx context.Context) error {
 		return err
 	}
 	var appConfig *appcfg.ApplicationConfig
-	deployedVersion, _, err := utils.GetDeployedReleaseVersion(actionConfig, p.manager.Spec.AppName)
+	deployedVersion, _, err := apputils.GetDeployedReleaseVersion(actionConfig, p.manager.Spec.AppName)
 	if err != nil {
 		klog.Errorf("Failed to get release revision err=%v", err)
 		return err

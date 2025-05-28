@@ -7,8 +7,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
-	"bytetrade.io/web3os/app-service/pkg/utils"
-
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 	"github.com/emicklei/go-restful/v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -22,7 +21,7 @@ func (h *Handler) suspend(req *restful.Request, resp *restful.Response) {
 		return
 	}
 	var application v1alpha1.Application
-	name, err := utils.FmtAppMgrName(app, owner, "")
+	name, err := apputils.FmtAppMgrName(app, owner, "")
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -40,7 +39,7 @@ func (h *Handler) suspend(req *restful.Request, resp *restful.Response) {
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
-	_, err = utils.UpdateAppMgrStatus(name, status)
+	_, err = apputils.UpdateAppMgrStatus(name, status)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -56,7 +55,7 @@ func (h *Handler) resume(req *restful.Request, resp *restful.Response) {
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 	var application v1alpha1.Application
 
-	name, err := utils.FmtAppMgrName(app, owner, "")
+	name, err := apputils.FmtAppMgrName(app, owner, "")
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -87,7 +86,7 @@ func (h *Handler) resume(req *restful.Request, resp *restful.Response) {
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
-	_, err = utils.UpdateAppMgrStatus(name, status)
+	_, err = apputils.UpdateAppMgrStatus(name, status)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return

@@ -8,13 +8,17 @@ import (
 	"net/http"
 	"time"
 
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
+	"bytetrade.io/web3os/app-service/pkg/appstate"
+
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
-	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
+	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/utils"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 	"bytetrade.io/web3os/app-service/pkg/utils/config"
 	"bytetrade.io/web3os/app-service/pkg/workflowinstaller"
 
@@ -52,7 +56,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	appConfig, _, err := config.GetAppConfig(req.Request.Context(), app, owner,
+	appConfig, _, err := apputils.GetAppConfig(req.Request.Context(), app, owner,
 		insReq.CfgURL, insReq.RepoURL, "", token, admin)
 	if err != nil {
 		klog.Errorf("Failed to get appconfig err=%v", err)
@@ -76,7 +80,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	err = utils.CheckTailScaleACLs(appConfig.TailScale.ACLs)
+	err = apputils.CheckTailScaleACLs(appConfig.TailScale.ACLs)
 	if err != nil {
 		api.HandleBadRequest(resp, req, err)
 		return
@@ -87,7 +91,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	if utils.IsForbidNamespace(appConfig.Namespace) {
+	if apputils.IsForbidNamespace(appConfig.Namespace) {
 		api.HandleBadRequest(resp, req, fmt.Errorf("unsupported namespace: %s", appConfig.Namespace))
 		return
 	}
@@ -162,7 +166,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 	var a *v1alpha1.ApplicationManager
-	name, _ := utils.FmtAppMgrName(app, owner, appConfig.Namespace)
+	name, _ := apputils.FmtAppMgrName(app, owner, appConfig.Namespace)
 	appMgr := &v1alpha1.ApplicationManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
@@ -205,6 +209,11 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 			api.HandleError(resp, req, err)
 			return
 		}
+		if !appstate.IsOperationAllowed(a.Status.State, v1alpha1.InstallOp) {
+			api.HandleBadRequest(resp, req, fmt.Errorf("%s operation is not allowed for %s state", v1alpha1.InstallOp, a.Status.State))
+
+			return
+		}
 	}
 
 	now := metav1.Now()
@@ -223,7 +232,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		UpdateTime: &now,
 		OpTime:     &now,
 	}
-	a, err = utils.UpdateAppMgrStatus(name, status)
+	a, err = apputils.UpdateAppMgrStatus(name, status)
 
 	if err != nil {
 		api.HandleError(resp, req, err)
@@ -240,26 +249,37 @@ func (h *Handler) uninstall(req *restful.Request, resp *restful.Response) {
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 	token := req.HeaderParameter(constants.AuthorizationTokenKey)
 
-	name, err := utils.FmtAppMgrName(app, owner, "")
-	if err != nil {
-		api.HandleError(resp, req, err)
-		return
-	}
-	var application v1alpha1.Application
-	err = h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: name}, &application)
-	if err != nil {
-		api.HandleError(resp, req, err)
-		return
-	}
-	if application.Spec.IsSysApp {
-		api.HandleBadRequest(resp, req, errors.New("can not uninstall sys app"))
+	if userspace.IsSysApp(app) {
+		api.HandleBadRequest(resp, req, errors.New("sys app can not be uninstall"))
 		return
 	}
 
-	//if application.Status.State == v1alpha1.Pending.String() ||
-	//	application.Status.State == v1alpha1.Downloading.String() {
-	//
+	name, err := apputils.FmtAppMgrName(app, owner, "")
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	var am v1alpha1.ApplicationManager
+	err = h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: name}, &am)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+
+	//var application v1alpha1.Application
+	//err = h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: name}, &application)
+	//if err != nil {
+	//	api.HandleError(resp, req, err)
+	//	return
 	//}
+	//if application.Spec.IsSysApp {
+	//	api.HandleBadRequest(resp, req, errors.New("can not uninstall sys app"))
+	//	return
+	//}
+	if !appstate.IsOperationAllowed(am.Status.State, v1alpha1.UninstallOp) {
+		api.HandleBadRequest(resp, req, fmt.Errorf("%s operation is not allowed for %s state", v1alpha1.UninstallOp, am.Status.State))
+		return
+	}
 
 	now := metav1.Now()
 	status := v1alpha1.ApplicationManagerStatus{
@@ -273,7 +293,7 @@ func (h *Handler) uninstall(req *restful.Request, resp *restful.Response) {
 		UpdateTime: &now,
 	}
 
-	_, err = utils.UpdateAppMgrStatus(name, status)
+	_, err = apputils.UpdateAppMgrStatus(name, status)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -293,19 +313,40 @@ func (h *Handler) cancel(req *restful.Request, resp *restful.Response) {
 		cancelType = "operate"
 	}
 
-	name, err := utils.FmtAppMgrName(app, owner, "")
+	name, err := apputils.FmtAppMgrName(app, owner, "")
 	var am v1alpha1.ApplicationManager
 	err = h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: name}, &am)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
+	state := am.Status.State
+	if !appstate.IsOperationAllowed(state, v1alpha1.CancelOp) {
+		api.HandleBadRequest(resp, req, fmt.Errorf("%s operation is not allowed for %s state", v1alpha1.CancelOp, am.Status.State))
+
+		return
+	}
+	var cancelState v1alpha1.ApplicationManagerState
+	switch state {
+	case v1alpha1.Pending:
+		cancelState = v1alpha1.PendingCanceling
+	case v1alpha1.Downloading:
+		cancelState = v1alpha1.DownloadingCanceling
+	case v1alpha1.Installing:
+		cancelState = v1alpha1.InstallingCanceling
+	case v1alpha1.Initializing:
+		cancelState = v1alpha1.InitializingCanceling
+	case v1alpha1.Resuming:
+		cancelState = v1alpha1.ResumingCanceling
+	case v1alpha1.Upgrading:
+		cancelState = v1alpha1.UpgradingCanceling
+	}
 
 	now := metav1.Now()
 	status := v1alpha1.ApplicationManagerStatus{
 		OpType:     v1alpha1.CancelOp,
 		LastState:  am.Status.LastState,
-		State:      v1alpha1.Canceling,
+		State:      cancelState,
 		Progress:   "0.00",
 		Message:    cancelType,
 		StatusTime: &now,
@@ -315,7 +356,7 @@ func (h *Handler) cancel(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
-	_, err = utils.UpdateAppMgrStatus(name, status)
+	_, err = apputils.UpdateAppMgrStatus(name, status)
 
 	if err != nil {
 		api.HandleError(resp, req, err)
@@ -406,11 +447,13 @@ func (h *Handler) installRecommend(req *restful.Request, resp *restful.Response)
 		return
 	}
 
+	go h.notifyKnowledgeInstall(workflowCfg.Cfg.Metadata.Title, app, owner)
+
 	client, _ := utils.GetClient()
 
 	var a *v1alpha1.ApplicationManager
 	//appNamespace, _ := utils.AppNamespace(app, owner, workflowCfg.Namespace)
-	name, _ := utils.FmtAppMgrName(app, owner, workflowCfg.Namespace)
+	name, _ := apputils.FmtAppMgrName(app, owner, workflowCfg.Namespace)
 	recommendMgr := &v1alpha1.ApplicationManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: fmt.Sprintf("%s-%s", workflowCfg.Namespace, app),
@@ -463,7 +506,7 @@ func (h *Handler) installRecommend(req *restful.Request, resp *restful.Response)
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
-	a, err = utils.UpdateAppMgrStatus(a.Name, recommendStatus)
+	a, err = apputils.UpdateAppMgrStatus(a.Name, recommendStatus)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -480,9 +523,9 @@ func (h *Handler) installRecommend(req *restful.Request, resp *restful.Response)
 	klog.Info("Start to install workflow, ", workflowCfg)
 	err = workflowinstaller.Install(req.Request.Context(), h.kubeConfig, workflowCfg)
 	if err != nil {
-		opRecord.Status = "failed"
+		opRecord.Status = v1alpha1.Failed
 		opRecord.Message = fmt.Sprintf(constants.OperationFailedTpl, a.Status.OpType, err.Error())
-		e := utils.UpdateStatus(a, opRecord.Status, &opRecord, "", opRecord.Message)
+		e := apputils.UpdateStatus(a, opRecord.Status, &opRecord, opRecord.Message)
 		if e != nil {
 			klog.Errorf("Failed to update applicationmanager status name=%s err=%v", a.Name, e)
 		}
@@ -492,7 +535,7 @@ func (h *Handler) installRecommend(req *restful.Request, resp *restful.Response)
 
 	now = metav1.Now()
 	opRecord.Message = fmt.Sprintf(constants.InstallOperationCompletedTpl, a.Spec.Type.String(), a.Spec.AppName)
-	err = utils.UpdateStatus(a, v1alpha1.Running, &opRecord, "", opRecord.Message)
+	err = apputils.UpdateStatus(a, v1alpha1.Running, &opRecord, opRecord.Message)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -549,11 +592,71 @@ func (h *Handler) cleanRecommendFeedData(name, owner string) error {
 	klog.Info("Delete entry success page: ", name, len(feedUrls))
 	return nil
 }
+
+type KnowledgeInstallMsg struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
+
+func (h *Handler) notifyKnowledgeInstall(title, name, owner string) error {
+	knowledgeAPI := "http://rss-svc.os-system:3010/knowledge/algorithm/recommend/install"
+	klog.Info("Start to notify knowledge to Install ", knowledgeAPI, title, name)
+
+	msg := KnowledgeInstallMsg{
+		ID:    name,
+		Title: title,
+	}
+	body, jsonErr := json.Marshal(msg)
+	if jsonErr != nil {
+		return jsonErr
+	}
+	client := resty.New()
+	resp, err := client.SetTimeout(10*time.Second).R().
+		SetHeader(restful.HEADER_ContentType, restful.MIME_JSON).
+		SetHeader("X-Bfl-User", owner).
+		SetBody(body).Post(knowledgeAPI)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode() != http.StatusOK {
+		klog.Errorf("Failed to notify knowledge to Install status=%s", resp.Status())
+		return errors.New(resp.Status())
+	}
+	return nil
+}
+
+func (h *Handler) notifyKnowledgeUnInstall(name, owner string) error {
+	knowledgeAPI := "http://rss-svc.os-system:3010/knowledge/algorithm/recommend/uninstall"
+
+	msg := KnowledgeInstallMsg{
+		ID: name,
+	}
+	body, jsonErr := json.Marshal(msg)
+	if jsonErr != nil {
+		return jsonErr
+	}
+	klog.Info("Start to notify knowledge to unInstall ", knowledgeAPI)
+	client := resty.New()
+	resp, err := client.SetTimeout(10*time.Second).R().
+		SetHeader(restful.HEADER_ContentType, restful.MIME_JSON).
+		SetHeader("X-Bfl-User", owner).
+		SetBody(body).Post(knowledgeAPI)
+
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode() != http.StatusOK {
+		klog.Errorf("Failed to notify knowledge to Install status=%s", resp.Status())
+		return errors.New(resp.Status())
+	}
+	return nil
+}
 func (h *Handler) cleanRecommendEntryData(name, owner string) error {
 	knowledgeAPI := fmt.Sprintf("http://knowledge-base-api.user-system-%s:3010", owner)
 	entryAPI := knowledgeAPI + "/knowledge/entry/algorithm/" + name
 	klog.Info("Start to clean recommend entry data ", entryAPI)
-	client := resty.New()
+	client := resty.New().SetTimeout(10*time.Second).
+		SetHeader("X-Bfl-User", owner)
 	entryResp, err := client.R().Get(entryAPI)
 	if err != nil {
 		return err
@@ -615,6 +718,7 @@ func (h *Handler) uninstallRecommend(req *restful.Request, resp *restful.Respons
 	klog.Infof("Start to uninstall workflow name=%s", workflowCfg.WorkflowName)
 
 	go h.cleanRecommendEntryData(app, owner)
+	go h.notifyKnowledgeUnInstall(app, owner)
 
 	now := metav1.Now()
 	var recommendMgr *v1alpha1.ApplicationManager
@@ -625,8 +729,8 @@ func (h *Handler) uninstallRecommend(req *restful.Request, resp *restful.Respons
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
-	name, _ := utils.FmtAppMgrName(app, owner, namespace)
-	recommendMgr, err = utils.UpdateAppMgrStatus(name, recommendStatus)
+	name, _ := apputils.FmtAppMgrName(app, owner, namespace)
+	recommendMgr, err = apputils.UpdateAppMgrStatus(name, recommendStatus)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -641,10 +745,10 @@ func (h *Handler) uninstallRecommend(req *restful.Request, resp *restful.Respons
 				Message:   message,
 				Source:    recommendMgr.Spec.Source,
 				Version:   recommendMgr.Status.Payload["version"],
-				Status:    "failed",
+				Status:    v1alpha1.Failed,
 				StateTime: &now,
 			}
-			e := utils.UpdateStatus(recommendMgr, "failed", &opRecord, "", message)
+			e := apputils.UpdateStatus(recommendMgr, "failed", &opRecord, message)
 			if e != nil {
 				klog.Errorf("Failed to update applicationmanager status in uninstall Recommend name=%s err=%v", recommendMgr.Name, e)
 			}
@@ -683,7 +787,7 @@ func (h *Handler) uninstallRecommend(req *restful.Request, resp *restful.Respons
 							Status:    v1alpha1.Running,
 							StateTime: &now,
 						}
-						err = utils.UpdateStatus(recommendMgr, opRecord.Status, &opRecord, "", message)
+						err = apputils.UpdateStatus(recommendMgr, opRecord.Status, &opRecord, message)
 						if err != nil {
 							klog.Errorf("Failed to update applicationmanager name=%s in uninstall Recommend err=%v", recommendMgr.Name, err)
 						}
@@ -727,10 +831,10 @@ func (h *Handler) upgradeRecommend(req *restful.Request, resp *restful.Response)
 			StateTime: &now,
 		}
 		if err != nil {
-			opRecord.Status = "failed"
+			opRecord.Status = v1alpha1.Failed
 			opRecord.Message = fmt.Sprintf(constants.OperationFailedTpl, recommendMgr.Status.OpType, err.Error())
 		}
-		e := utils.UpdateStatus(recommendMgr, opRecord.Status, &opRecord, "", opRecord.Message)
+		e := apputils.UpdateStatus(recommendMgr, opRecord.Status, &opRecord, opRecord.Message)
 		if e != nil {
 			klog.Errorf("Failed to update applicationmanager status in upgrade recommend name=%s err=%v", recommendMgr.Name, e)
 		}
@@ -753,8 +857,8 @@ func (h *Handler) upgradeRecommend(req *restful.Request, resp *restful.Response)
 		api.HandleError(resp, req, err)
 		return
 	}
-	name, _ := utils.FmtAppMgrName(app, owner, workflowCfg.Namespace)
-	recommendMgr, err = utils.UpdateAppMgrStatus(name, recommendStatus)
+	name, _ := apputils.FmtAppMgrName(app, owner, workflowCfg.Namespace)
+	recommendMgr, err = apputils.UpdateAppMgrStatus(name, recommendStatus)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return

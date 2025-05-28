@@ -17,6 +17,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/utils"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
 	"github.com/thoas/go-funk"
 	"helm.sh/helm/v3/pkg/action"
@@ -169,7 +170,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			}
 			versionChanged := false
 			if !userspace.IsSysApp(app.Spec.Name) {
-				version, _, err := utils.GetDeployedReleaseVersion(actionConfig, name)
+				version, _, err := apputils.GetDeployedReleaseVersion(actionConfig, name)
 				if err != nil {
 					ctrl.Log.Error(err, "get release version error")
 					return ctrl.Result{}, err
@@ -194,7 +195,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			// deployment or statefulset is nil, delete application
 			if err == nil && app != nil {
 				client, _ := kubernetes.NewForConfig(r.Kubeconfig)
-				if utils.IsProtectedNamespace(app.Spec.Namespace) {
+				if apputils.IsProtectedNamespace(app.Spec.Namespace) {
 					_, err = client.CoreV1().Namespaces().Get(context.TODO(), "not exists namespace", metav1.GetOptions{})
 				} else {
 					_, err = client.CoreV1().Namespaces().Get(context.TODO(), app.Spec.Namespace, metav1.GetOptions{})
@@ -232,7 +233,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 							opRecord.Status = appv1alpha1.InstallingCanceled
 							state = appv1alpha1.InstallingCanceled
 						}
-						err = utils.UpdateStatus(&appMgr, state, &opRecord, "", opRecord.Message)
+						err = apputils.UpdateStatus(&appMgr, state, &opRecord, opRecord.Message)
 						if err != nil {
 							klog.Errorf("Failed to update applicationmanagers err=%v", err)
 						}
@@ -375,14 +376,14 @@ func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.
 	appCopy := app.DeepCopy()
 	app.Status.State = appv1alpha1.AppInstalling.String()
 	if userspace.IsSysApp(app.Spec.Name) {
-		err = utils.CreateSysAppMgr(app.Spec.Name, app.Spec.Owner)
+		err = apputils.CreateSysAppMgr(app.Spec.Name, app.Spec.Owner)
 		if err != nil {
 			klog.Errorf("Failed to create applicationmanagers for system app=%s err=%v", app.Spec.Name, err)
 		}
 		app.Status.State = appv1alpha1.AppRunning.String()
 	}
-	appMgrName, _ := utils.FmtAppMgrName(app.Spec.Name, app.Spec.Owner, app.Spec.Namespace)
-	status, err := utils.GetAppMgrStatus(appMgrName)
+	appMgrName, _ := apputils.FmtAppMgrName(app.Spec.Name, app.Spec.Owner, app.Spec.Namespace)
+	status, err := apputils.GetAppMgrStatus(appMgrName)
 	if err != nil {
 		klog.Errorf("Failed to get applicationmanagers status err=%v", err)
 	} else {
@@ -431,9 +432,8 @@ func (r *ApplicationReconciler) updateApplication(ctx context.Context, req ctrl.
 	owner := deployment.GetLabels()[constants.ApplicationOwnerLabel]
 	klog.Infof("in updateApplication ....")
 	icons := getAppIcon(deployment)
-	var icon string
 
-	icon = icons[name]
+	icon := icons[name]
 
 	appCopy.Spec.Name = name
 	appCopy.Spec.Namespace = deployment.GetNamespace()
@@ -450,7 +450,7 @@ func (r *ApplicationReconciler) updateApplication(ctx context.Context, req ctrl.
 	}
 
 	if !userspace.IsSysApp(app.Spec.Name) {
-		version, _, err := utils.GetDeployedReleaseVersion(actionConfig, name)
+		version, _, err := apputils.GetDeployedReleaseVersion(actionConfig, name)
 		if err != nil && !errors.Is(err, driver.ErrReleaseNotFound) {
 			ctrl.Log.Error(err, "get deployed release version error")
 		}

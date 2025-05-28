@@ -19,6 +19,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/upgrade"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/utils"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
 	"github.com/emicklei/go-restful/v3"
 	corev1 "k8s.io/api/core/v1"
@@ -39,7 +40,7 @@ func (h *Handler) status(req *restful.Request, resp *restful.Response) {
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 
 	var a v1alpha1.Application
-	name, err := utils.FmtAppMgrName(app, owner, "")
+	name, err := apputils.FmtAppMgrName(app, owner, "")
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -74,7 +75,7 @@ func (h *Handler) status(req *restful.Request, resp *restful.Response) {
 		now := metav1.Now()
 		sts = appinstaller.Status{
 			Name:              am.Spec.AppName,
-			AppID:             utils.GetAppID(am.Spec.AppName),
+			AppID:             apputils.GetAppID(am.Spec.AppName),
 			Namespace:         am.Spec.AppNamespace,
 			CreationTimestamp: now,
 			Source:            am.Spec.Source,
@@ -165,7 +166,7 @@ func (h *Handler) appsStatus(req *restful.Request, resp *restful.Response) {
 			now := metav1.Now()
 			status := appinstaller.Status{
 				Name:              am.Spec.AppName,
-				AppID:             utils.GetAppID(am.Spec.AppName),
+				AppID:             apputils.GetAppID(am.Spec.AppName),
 				Namespace:         am.Spec.AppNamespace,
 				CreationTimestamp: now,
 				Source:            am.Spec.Source,
@@ -196,7 +197,7 @@ func (h *Handler) operate(req *restful.Request, resp *restful.Response) {
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 
 	var am v1alpha1.ApplicationManager
-	name, err := utils.FmtAppMgrName(app, owner, "")
+	name, err := apputils.FmtAppMgrName(app, owner, "")
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -272,7 +273,7 @@ func (h *Handler) operateHistory(req *restful.Request, resp *restful.Response) {
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 
 	var am v1alpha1.ApplicationManager
-	name, err := utils.FmtAppMgrName(app, owner, "")
+	name, err := apputils.FmtAppMgrName(app, owner, "")
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -377,7 +378,7 @@ func (h *Handler) getApp(req *restful.Request, resp *restful.Response) {
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 
 	appName := req.PathParameter(ParamAppName)
-	name, err := utils.FmtAppMgrName(appName, owner, "")
+	name, err := apputils.FmtAppMgrName(appName, owner, "")
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -452,7 +453,7 @@ func (h *Handler) apps(req *restful.Request, resp *restful.Response) {
 			return
 		}
 		now := metav1.Now()
-		name, _ := utils.FmtAppMgrName(am.Spec.AppName, owner, appconfig.Namespace)
+		name, _ := apputils.FmtAppMgrName(am.Spec.AppName, owner, appconfig.Namespace)
 		app := v1alpha1.Application{
 			TypeMeta: metav1.TypeMeta{},
 			ObjectMeta: metav1.ObjectMeta{
@@ -461,7 +462,7 @@ func (h *Handler) apps(req *restful.Request, resp *restful.Response) {
 			},
 			Spec: v1alpha1.ApplicationSpec{
 				Name:      am.Spec.AppName,
-				Appid:     utils.GetAppID(am.Spec.AppName),
+				Appid:     apputils.GetAppID(am.Spec.AppName),
 				IsSysApp:  userspace.IsSysApp(am.Spec.AppName),
 				Namespace: am.Spec.AppNamespace,
 				Owner:     owner,
@@ -511,7 +512,7 @@ func (h *Handler) apps(req *restful.Request, resp *restful.Response) {
 }
 
 func (h *Handler) pendingOrInstallingApps(req *restful.Request, resp *restful.Response) {
-	ams, err := utils.GetPendingOrRunningTask(req.Request.Context())
+	ams, err := apputils.GetPendingOrRunningTask(req.Request.Context())
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -552,7 +553,7 @@ func (h *Handler) operateRecommend(req *restful.Request, resp *restful.Response)
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 
 	var am v1alpha1.ApplicationManager
-	name, err := utils.FmtAppMgrName(app, owner, "")
+	name, err := apputils.FmtAppMgrName(app, owner, "")
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -617,7 +618,7 @@ func (h *Handler) operateRecommendHistory(req *restful.Request, resp *restful.Re
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 
 	var am v1alpha1.ApplicationManager
-	name, err := utils.FmtAppMgrName(app, owner, "")
+	name, err := apputils.FmtAppMgrName(app, owner, "")
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -761,7 +762,7 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 				},
 				Spec: v1alpha1.ApplicationSpec{
 					Name:      am.Spec.AppName,
-					Appid:     utils.GetAppID(am.Spec.AppName),
+					Appid:     apputils.GetAppID(am.Spec.AppName),
 					IsSysApp:  userspace.IsSysApp(am.Spec.AppName),
 					Namespace: am.Spec.AppNamespace,
 					Owner:     am.Spec.AppOwner,

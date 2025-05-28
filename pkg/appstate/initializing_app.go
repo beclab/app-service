@@ -108,7 +108,7 @@ func (p *InitializingApp) Exec(ctx context.Context) (StatefulInProgressApp, erro
 					klog.Errorf("wait for launch failed %v", err)
 					if err != nil {
 						klog.Error("wait for launch error: ", err, ", ", p.manager.Name)
-						updateErr := p.updateStatus(ctx, p.manager, appsv1.InitializingCanceling, nil, "canceling")
+						updateErr := p.updateStatus(c, p.manager, appsv1.InitializingCanceling, nil, appsv1.InitializingCanceling.String())
 						if updateErr != nil {
 							klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.InitializingCanceling, updateErr)
 							return
@@ -118,7 +118,7 @@ func (p *InitializingApp) Exec(ctx context.Context) (StatefulInProgressApp, erro
 					return
 
 				}
-				updateErr := p.updateStatus(ctx, p.manager, appsv1.Running, nil, appsv1.InstallFailed.String())
+				updateErr := p.updateStatus(c, p.manager, appsv1.Running, nil, appsv1.Running.String())
 				if updateErr != nil {
 					klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.Running, updateErr)
 				}

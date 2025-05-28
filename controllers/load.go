@@ -21,7 +21,7 @@ func LoadStatefulApp(ctx context.Context, appmgr *ApplicationManagerController, 
 
 			var app appv1alpha1.Application
 			if err = appmgr.Get(ctx, types.NamespacedName{Name: name}, &app); err == nil {
-				klog.Infof("LoadStatefulApp: application manager %s not found, but application %s exists", name, am.Name)
+				klog.Infof("LoadStatefulApp: application manager %s not found, but application %s exists", name, app.Name)
 				// If the application manager is not found, but the application exists,
 				// we need force delete the application.
 				return nil, appstate.NewErrorUnknownState(func() func(ctx context.Context) error {
@@ -29,18 +29,18 @@ func LoadStatefulApp(ctx context.Context, appmgr *ApplicationManagerController, 
 						go func() {
 							delCtx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 							defer cancel()
-							klog.Infof("LoadStatefulApp: force delete application %s", am.Name)
+							klog.Infof("LoadStatefulApp: force delete application %s", app.Name)
 							err := appmgr.Delete(delCtx,
 								&corev1.Namespace{
 									ObjectMeta: metav1.ObjectMeta{
-										Name: app.Namespace,
+										Name: app.Spec.Namespace,
 									},
 								})
 
 							if err != nil {
-								klog.Errorf("LoadStatefulApp: force delete application %s failed: %v", am.Name, err)
+								klog.Errorf("LoadStatefulApp: force delete application %s failed: %v", app.Name, err)
 							} else {
-								klog.Infof("LoadStatefulApp: force delete application %s successfully", am.Name)
+								klog.Infof("LoadStatefulApp: force delete application %s successfully", app.Name)
 							}
 						}()
 

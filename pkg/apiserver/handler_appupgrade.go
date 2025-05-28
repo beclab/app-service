@@ -10,6 +10,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/helm"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/utils"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 	"bytetrade.io/web3os/app-service/pkg/utils/config"
 
 	"github.com/emicklei/go-restful/v3"
@@ -32,7 +33,7 @@ func (h *Handler) releaseVersion(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
-	version, _, err := utils.GetDeployedReleaseVersion(actionConfig, appName)
+	version, _, err := apputils.GetDeployedReleaseVersion(actionConfig, appName)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -59,7 +60,7 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		return
 	}
 	var appMgr appv1alpha1.ApplicationManager
-	appMgrName, err := utils.FmtAppMgrName(app, owner, "")
+	appMgrName, err := apputils.FmtAppMgrName(app, owner, "")
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -88,7 +89,7 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
-	err = utils.CheckTailScaleACLs(appConfig.TailScale.ACLs)
+	err = apputils.CheckTailScaleACLs(appConfig.TailScale.ACLs)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -134,7 +135,7 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		UpdateTime: &now,
 	}
 
-	_, err = utils.UpdateAppMgrStatus(appMgrName, status)
+	_, err = apputils.UpdateAppMgrStatus(appMgrName, status)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return

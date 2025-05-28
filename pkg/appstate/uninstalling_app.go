@@ -7,7 +7,7 @@ import (
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
-	"bytetrade.io/web3os/app-service/pkg/utils"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -98,7 +98,7 @@ func (p *UninstallingApp) Exec(ctx context.Context) (StatefulInProgressApp, erro
 func (p *UninstallingApp) waitForDeleteNamespace(ctx context.Context) error {
 	// cur app may be installed in os-system or user-space-xxx namespace
 	// for those app no need to wait namespace be deleted
-	if utils.IsProtectedNamespace(p.manager.Spec.AppNamespace) {
+	if apputils.IsProtectedNamespace(p.manager.Spec.AppNamespace) {
 		return nil
 	}
 	err := utilwait.PollImmediate(time.Second, 15*time.Minute, func() (done bool, err error) {

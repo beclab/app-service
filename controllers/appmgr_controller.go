@@ -71,7 +71,7 @@ func (r *ApplicationManagerController) SetupWithManager(mgr ctrl.Manager) error 
 	}
 
 	// start auto reconcile the application manager state
-	go wait.Until(r.ReconcileAll, 5*time.Second, wait.NeverStop)
+	go wait.Until(r.ReconcileAll, time.Minute, wait.NeverStop)
 
 	return nil
 }

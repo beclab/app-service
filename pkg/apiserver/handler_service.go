@@ -12,6 +12,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/utils"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
 	"github.com/emicklei/go-restful/v3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -54,7 +55,7 @@ func (h *Handler) get(req *restful.Request, resp *restful.Response) {
 			},
 			Spec: appv1alpha1.ApplicationSpec{
 				Name:      am.Spec.AppName,
-				Appid:     utils.GetAppID(am.Spec.AppName),
+				Appid:     apputils.GetAppID(am.Spec.AppName),
 				IsSysApp:  userspace.IsSysApp(am.Spec.AppName),
 				Namespace: am.Spec.AppNamespace,
 				Owner:     owner,
@@ -105,7 +106,7 @@ func (h *Handler) list(req *restful.Request, resp *restful.Response) {
 				},
 				Spec: appv1alpha1.ApplicationSpec{
 					Name:      am.Spec.AppName,
-					Appid:     utils.GetAppID(am.Spec.AppName),
+					Appid:     apputils.GetAppID(am.Spec.AppName),
 					IsSysApp:  userspace.IsSysApp(am.Spec.AppName),
 					Namespace: am.Spec.AppNamespace,
 					Owner:     owner,
@@ -154,7 +155,7 @@ func (h *Handler) listBackend(req *restful.Request, resp *restful.Response) {
 				return
 			}
 			now := metav1.Now()
-			name, _ := utils.FmtAppMgrName(am.Spec.AppName, owner, appConfig.Namespace)
+			name, _ := apputils.FmtAppMgrName(am.Spec.AppName, owner, appConfig.Namespace)
 			app := appv1alpha1.Application{
 				TypeMeta: metav1.TypeMeta{},
 				ObjectMeta: metav1.ObjectMeta{
@@ -163,7 +164,7 @@ func (h *Handler) listBackend(req *restful.Request, resp *restful.Response) {
 				},
 				Spec: appv1alpha1.ApplicationSpec{
 					Name:      am.Spec.AppName,
-					Appid:     utils.GetAppID(am.Spec.AppName),
+					Appid:     apputils.GetAppID(am.Spec.AppName),
 					IsSysApp:  userspace.IsSysApp(am.Spec.AppName),
 					Namespace: am.Spec.AppNamespace,
 					Owner:     owner,

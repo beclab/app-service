@@ -11,7 +11,10 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/middlewareinstaller"
 	"bytetrade.io/web3os/app-service/pkg/utils"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 	installerv1 "bytetrade.io/web3os/app-service/pkg/workflowinstaller/v1"
+
+	"sort"
 
 	"github.com/emicklei/go-restful/v3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -19,7 +22,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
-	"sort"
 )
 
 func (h *Handler) statusMiddleware(req *restful.Request, resp *restful.Response) {
@@ -105,8 +107,15 @@ func getMiddlewareStatus(ctx context.Context, kubeConfig *rest.Config, app, owne
 		ResourceType:   v1alpha1.Middleware.String(),
 		Metadata:       metadata{Name: app},
 	}
-	client, _ := utils.GetClient()
-	name, _ := utils.FmtAppMgrName(app, owner, namespace)
+	client, err := utils.GetClient()
+	if err != nil {
+		return nil, err
+	}
+	name, err := apputils.FmtAppMgrName(app, owner, namespace)
+	if err != nil {
+		return nil, err
+	}
+
 	mgr, err := client.AppV1alpha1().ApplicationManagers().Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
@@ -147,7 +156,7 @@ func (h *Handler) operateMiddleware(req *restful.Request, resp *restful.Response
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 
 	var am v1alpha1.ApplicationManager
-	name, err := utils.FmtAppMgrName(app, owner, "")
+	name, err := apputils.FmtAppMgrName(app, owner, "")
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return

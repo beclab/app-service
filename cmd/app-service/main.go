@@ -133,6 +133,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = (&controllers.EvictionManagerController{
+		Client: mgr.GetClient(),
+	}).SetUpWithManager(mgr); err != nil {
+		setupLog.Error(err, "Unable to create controller", "controller", "Eviction Manager")
+		os.Exit(1)
+	}
+
 	if err = (&controllers.TailScaleACLController{
 		Client: mgr.GetClient(),
 	}).SetUpWithManager(mgr); err != nil {
@@ -205,7 +212,10 @@ func runAPIServer(ctx context.Context, ksHost string, kubeConfig *rest.Config, c
 		return err
 	}
 
-	err = server.PrepareRun(ksHost, kubeConfig, client)
+	stopCh := make(chan struct{})
+	defer close(stopCh)
+
+	err = server.PrepareRun(ksHost, kubeConfig, client, stopCh)
 	if err != nil {
 		return err
 	}

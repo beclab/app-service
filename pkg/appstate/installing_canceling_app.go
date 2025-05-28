@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
-	"bytetrade.io/web3os/app-service/pkg/utils"
 	"helm.sh/helm/v3/pkg/storage/driver"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -147,7 +147,7 @@ func (p *installingCancelInProgressApp) Exec(ctx context.Context) (StatefulInPro
 }
 
 func (p *installingCancelInProgressApp) poll(ctx context.Context) error {
-	if utils.IsProtectedNamespace(p.manager.Spec.AppNamespace) {
+	if apputils.IsProtectedNamespace(p.manager.Spec.AppNamespace) {
 		return nil
 	}
 
