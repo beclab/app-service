@@ -9,30 +9,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// FIXME: impossible state
+
 var _ StatefulApp = &PendingCancelFailedApp{}
 
 type PendingCancelFailedApp struct {
 	baseStatefulApp
-}
-
-func (p *PendingCancelFailedApp) State() string {
-	return p.GetManager().Status.State.String()
-}
-
-func (p *PendingCancelFailedApp) IsOperation() bool {
-	return true
-}
-
-func (p *PendingCancelFailedApp) IsCancelOperation() bool {
-	return false
-}
-
-func (p *PendingCancelFailedApp) IsAppCreated() bool {
-	return false
-}
-
-func (p *PendingCancelFailedApp) IsTimeout() bool {
-	return false
 }
 
 func NewPendingCancelFailedApp(c client.Client,

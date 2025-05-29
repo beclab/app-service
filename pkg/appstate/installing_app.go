@@ -19,34 +19,10 @@ import (
 	"k8s.io/klog/v2"
 )
 
-var _ StatefulApp = &InstallingApp{}
+var _ OperationApp = &InstallingApp{}
 
 type InstallingApp struct {
-	baseStatefulApp
-	ttl time.Duration
-}
-
-func (p *InstallingApp) State() string {
-	return p.GetManager().Status.State.String()
-}
-
-func (p *InstallingApp) IsOperation() bool {
-	return true
-}
-
-func (p *InstallingApp) IsCancelOperation() bool {
-	return false
-}
-
-func (p *InstallingApp) IsAppCreated() bool {
-	return false
-}
-
-func (p *InstallingApp) IsTimeout() bool {
-	if p.ttl == 0 {
-		return false
-	}
-	return p.manager.Status.StatusTime.Add(p.ttl).Before(time.Now())
+	*baseOperationApp
 }
 
 func NewInstallingApp(c client.Client,
@@ -56,9 +32,11 @@ func NewInstallingApp(c client.Client,
 	return appFactory.New(c, manager, ttl,
 		func(c client.Client, manager *appsv1.ApplicationManager, ttl time.Duration) StatefulApp {
 			return &InstallingApp{
-				baseStatefulApp: baseStatefulApp{
-					manager: manager,
-					client:  c,
+				baseOperationApp: &baseOperationApp{
+					baseStatefulApp: &baseStatefulApp{
+						manager: manager,
+						client:  c,
+					},
 				},
 			}
 		})

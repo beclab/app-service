@@ -17,7 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var _ StatefulApp = &DownloadingApp{}
+var _ OperationApp = &DownloadingApp{}
 var _ PollableStatefulInProgressApp = &downloadingInProgressApp{}
 
 type downloadingInProgressApp struct {
@@ -62,49 +62,9 @@ func (p *downloadingInProgressApp) Cancel(ctx context.Context) error {
 	return nil
 }
 
-func (p *downloadingInProgressApp) IsTimeout() bool {
-	if p.ttl == 0 {
-		return false
-	}
-	return p.manager.Status.StatusTime.Add(p.ttl).Before(time.Now())
-}
-
 type DownloadingApp struct {
-	StatefulApp
-	baseStatefulApp
+	*baseOperationApp
 	imageClient images.ImageManager
-	ttl         time.Duration
-}
-
-func (p *DownloadingApp) State() string {
-	return p.GetManager().Status.State.String()
-}
-
-func (p *DownloadingApp) GetManager() *appsv1.ApplicationManager {
-	return p.manager
-}
-
-func (p *DownloadingApp) IsOperation() bool {
-	return true
-}
-
-func (p *DownloadingApp) IsCancelOperation() bool {
-	return false
-}
-
-func (p *DownloadingApp) IsAppCreated() bool {
-	return false
-}
-
-func (p *DownloadingApp) GetApp() *appsv1.Application {
-	return p.app
-}
-
-func (p *DownloadingApp) IsTimeout() bool {
-	if p.ttl == 0 {
-		return false
-	}
-	return p.manager.Status.StatusTime.Add(p.ttl).Before(time.Now())
 }
 
 func NewDownloadingApp(c client.Client,
@@ -116,11 +76,13 @@ func NewDownloadingApp(c client.Client,
 	return appFactory.New(c, manager, ttl,
 		func(c client.Client, manager *appsv1.ApplicationManager, ttl time.Duration) StatefulApp {
 			return &DownloadingApp{
-				baseStatefulApp: baseStatefulApp{
-					client:  c,
-					manager: manager,
+				baseOperationApp: &baseOperationApp{
+					baseStatefulApp: &baseStatefulApp{
+						client:  c,
+						manager: manager,
+					},
+					ttl: ttl,
 				},
-				ttl:         ttl,
 				imageClient: images.NewImageManager(c),
 			}
 		})

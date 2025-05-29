@@ -10,30 +10,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var _ StatefulApp = &UninstallFailedApp{}
+var _ OperationApp = &UninstallFailedApp{}
 
 type UninstallFailedApp struct {
-	baseStatefulApp
-}
-
-func (p *UninstallFailedApp) State() string {
-	return p.GetManager().Status.State.String()
-}
-
-func (p *UninstallFailedApp) IsOperation() bool {
-	return true
-}
-
-func (p *UninstallFailedApp) IsCancelOperation() bool {
-	return false
-}
-
-func (p *UninstallFailedApp) IsAppCreated() bool {
-	return true
-}
-
-func (p *UninstallFailedApp) IsTimeout() bool {
-	return false
+	*baseOperationApp
 }
 
 func NewUninstallFailedApp(c client.Client,
@@ -42,9 +22,12 @@ func NewUninstallFailedApp(c client.Client,
 	return appFactory.New(c, manager, 0,
 		func(c client.Client, manager *appsv1.ApplicationManager, ttl time.Duration) StatefulApp {
 			return &UninstallFailedApp{
-				baseStatefulApp: baseStatefulApp{
-					manager: manager,
-					client:  c,
+				&baseOperationApp{
+					ttl: ttl,
+					baseStatefulApp: &baseStatefulApp{
+						manager: manager,
+						client:  c,
+					},
 				},
 			}
 		})

@@ -10,30 +10,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var _ StatefulApp = &SuspendingApp{}
+var _ OperationApp = &SuspendingApp{}
 
 type SuspendingApp struct {
-	baseStatefulApp
-}
-
-func (p *SuspendingApp) State() string {
-	return p.GetManager().Status.State.String()
-}
-
-func (p *SuspendingApp) IsOperation() bool {
-	return true
-}
-
-func (p *SuspendingApp) IsCancelOperation() bool {
-	return false
-}
-
-func (p *SuspendingApp) IsAppCreated() bool {
-	return true
-}
-
-func (p *SuspendingApp) IsTimeout() bool {
-	return false
+	*baseOperationApp
 }
 
 func NewSuspendingApp(c client.Client,
@@ -43,9 +23,12 @@ func NewSuspendingApp(c client.Client,
 	return appFactory.New(c, manager, ttl,
 		func(c client.Client, manager *appsv1.ApplicationManager, ttl time.Duration) StatefulApp {
 			return &SuspendingApp{
-				baseStatefulApp: baseStatefulApp{
-					manager: manager,
-					client:  c,
+				&baseOperationApp{
+					ttl: ttl,
+					baseStatefulApp: &baseStatefulApp{
+						manager: manager,
+						client:  c,
+					},
 				},
 			}
 		})

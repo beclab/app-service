@@ -20,40 +20,7 @@ import (
 var _ StatefulInProgressApp = &PendingApp{}
 
 type PendingApp struct {
-	StatefulInProgressApp
-	baseStatefulApp
-	ttl time.Duration
-}
-
-func (p *PendingApp) IsOperation() bool {
-	return true
-}
-
-func (p *PendingApp) IsCancelOperation() bool {
-	return false
-}
-
-func (p *PendingApp) IsAppCreated() bool {
-	return false
-}
-
-func (p *PendingApp) State() string {
-	return p.GetManager().Status.State.String()
-}
-
-func (p *PendingApp) GetApp() *appsv1.Application {
-	return p.app
-}
-
-func (p *PendingApp) GetManager() *appsv1.ApplicationManager {
-	return p.manager
-}
-
-func (p *PendingApp) IsTimeout() bool {
-	if p.ttl == 0 {
-		return false
-	}
-	return p.manager.Status.StatusTime.Add(p.ttl).Before(time.Now())
+	*baseOperationApp
 }
 
 func NewPendingApp(ctx context.Context, c client.Client,
@@ -82,11 +49,13 @@ func NewPendingApp(ctx context.Context, c client.Client,
 	return appFactory.New(c, manager, ttl,
 		func(c client.Client, manager *appsv1.ApplicationManager, ttl time.Duration) StatefulApp {
 			return &PendingApp{
-				baseStatefulApp: baseStatefulApp{
-					manager: manager,
-					client:  c,
+				baseOperationApp: &baseOperationApp{
+					baseStatefulApp: &baseStatefulApp{
+						manager: manager,
+						client:  c,
+					},
+					ttl: ttl,
 				},
-				ttl: ttl,
 			}
 		})
 }

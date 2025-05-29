@@ -131,9 +131,9 @@ func (r *ApplicationManagerController) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, nil
 	}
 
-	if statefulApp.IsOperation() {
+	if operation, ok := statefulApp.(appstate.OperationApp); ok {
 		klog.Info("stateful app is doing something, ", statefulApp.State())
-		if statefulApp.IsTimeout() {
+		if operation.IsTimeout() {
 			if inProgress, ok := statefulApp.(appstate.StatefulInProgressApp); ok {
 				klog.Info("stateful app is doing something timeout, should be canceled, ", statefulApp.GetManager().Name, ", ", statefulApp.State())
 				err := inProgress.Cancel(ctx)
@@ -147,7 +147,7 @@ func (r *ApplicationManagerController) Reconcile(ctx context.Context, req ctrl.R
 			return ctrl.Result{}, nil
 		}
 
-		inProgress, err := statefulApp.Exec(ctx)
+		inProgress, err := operation.Exec(ctx)
 		if err != nil {
 			klog.Error("execute stateful app operation error, ", err, ", ", statefulApp.GetManager().Name, ", ", statefulApp.State())
 		}
@@ -190,13 +190,15 @@ func (r *ApplicationManagerController) handleCancel(am *appv1alpha1.ApplicationM
 		return false, nil
 	}
 
-	if !statefulApp.IsCancelOperation() {
+	cancelOperation, ok := statefulApp.(appstate.CancelOperationApp)
+	if !ok {
+		klog.Warningf("app %s is not cancelable, state=%s", am.Name, statefulApp.State())
 		return true, nil
 	}
 
 	// like installing state, the function `reconcile` will do helm installing synchronously
 	// so we need to do cancel operation immediately
-	_, serr := statefulApp.Exec(ctx)
+	_, serr := cancelOperation.Exec(ctx)
 	return false, serr
 }
 

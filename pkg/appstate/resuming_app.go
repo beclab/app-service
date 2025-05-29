@@ -14,34 +14,10 @@ import (
 	"k8s.io/klog/v2"
 )
 
-var _ StatefulApp = &ResumingApp{}
+var _ OperationApp = &ResumingApp{}
 
 type ResumingApp struct {
-	baseStatefulApp
-	ttl time.Duration
-}
-
-func (p *ResumingApp) State() string {
-	return p.GetManager().Status.State.String()
-}
-
-func (p *ResumingApp) IsOperation() bool {
-	return true
-}
-
-func (p *ResumingApp) IsCancelOperation() bool {
-	return false
-}
-
-func (p *ResumingApp) IsAppCreated() bool {
-	return true
-}
-
-func (p *ResumingApp) IsTimeout() bool {
-	if p.ttl == 0 {
-		return false
-	}
-	return p.manager.Status.StatusTime.Add(p.ttl).Before(time.Now())
+	*baseOperationApp
 }
 
 func NewResumingApp(c client.Client,
@@ -50,9 +26,12 @@ func NewResumingApp(c client.Client,
 	return appFactory.New(c, manager, ttl,
 		func(c client.Client, manager *appsv1.ApplicationManager, ttl time.Duration) StatefulApp {
 			return &ResumingApp{
-				baseStatefulApp: baseStatefulApp{
-					manager: manager,
-					client:  c,
+				&baseOperationApp{
+					ttl: ttl,
+					baseStatefulApp: &baseStatefulApp{
+						manager: manager,
+						client:  c,
+					},
 				},
 			}
 		})
@@ -70,12 +49,7 @@ func (p *ResumingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
 	}
 
 	return &resumingInProgressApp{
-		ResumingApp: &ResumingApp{
-			baseStatefulApp: baseStatefulApp{
-				manager: p.manager,
-				client:  p.client,
-			},
-		},
+		ResumingApp:                       p,
 		basePollableStatefulInProgressApp: &basePollableStatefulInProgressApp{},
 	}, nil
 }

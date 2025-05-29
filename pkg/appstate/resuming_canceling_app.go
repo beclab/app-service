@@ -10,30 +10,14 @@ import (
 	//"k8s.io/klog/v2"
 )
 
-var _ StatefulApp = &ResumingCancelingApp{}
+var _ CancelOperationApp = &ResumingCancelingApp{}
 
 type ResumingCancelingApp struct {
-	baseStatefulApp
-}
-
-func (p *ResumingCancelingApp) State() string {
-	return p.GetManager().Status.State.String()
-}
-
-func (p *ResumingCancelingApp) IsOperation() bool {
-	return true
-}
-
-func (p *ResumingCancelingApp) IsCancelOperation() bool {
-	return true
+	*baseOperationApp
 }
 
 func (p *ResumingCancelingApp) IsAppCreated() bool {
 	return true
-}
-
-func (p *ResumingCancelingApp) IsTimeout() bool {
-	return false
 }
 
 func NewResumingCancelingApp(c client.Client,
@@ -42,9 +26,12 @@ func NewResumingCancelingApp(c client.Client,
 	return appFactory.New(c, manager, 0,
 		func(c client.Client, manager *appsv1.ApplicationManager, ttl time.Duration) StatefulApp {
 			return &ResumingCancelingApp{
-				baseStatefulApp: baseStatefulApp{
-					manager: manager,
-					client:  c,
+				&baseOperationApp{
+					ttl: ttl,
+					baseStatefulApp: &baseStatefulApp{
+						manager: manager,
+						client:  c,
+					},
 				},
 			}
 		})
@@ -62,8 +49,4 @@ func (p *ResumingCancelingApp) Exec(ctx context.Context) (StatefulInProgressApp,
 	}
 
 	return nil, nil
-}
-
-func (p *ResumingCancelingApp) Cancel(ctx context.Context) error {
-	return nil
 }

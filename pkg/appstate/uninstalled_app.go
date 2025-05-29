@@ -17,26 +17,6 @@ type UninstalledApp struct {
 	baseStatefulApp
 }
 
-func (p *UninstalledApp) State() string {
-	return p.GetManager().Status.State.String()
-}
-
-func (p *UninstalledApp) IsOperation() bool {
-	return false
-}
-
-func (p *UninstalledApp) IsCancelOperation() bool {
-	return false
-}
-
-func (p *UninstalledApp) IsAppCreated() bool {
-	return false
-}
-
-func (p *UninstalledApp) IsTimeout() bool {
-	return false
-}
-
 func NewUninstalledApp(ctx context.Context, client client.Client,
 	manager *appsv1.ApplicationManager) (StatefulApp, StateError) {
 
@@ -73,8 +53,4 @@ func NewUninstalledApp(ctx context.Context, client client.Client,
 	}
 
 	return r, nil
-}
-
-func (p *UninstalledApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
-	return nil, nil
 }

@@ -9,30 +9,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var _ StatefulApp = &UpgradingCancelingApp{}
+var _ CancelOperationApp = &UpgradingCancelingApp{}
 
 type UpgradingCancelingApp struct {
-	baseStatefulApp
-}
-
-func (p *UpgradingCancelingApp) State() string {
-	return p.GetManager().Status.State.String()
-}
-
-func (p *UpgradingCancelingApp) IsOperation() bool {
-	return true
-}
-
-func (p *UpgradingCancelingApp) IsCancelOperation() bool {
-	return true
+	*baseOperationApp
 }
 
 func (p *UpgradingCancelingApp) IsAppCreated() bool {
 	return true
-}
-
-func (p *UpgradingCancelingApp) IsTimeout() bool {
-	return false
 }
 
 func NewUpgradingCancelingApp(c client.Client,
@@ -41,9 +25,12 @@ func NewUpgradingCancelingApp(c client.Client,
 	return appFactory.New(c, manager, 0,
 		func(c client.Client, manager *appsv1.ApplicationManager, ttl time.Duration) StatefulApp {
 			return &UpgradingCancelingApp{
-				baseStatefulApp: baseStatefulApp{
-					manager: manager,
-					client:  c,
+				&baseOperationApp{
+					ttl: ttl,
+					baseStatefulApp: &baseStatefulApp{
+						manager: manager,
+						client:  c,
+					},
 				},
 			}
 		})
