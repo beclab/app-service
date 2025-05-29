@@ -102,32 +102,10 @@ func (r *ApplicationManagerController) ReconcileAll() {
 // Reconcile implements the reconciliation loop for the ApplicationManagerController
 func (r *ApplicationManagerController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	klog.Infof("reconcile application manager request name=%s", req.Name)
-	statefulApp, err := LoadStatefulApp(ctx, r, req.Name)
+	statefulApp, err := r.loadStatefulAppAndReconcile(ctx, req.Name)
 	if err != nil {
-		klog.Errorf("load stateful app failed %v", err)
-
-		switch {
-		case appstate.IsUnknownState(err):
-			if srfunc := err.StateReconcile(); srfunc != nil {
-				err := srfunc(ctx)
-				if err != nil {
-					klog.Errorf("reconcile stateful app failed %v", err)
-					return ctrl.Result{}, err
-				}
-			}
-		case appstate.IsUnknownInProgressApp(err):
-			// this is a special case, the app is in progress but the state is unknown
-			err.CleanUp(ctx)
-		}
-
-		// return error to the controller-runtime, and re-enqueue the request
-		return ctrl.Result{}, err
-	}
-
-	if statefulApp == nil {
-		// app not found
-		klog.Warning("reconciling app not found, ", req.Name)
-		return ctrl.Result{}, nil
+		klog.Errorf("load stateful app failed in reconcile %v", err)
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, err
 	}
 
 	if operation, ok := statefulApp.(appstate.OperationApp); ok {
@@ -176,7 +154,7 @@ func (r *ApplicationManagerController) preEnqueueCheckForCreate(obj client.Objec
 
 func (r *ApplicationManagerController) handleCancel(am *appv1alpha1.ApplicationManager) (enqueue bool, err error) {
 	ctx := context.Background()
-	statefulApp, err := LoadStatefulApp(ctx, r, am.Name)
+	statefulApp, err := r.loadStatefulAppAndReconcile(ctx, am.Name)
 	if err != nil {
 		klog.Errorf("load stateful app failed in handle cancel %v", err)
 		return false, err
@@ -218,6 +196,32 @@ func (r *ApplicationManagerController) preEnqueueCheckForUpdate(old, new client.
 	}
 
 	return enqueue
+}
+
+func (r *ApplicationManagerController) loadStatefulAppAndReconcile(ctx context.Context, name string) (appstate.StatefulApp, error) {
+	statefulApp, err := LoadStatefulApp(ctx, r, name)
+	if err != nil {
+		klog.Errorf("load stateful app failed %v", err)
+
+		switch {
+		case appstate.IsUnknownState(err):
+			if srfunc := err.StateReconcile(); srfunc != nil {
+				err := srfunc(ctx)
+				if err != nil {
+					klog.Errorf("reconcile stateful app failed %v", err)
+					return nil, err
+				}
+			}
+		case appstate.IsUnknownInProgressApp(err):
+			// this is a special case, the app is in progress but the state is unknown
+			err.CleanUp(ctx)
+		}
+
+		// return error to the controller-runtime, and re-enqueue the request
+		return nil, err
+	}
+
+	return statefulApp, nil
 }
 
 func (r *ApplicationManagerController) updateStatus(ctx context.Context, am *appv1alpha1.ApplicationManager, state appv1alpha1.ApplicationManagerState) error {
