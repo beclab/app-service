@@ -109,12 +109,8 @@ func LoadStatefulApp(ctx context.Context, appmgr *ApplicationManagerController, 
 
 		case appv1alpha1.InstallingCancelFailed:
 			return appstate.NewInstallingCancelFailedApp(appmgr, &am)
-		//case appv1alpha1.InitializingCancelFailed:
-		//	return appstate.NewInitializingCancelFailedApp(appmgr, &am), nil
 		case appv1alpha1.UpgradingCancelFailed:
 			return appstate.NewUpgradingCancelFailedApp(appmgr, &am)
-		//case appv1alpha1.ResumingCancelFailed:
-		//	return appstate.NewResumingCancelFailedApp(appmgr, &am), nil
 		case appv1alpha1.Uninstalled:
 			return appstate.NewUninstalledApp(ctx, appmgr, &am)
 		}
@@ -123,7 +119,7 @@ func LoadStatefulApp(ctx context.Context, appmgr *ApplicationManagerController, 
 	}()
 
 	if serr != nil {
-		klog.Info("LoadStatefulApp: unknown state: ", am.Status.State, ", ", serr)
+		klog.Info("load stateful app name=%s, state=%s failed err %v", am.Name, am.Status.State, serr)
 		return nil, serr
 	}
 

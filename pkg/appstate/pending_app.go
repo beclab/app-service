@@ -6,54 +6,22 @@ import (
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/constants"
+	"bytetrade.io/web3os/app-service/pkg/helm"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
-	k8sappv1 "k8s.io/api/apps/v1"
+
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	"k8s.io/klog/v2"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var _ StatefulInProgressApp = &PendingApp{}
 
 type PendingApp struct {
-	StatefulInProgressApp
-	baseStatefulApp
-	ttl time.Duration
-}
-
-func (p *PendingApp) IsOperation() bool {
-	return true
-}
-
-func (p *PendingApp) IsCancelOperation() bool {
-	return false
-}
-
-func (p *PendingApp) IsAppCreated() bool {
-	return false
-}
-
-func (p *PendingApp) State() string {
-	return p.GetManager().Status.State.String()
-}
-
-func (p *PendingApp) GetApp() *appsv1.Application {
-	return p.app
-}
-
-func (p *PendingApp) GetManager() *appsv1.ApplicationManager {
-	return p.manager
-}
-
-func (p *PendingApp) IsTimeout() bool {
-	if p.ttl == 0 {
-		return false
-	}
-	return p.manager.Status.StatusTime.Add(p.ttl).Before(time.Now())
+	*baseOperationApp
 }
 
 func NewPendingApp(ctx context.Context, c client.Client,
@@ -82,11 +50,13 @@ func NewPendingApp(ctx context.Context, c client.Client,
 	return appFactory.New(c, manager, ttl,
 		func(c client.Client, manager *appsv1.ApplicationManager, ttl time.Duration) StatefulApp {
 			return &PendingApp{
-				baseStatefulApp: baseStatefulApp{
-					manager: manager,
-					client:  c,
+				baseOperationApp: &baseOperationApp{
+					baseStatefulApp: &baseStatefulApp{
+						manager: manager,
+						client:  c,
+					},
+					ttl: ttl,
 				},
-				ttl: ttl,
 			}
 		})
 }
@@ -97,6 +67,7 @@ func (p *PendingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
 	now := metav1.Now()
 	p.manager.Status.StatusTime = &now
 	p.manager.Status.UpdateTime = &now
+	p.manager.Status.OpGeneration += 1
 	err := p.client.Status().Update(ctx, p.manager)
 	if err != nil {
 		klog.Error("update app manager status error, ", err, ", ", p.manager.Name)
@@ -141,27 +112,23 @@ func removeUnknownApplication(client client.Client, name string) func(ctx contex
 			// application will be removed automatically when the ns is removed
 			err = client.Delete(ctx, &ns)
 			if err != nil {
-				klog.Error("delete namespace error: ", err, ", ", app.Spec.Namespace)
+				klog.Errorf("delete namespace %s failed %v ", app.Spec.Namespace, err)
 				return err
 			}
 
 		} else {
-			// delete the deployment of application
-			var deploy k8sappv1.Deployment
-			if err := client.Get(ctx, types.NamespacedName{Name: app.Spec.Name}, &deploy); err == nil {
-				klog.Info("delete deployment of application: %s", app.Spec.Name)
-				if err = client.Delete(ctx, &deploy); err != nil {
-					klog.Error("delete deployment error: ", err, ", ", name)
-				}
-			} else {
-				var sts k8sappv1.StatefulSet
-				if err := client.Get(ctx, types.NamespacedName{Name: name}, &sts); err == nil {
-					klog.Info("delete statefulset of application: %s", name)
-					if err = client.Delete(ctx, &sts); err != nil {
-						klog.Error("delete statefulset error: ", err, ", ", name)
-					}
-				}
+			kubeConfig, err := ctrl.GetConfig()
+			if err != nil {
+				return err
 			}
+			actionConfig, _, err := helm.InitConfig(kubeConfig, app.Spec.Namespace)
+
+			err = helm.UninstallCharts(actionConfig, app.Spec.Name)
+			if err != nil {
+				klog.Errorf("uninstall release %s failed %v", app.Spec.Name, err)
+				return err
+			}
+
 		}
 
 		return nil

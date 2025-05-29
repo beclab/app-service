@@ -25,31 +25,11 @@ import (
 	"k8s.io/klog/v2"
 )
 
-var _ StatefulApp = &UpgradingApp{}
+var _ OperationApp = &UpgradingApp{}
 
 type UpgradingApp struct {
-	baseStatefulApp
-	ttl         time.Duration
+	*baseOperationApp
 	imageClient images.ImageManager
-}
-
-func (p *UpgradingApp) IsOperation() bool {
-	return true
-}
-
-func (p *UpgradingApp) IsCancelOperation() bool {
-	return false
-}
-
-func (p *UpgradingApp) IsAppCreated() bool {
-	return true
-}
-
-func (p *UpgradingApp) IsTimeout() bool {
-	if p.ttl == 0 {
-		return false
-	}
-	return p.manager.Status.StatusTime.Add(p.ttl).Before(time.Now())
 }
 
 func (p *UpgradingApp) State() string {
@@ -62,9 +42,12 @@ func NewUpgradingApp(c client.Client,
 	return appFactory.New(c, manager, ttl,
 		func(c client.Client, manager *appsv1.ApplicationManager, ttl time.Duration) StatefulApp {
 			return &UpgradingApp{
-				baseStatefulApp: baseStatefulApp{
-					manager: manager,
-					client:  c,
+				baseOperationApp: &baseOperationApp{
+					ttl: ttl,
+					baseStatefulApp: &baseStatefulApp{
+						manager: manager,
+						client:  c,
+					},
 				},
 				imageClient: images.NewImageManager(c),
 			}

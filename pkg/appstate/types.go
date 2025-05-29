@@ -3,6 +3,7 @@ package appstate
 import (
 	"context"
 	"strings"
+	"time"
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
@@ -15,14 +16,9 @@ import (
 )
 
 type StatefulApp interface {
-	GetApp() *appsv1.Application
+	// GetApp() *appsv1.Application
 	GetManager() *appsv1.ApplicationManager
-	IsOperation() bool
-	IsCancelOperation() bool
-	IsAppCreated() bool
 	State() string
-	IsTimeout() bool
-	Exec(ctx context.Context) (StatefulInProgressApp, error)
 	Finally()
 }
 
@@ -37,9 +33,13 @@ func (b *baseStatefulApp) GetManager() *appsv1.ApplicationManager {
 	return b.manager
 }
 
-func (b *baseStatefulApp) GetApp() *appsv1.Application {
-	return b.app
+func (b *baseStatefulApp) State() string {
+	return b.GetManager().Status.State.String()
 }
+
+// func (b *baseStatefulApp) GetApp() *appsv1.Application {
+// 	return b.app
+// }
 
 func (b *baseStatefulApp) updateStatus(ctx context.Context, am *appsv1.ApplicationManager, state appsv1.ApplicationManagerState,
 	opRecord *appsv1.OpRecord, message string) error {
@@ -112,8 +112,32 @@ func (p *baseStatefulApp) forceDeleteApp(ctx context.Context) error {
 	return nil
 }
 
-type StatefulInProgressApp interface {
+type OperationApp interface {
 	StatefulApp
+	IsTimeout() bool
+	Exec(ctx context.Context) (StatefulInProgressApp, error)
+}
+
+type baseOperationApp struct {
+	*baseStatefulApp
+	ttl time.Duration
+}
+
+func (b *baseOperationApp) IsTimeout() bool {
+	if b.ttl <= 0 {
+		return false
+	}
+	return b.GetManager().Status.StatusTime.Add(b.ttl).Before(time.Now())
+}
+
+type CancelOperationApp interface {
+	OperationApp
+	IsAppCreated() bool
+	// Failed() error
+}
+
+type StatefulInProgressApp interface {
+	OperationApp
 
 	// update the app to cancel state, into the next phase phase
 	Cancel(ctx context.Context) error

@@ -15,38 +15,10 @@ import (
 	"k8s.io/klog/v2"
 )
 
-var _ StatefulApp = &InitializingApp{}
+var _ OperationApp = &InitializingApp{}
 
 type InitializingApp struct {
-	baseStatefulApp
-	ttl time.Duration
-}
-
-// IsAppCreated implements StatefulApp.
-func (p *InitializingApp) IsAppCreated() bool {
-	return true
-}
-
-// IsCancelOperation implements StatefulApp.
-func (p *InitializingApp) IsCancelOperation() bool {
-	return false
-}
-
-// IsOperation implements StatefulApp.
-func (p *InitializingApp) IsOperation() bool {
-	return true
-}
-
-// IsTimeout implements StatefulApp.
-func (p *InitializingApp) IsTimeout() bool {
-	if p.ttl == 0 {
-		return false
-	}
-	return p.manager.Status.StatusTime.Add(p.ttl).Before(time.Now())
-}
-
-func (p *InitializingApp) State() string {
-	return p.GetManager().Status.State.String()
+	*baseOperationApp
 }
 
 func NewInitializingApp(c client.Client,
@@ -56,9 +28,11 @@ func NewInitializingApp(c client.Client,
 	return appFactory.New(c, manager, ttl,
 		func(c client.Client, manager *appsv1.ApplicationManager, ttl time.Duration) StatefulApp {
 			return &InitializingApp{
-				baseStatefulApp: baseStatefulApp{
-					manager: manager,
-					client:  c,
+				baseOperationApp: &baseOperationApp{
+					baseStatefulApp: &baseStatefulApp{
+						manager: manager,
+						client:  c,
+					},
 				},
 			}
 		})

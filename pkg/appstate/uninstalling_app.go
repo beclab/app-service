@@ -19,34 +19,10 @@ import (
 	"k8s.io/klog/v2"
 )
 
-var _ StatefulApp = &UninstallingApp{}
+var _ OperationApp = &UninstallingApp{}
 
 type UninstallingApp struct {
-	baseStatefulApp
-	ttl time.Duration
-}
-
-func (p *UninstallingApp) State() string {
-	return p.GetManager().Status.State.String()
-}
-
-func (p *UninstallingApp) IsOperation() bool {
-	return true
-}
-
-func (p *UninstallingApp) IsCancelOperation() bool {
-	return false
-}
-
-func (p *UninstallingApp) IsAppCreated() bool {
-	return true
-}
-
-func (p *UninstallingApp) IsTimeout() bool {
-	if p.ttl == 0 {
-		return false
-	}
-	return p.manager.Status.StatusTime.Add(p.ttl).Before(time.Now())
+	*baseOperationApp
 }
 
 func NewUninstallingApp(c client.Client,
@@ -55,9 +31,12 @@ func NewUninstallingApp(c client.Client,
 	return appFactory.New(c, manager, ttl,
 		func(c client.Client, manager *appsv1.ApplicationManager, ttl time.Duration) StatefulApp {
 			return &UninstallingApp{
-				baseStatefulApp: baseStatefulApp{
-					manager: manager,
-					client:  c,
+				&baseOperationApp{
+					ttl: ttl,
+					baseStatefulApp: &baseStatefulApp{
+						manager: manager,
+						client:  c,
+					},
 				},
 			}
 		})

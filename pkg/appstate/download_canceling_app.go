@@ -9,29 +9,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var _ StatefulApp = &DownloadingCancelingApp{}
+var _ CancelOperationApp = &DownloadingCancelingApp{}
 
 type DownloadingCancelingApp struct {
-	baseStatefulApp
-}
-
-func (p *DownloadingCancelingApp) State() string {
-	return p.GetManager().Status.State.String()
-}
-
-func (p *DownloadingCancelingApp) IsOperation() bool {
-	return true
-}
-
-func (p *DownloadingCancelingApp) IsCancelOperation() bool {
-	return true
+	*baseOperationApp
 }
 
 func (p *DownloadingCancelingApp) IsAppCreated() bool {
-	return false
-}
-
-func (p *DownloadingCancelingApp) IsTimeout() bool {
 	return false
 }
 
@@ -41,9 +25,12 @@ func NewDownloadingCancelingApp(c client.Client,
 	return appFactory.New(c, manager, 0,
 		func(c client.Client, manager *appsv1.ApplicationManager, ttl time.Duration) StatefulApp {
 			return &DownloadingCancelingApp{
-				baseStatefulApp: baseStatefulApp{
-					manager: manager,
-					client:  c,
+				baseOperationApp: &baseOperationApp{
+					baseStatefulApp: &baseStatefulApp{
+						manager: manager,
+						client:  c,
+					},
+					ttl: ttl,
 				},
 			}
 		})
@@ -60,15 +47,10 @@ func (p *DownloadingCancelingApp) Exec(ctx context.Context) (StatefulInProgressA
 
 		return nil, updateErr
 	}
-	//updateErr = p.updateImStatus(context.TODO(), p.manager.Name)
-	//if updateErr != nil {
-	//	klog.Errorf("update im manager %s to %s state failed %v", p.manager.Name, appsv1.DownloadingCanceled.String(), updateErr)
-	//	c <- updateErr
-	//	return
-	//}
+
 	return nil, nil
 }
 
-func (p *DownloadingCancelingApp) Cancel(ctx context.Context) error {
-	return nil
-}
+// func (p *DownloadingCancelingApp) Cancel(ctx context.Context) error {
+// 	return p.updateStatus(ctx, p.manager, appsv1.DownloadingCancelFailed, nil, appsv1.DownloadingCancelFailed.String())
+// }

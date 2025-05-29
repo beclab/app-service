@@ -1,7 +1,6 @@
 package appstate
 
 import (
-	"context"
 	"time"
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
@@ -11,27 +10,7 @@ import (
 var _ StatefulApp = &DoNothingApp{}
 
 type DoNothingApp struct {
-	baseStatefulApp
-}
-
-func (p *DoNothingApp) State() string {
-	return p.GetManager().Status.State.String()
-}
-
-func (p *DoNothingApp) IsOperation() bool {
-	return false
-}
-
-func (p *DoNothingApp) IsCancelOperation() bool {
-	return false
-}
-
-func (p *DoNothingApp) IsAppCreated() bool {
-	return false
-}
-
-func (p *DoNothingApp) IsTimeout() bool {
-	return false
+	*baseStatefulApp
 }
 
 func NewDoNothingApp(c client.Client,
@@ -41,18 +20,10 @@ func NewDoNothingApp(c client.Client,
 		func(c client.Client, manager *appsv1.ApplicationManager, ttl time.Duration) StatefulApp {
 
 			return &DoNothingApp{
-				baseStatefulApp: baseStatefulApp{
+				baseStatefulApp: &baseStatefulApp{
 					manager: manager,
 					client:  c,
 				},
 			}
 		})
-}
-
-func (p *DoNothingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
-	return nil, nil
-}
-
-func (p *DoNothingApp) Cancel(ctx context.Context) error {
-	return nil
 }

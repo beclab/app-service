@@ -7,7 +7,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var _ StatefulApp = &UpgradeFailedApp{}
+var _ OperationApp = &UpgradeFailedApp{}
 
 type UpgradeFailedApp struct {
 	SuspendFailedApp
@@ -19,9 +19,12 @@ func NewUpgradeFailedApp(c client.Client,
 		func(c client.Client, manager *appsv1.ApplicationManager, ttl time.Duration) StatefulApp {
 			return &UpgradeFailedApp{
 				SuspendFailedApp: SuspendFailedApp{
-					baseStatefulApp: baseStatefulApp{
-						manager: manager,
-						client:  c,
+					&baseOperationApp{
+						ttl: ttl,
+						baseStatefulApp: &baseStatefulApp{
+							manager: manager,
+							client:  c,
+						},
 					},
 				},
 			}

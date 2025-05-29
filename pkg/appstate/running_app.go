@@ -18,26 +18,6 @@ type RunningApp struct {
 	baseStatefulApp
 }
 
-func (p *RunningApp) State() string {
-	return p.GetManager().Status.State.String()
-}
-
-func (p *RunningApp) IsOperation() bool {
-	return false
-}
-
-func (p *RunningApp) IsCancelOperation() bool {
-	return false
-}
-
-func (p *RunningApp) IsAppCreated() bool {
-	return true
-}
-
-func (p *RunningApp) IsTimeout() bool {
-	return false
-}
-
 func NewRunningApp(ctx context.Context, c client.Client,
 	manager *appsv1.ApplicationManager) (StatefulApp, StateError) {
 	// check state
@@ -84,8 +64,4 @@ func NewRunningApp(ctx context.Context, c client.Client,
 	}
 
 	return sapp, nil
-}
-
-func (p *RunningApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
-	return nil, nil
 }

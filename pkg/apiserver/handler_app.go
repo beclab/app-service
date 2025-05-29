@@ -39,54 +39,49 @@ func (h *Handler) status(req *restful.Request, resp *restful.Response) {
 	app := req.PathParameter(ParamAppName)
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 
-	var a v1alpha1.Application
 	name, err := apputils.FmtAppMgrName(app, owner, "")
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
-	key := types.NamespacedName{Name: name}
-	err = h.ctrlClient.Get(req.Request.Context(), key, &a)
-	if err != nil && !apierrors.IsNotFound(err) {
-		api.HandleError(resp, req, err)
+	//key := types.NamespacedName{Name: name}
+	//err = h.ctrlClient.Get(req.Request.Context(), key, &a)
+	//if err != nil && !apierrors.IsNotFound(err) {
+	//	api.HandleError(resp, req, err)
+	//	return
+	//}
+	//source := a.Spec.Settings["source"]
+	//if source == "" {
+	//	source = api.Unknown.String()
+	//}
+	//sts := appinstaller.Status{
+	//	Name:              a.Spec.Name,
+	//	AppID:             a.Spec.Appid,
+	//	Namespace:         a.Spec.Namespace,
+	//	CreationTimestamp: a.CreationTimestamp,
+	//	Source:            source,
+	//	AppStatus:         a.Status,
+	//}
+
+	var am v1alpha1.ApplicationManager
+	e := h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: name}, &am)
+	if e != nil {
+		api.HandleError(resp, req, e)
 		return
 	}
-	source := a.Spec.Settings["source"]
-	if source == "" {
-		source = api.Unknown.String()
-	}
+	now := metav1.Now()
 	sts := appinstaller.Status{
-		Name:              a.Spec.Name,
-		AppID:             a.Spec.Appid,
-		Namespace:         a.Spec.Namespace,
-		CreationTimestamp: a.CreationTimestamp,
-		Source:            source,
-		AppStatus:         a.Status,
-	}
-
-	if a.Status.State != v1alpha1.AppRunning.String() {
-		var am v1alpha1.ApplicationManager
-		e := h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: name}, &am)
-		if e != nil {
-			api.HandleError(resp, req, e)
-			return
-		}
-		//if _, ok := appstate.OperatingStates[v1alpha1.ApplicationManagerState(am.Name)]; ok {
-		now := metav1.Now()
-		sts = appinstaller.Status{
-			Name:              am.Spec.AppName,
-			AppID:             apputils.GetAppID(am.Spec.AppName),
-			Namespace:         am.Spec.AppNamespace,
-			CreationTimestamp: now,
-			Source:            am.Spec.Source,
-			AppStatus: v1alpha1.ApplicationStatus{
-				State:      am.Status.State.String(),
-				Progress:   am.Status.Progress,
-				StatusTime: &now,
-				UpdateTime: &now,
-			},
-		}
-		//}
+		Name:              am.Spec.AppName,
+		AppID:             apputils.GetAppID(am.Spec.AppName),
+		Namespace:         am.Spec.AppNamespace,
+		CreationTimestamp: now,
+		Source:            am.Spec.Source,
+		AppStatus: v1alpha1.ApplicationStatus{
+			State:      am.Status.State.String(),
+			Progress:   am.Status.Progress,
+			StatusTime: &now,
+			UpdateTime: &now,
+		},
 	}
 
 	resp.WriteAsJson(sts)
@@ -112,39 +107,39 @@ func (h *Handler) appsStatus(req *restful.Request, resp *restful.Response) {
 		stateSet.Insert(s)
 	}
 
-	allApps, err := h.appLister.List(labels.Everything())
-	if err != nil {
-		api.HandleError(resp, req, err)
-		return
-	}
+	//allApps, err := h.appLister.List(labels.Everything())
+	//if err != nil {
+	//	api.HandleError(resp, req, err)
+	//	return
+	//}
 
 	// filter by application's owner
 	filteredApps := make([]appinstaller.Status, 0)
-	appsMap := make(map[string]appinstaller.Status)
+	//appsMap := make(map[string]appinstaller.Status)
 
-	for _, a := range allApps {
-		if a.Spec.Owner == owner {
-			if !stateSet.Has(a.Status.State) {
-				continue
-			}
-			if len(isSysApp) > 0 && strconv.FormatBool(a.Spec.IsSysApp) != isSysApp {
-				continue
-			}
-			source := a.Spec.Settings["source"]
-			if source == "" {
-				source = api.Unknown.String()
-			}
-			status := appinstaller.Status{
-				Name:              a.Spec.Name,
-				AppID:             a.Spec.Appid,
-				Namespace:         a.Spec.Namespace,
-				CreationTimestamp: a.CreationTimestamp,
-				Source:            source,
-				AppStatus:         a.Status,
-			}
-			appsMap[a.Name] = status
-		}
-	}
+	//for _, a := range allApps {
+	//	if a.Spec.Owner == owner {
+	//		if !stateSet.Has(a.Status.State) {
+	//			continue
+	//		}
+	//		if len(isSysApp) > 0 && strconv.FormatBool(a.Spec.IsSysApp) != isSysApp {
+	//			continue
+	//		}
+	//		source := a.Spec.Settings["source"]
+	//		if source == "" {
+	//			source = api.Unknown.String()
+	//		}
+	//		status := appinstaller.Status{
+	//			Name:              a.Spec.Name,
+	//			AppID:             a.Spec.Appid,
+	//			Namespace:         a.Spec.Namespace,
+	//			CreationTimestamp: a.CreationTimestamp,
+	//			Source:            source,
+	//			AppStatus:         a.Status,
+	//		}
+	//		appsMap[a.Name] = status
+	//	}
+	//}
 
 	appAms, err := h.appmgrLister.List(labels.Everything())
 	if err != nil {
@@ -153,14 +148,10 @@ func (h *Handler) appsStatus(req *restful.Request, resp *restful.Response) {
 	}
 	for _, am := range appAms {
 		if am.Spec.AppOwner == owner {
-			app, _ := appsMap[am.Name]
-			if app.AppStatus.State == v1alpha1.AppRunning.String() {
-				continue
-			}
 			if !stateSet.Has(am.Status.State.String()) {
 				continue
 			}
-			if len(isSysApp) > 0 && isSysApp == "true" && userspace.IsSysApp(am.Spec.AppName) {
+			if len(isSysApp) > 0 && isSysApp == "true" && !userspace.IsSysApp(am.Spec.AppName) {
 				continue
 			}
 			now := metav1.Now()
@@ -177,11 +168,9 @@ func (h *Handler) appsStatus(req *restful.Request, resp *restful.Response) {
 					UpdateTime: &now,
 				},
 			}
-			appsMap[am.Name] = status
+
+			filteredApps = append(filteredApps, status)
 		}
-	}
-	for _, app := range appsMap {
-		filteredApps = append(filteredApps, app)
 	}
 
 	// sort by create time desc
@@ -390,15 +379,12 @@ func (h *Handler) getApp(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
-	if app.Status.State != v1alpha1.AppRunning.String() {
-		am, err := client.AppClient.AppV1alpha1().ApplicationManagers().Get(req.Request.Context(), name, metav1.GetOptions{})
-		if err != nil {
-			api.HandleError(resp, req, err)
-			return
-		}
-		app.Spec.IsSysApp = userspace.IsSysApp(am.Spec.AppName)
-		app.Status.State = am.Status.State.String()
+	am, err := client.AppClient.AppV1alpha1().ApplicationManagers().Get(req.Request.Context(), name, metav1.GetOptions{})
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
 	}
+	app.Status.State = am.Status.State.String()
 
 	resp.WriteAsJson(app)
 }
@@ -497,10 +483,9 @@ func (h *Handler) apps(req *restful.Request, resp *restful.Response) {
 			if len(isSysApp) > 0 && isSysApp == "true" && strconv.FormatBool(a.Spec.IsSysApp) != isSysApp {
 				continue
 			}
-			if a.Status.State != v1alpha1.AppRunning.String() {
-				continue
+			if a.Spec.IsSysApp {
+				appsMap[a.Name] = *a
 			}
-			appsMap[a.Name] = *a
 		}
 	}
 	for _, app := range appsMap {

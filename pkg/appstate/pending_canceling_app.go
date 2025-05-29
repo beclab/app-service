@@ -9,29 +9,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var _ StatefulApp = &PendingCancelingApp{}
+var _ CancelOperationApp = &PendingCancelingApp{}
 
 type PendingCancelingApp struct {
-	baseStatefulApp
-}
-
-func (p *PendingCancelingApp) State() string {
-	return p.GetManager().Status.State.String()
-}
-
-func (p *PendingCancelingApp) IsOperation() bool {
-	return true
-}
-
-func (p *PendingCancelingApp) IsCancelOperation() bool {
-	return true
+	*baseOperationApp
 }
 
 func (p *PendingCancelingApp) IsAppCreated() bool {
-	return true
-}
-
-func (p *PendingCancelingApp) IsTimeout() bool {
 	return false
 }
 
@@ -41,9 +25,12 @@ func NewPendingCancelingApp(c client.Client,
 	return appFactory.New(c, manager, 0,
 		func(c client.Client, manager *appsv1.ApplicationManager, ttl time.Duration) StatefulApp {
 			return &PendingCancelingApp{
-				baseStatefulApp: baseStatefulApp{
-					manager: manager,
-					client:  c,
+				&baseOperationApp{
+					baseStatefulApp: &baseStatefulApp{
+						manager: manager,
+						client:  c,
+					},
+					ttl: ttl,
 				},
 			}
 		})
@@ -61,8 +48,4 @@ func (p *PendingCancelingApp) Exec(ctx context.Context) (StatefulInProgressApp, 
 	}
 
 	return nil, nil
-}
-
-func (p *PendingCancelingApp) Cancel(ctx context.Context) error {
-	return nil
 }
