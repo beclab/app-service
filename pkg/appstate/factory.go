@@ -38,6 +38,11 @@ func (f *statefulAppFactory) New(
 	inProgressApp, ok := f.inProgress[manager.Name]
 	if ok {
 		if inProgressApp.State() != manager.Status.State.String() {
+			a := create(client, manager, ttl)
+			if cancelOperation, ok := a.(CancelOperationApp); ok {
+				return cancelOperation, nil
+			}
+
 			klog.Infof("app %s is doing something in progress, but state is not match, expected: %s, actual: %s",
 				manager.Name, manager.Status.State.String(), inProgressApp.State())
 
