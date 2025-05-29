@@ -175,7 +175,6 @@ func (r *ApplicationManagerController) preEnqueueCheckForCreate(obj client.Objec
 }
 
 func (r *ApplicationManagerController) handleCancel(am *appv1alpha1.ApplicationManager) (enqueue bool, err error) {
-	klog.Infof("start to perform cancel operation app=%s", am.Spec.AppName)
 	ctx := context.Background()
 	statefulApp, err := LoadStatefulApp(ctx, r, am.Name)
 	if err != nil {
