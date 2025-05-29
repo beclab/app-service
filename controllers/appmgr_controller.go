@@ -71,7 +71,7 @@ func (r *ApplicationManagerController) SetupWithManager(mgr ctrl.Manager) error 
 	}
 
 	// start auto reconcile the application manager state
-	go wait.Until(r.ReconcileAll, time.Minute, wait.NeverStop)
+	go wait.Until(r.ReconcileAll, 2*time.Minute, wait.NeverStop)
 
 	return nil
 }
@@ -91,12 +91,11 @@ func (r *ApplicationManagerController) ReconcileAll() {
 		_, err := r.Reconcile(ctx, ctrl.Request{
 			NamespacedName: types.NamespacedName{
 				Name: appmgr.Name,
-			},
-		})
-
+			}})
 		if err != nil {
 			klog.Error("reconcile application manager error, ", err, ", ", appmgr.Name)
 		}
+		time.Sleep(time.Second)
 	} // end of app mgr list loop
 }
 

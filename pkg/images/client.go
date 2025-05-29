@@ -181,7 +181,7 @@ func (imc *ImageManagerClient) PollDownloadProgress(ctx context.Context, am *app
 				continue
 			}
 
-			klog.Infof("download progress.... %v", cur.Status.Progress)
+			klog.Infof("app %s download progress.... %v", am.Spec.AppName, cur.Status.Progress)
 			if cur.Status.Progress == "100.00" {
 				return nil
 			}
