@@ -190,19 +190,17 @@ func (r *ApplicationManagerController) handleCancel(am *appv1alpha1.ApplicationM
 		return false, nil
 	}
 
-	// like installing state, the function `reconcile` will do helm installing synchronously
-	// so we need to do cancel operation immediately
-	switch cancelable := statefulApp.(type) {
-	case appstate.StatefulInProgressApp:
-		err = cancelable.Cancel(ctx)
-	case appstate.CancelOperationApp:
-		_, err = cancelable.Exec(ctx)
-	default:
-		klog.Warningf("app %s is not cancelable, state=%s", am.Name, statefulApp.State())
+	cancelOperation, ok := statefulApp.(appstate.CancelOperationApp)
+	if !ok {
 		return true, nil
 	}
 
-	return false, err
+	klog.Infof("app %s is canceling state=%s, do it immediately", am.Name, statefulApp.State())
+
+	// like installing state, the function `reconcile` will do helm installing synchronously
+	// so we need to do cancel operation immediately
+	_, serr := cancelOperation.Exec(ctx)
+	return false, serr
 }
 
 func (r *ApplicationManagerController) preEnqueueCheckForUpdate(old, new client.Object) bool {
