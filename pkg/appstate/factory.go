@@ -71,6 +71,7 @@ func (f *statefulAppFactory) waitForPolling(ctx context.Context, app PollableSta
 
 	_, ok := f.inProgress[app.GetManager().Name]
 	if !ok {
+		f.inProgress[app.GetManager().Name] = app
 
 		go func() {
 			err := app.poll(ctx)
@@ -90,7 +91,6 @@ func (f *statefulAppFactory) waitForPolling(ctx context.Context, app PollableSta
 			finally()
 		}()
 
-		f.inProgress[app.GetManager().Name] = app
 	}
 }
 
