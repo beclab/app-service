@@ -195,7 +195,11 @@ func (r *basePollableStatefulInProgressApp) Cleanup(ctx context.Context) {
 }
 
 func (r *basePollableStatefulInProgressApp) stopPolling() {
-	r.cancelPoll()
+	if r != nil {
+		r.cancelPoll()
+	} else {
+		klog.Errorf("call cancelPool failed with nil pointer r ")
+	}
 }
 
 func (p *basePollableStatefulInProgressApp) Done() <-chan struct{} {
