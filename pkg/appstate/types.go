@@ -195,7 +195,7 @@ func (r *basePollableStatefulInProgressApp) Cleanup(ctx context.Context) {
 }
 
 func (r *basePollableStatefulInProgressApp) stopPolling() {
-	if r != nil {
+	if r != nil && r.cancelPoll != nil {
 		r.cancelPoll()
 	} else {
 		klog.Errorf("call cancelPool failed with nil pointer r ")
