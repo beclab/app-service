@@ -199,16 +199,16 @@ var OperationAllowedInState = map[appv1alpha1.ApplicationManagerState]map[appv1a
 	//	appv1alpha1.UninstallOp: true,
 	//	appv1alpha1.ResumeOp:    true,
 	//},
-	appv1alpha1.UpgradingCanceled: {
-		appv1alpha1.UpgradeOp:   true,
-		appv1alpha1.UninstallOp: true,
-		appv1alpha1.ResumeOp:    true,
-	},
-	appv1alpha1.ResumingCanceled: {
-		appv1alpha1.UpgradeOp:   true,
-		appv1alpha1.UninstallOp: true,
-		appv1alpha1.ResumeOp:    true,
-	},
+	//appv1alpha1.UpgradingCanceled: {
+	//	appv1alpha1.UpgradeOp:   true,
+	//	appv1alpha1.UninstallOp: true,
+	//	appv1alpha1.ResumeOp:    true,
+	//},
+	//appv1alpha1.ResumingCanceled: {
+	//	appv1alpha1.UpgradeOp:   true,
+	//	appv1alpha1.UninstallOp: true,
+	//	appv1alpha1.ResumeOp:    true,
+	//},
 	appv1alpha1.DownloadFailed: {
 		appv1alpha1.InstallOp: true,
 	},

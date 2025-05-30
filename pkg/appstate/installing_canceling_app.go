@@ -134,11 +134,12 @@ func (p *installingCancelInProgressApp) Exec(ctx context.Context) (StatefulInPro
 }
 
 func (p *installingCancelInProgressApp) poll(ctx context.Context) error {
+	pctx := p.createPollContext(ctx)
+
 	if apputils.IsProtectedNamespace(p.manager.Spec.AppNamespace) {
 		return nil
 	}
 
-	pctx := p.createPollContext(ctx)
 	timer := time.NewTicker(time.Second)
 	defer timer.Stop()
 	for {
@@ -146,6 +147,7 @@ func (p *installingCancelInProgressApp) poll(ctx context.Context) error {
 		case <-timer.C:
 			var ns corev1.Namespace
 			err := p.client.Get(pctx, types.NamespacedName{Name: p.manager.Spec.AppNamespace}, &ns)
+			klog.Infof("poll namespace %s err %v", p.manager.Spec.AppNamespace, err)
 			if apierrors.IsNotFound(err) {
 				return nil
 			}
