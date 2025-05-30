@@ -232,16 +232,6 @@ func (h *HelmOps) addApplicationLabelsToDeployment() error {
 				constants.ApplicationTailScaleKey: tailScale,
 			},
 		},
-		"spec": map[string]interface{}{
-			"template": map[string]interface{}{
-				"metadata": map[string]interface{}{
-					"labels": map[string]string{
-						constants.ApplicationNameLabel:  h.app.AppName,
-						constants.ApplicationOwnerLabel: h.app.OwnerName,
-					},
-				},
-			},
-		},
 	}
 
 	patchByte, err := json.Marshal(patchData)
