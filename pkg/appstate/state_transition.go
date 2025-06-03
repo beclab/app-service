@@ -102,6 +102,7 @@ var StateTransitions = map[appv1alpha1.ApplicationManagerState][]appv1alpha1.App
 	appv1alpha1.Resuming: {
 		appv1alpha1.ResumingCanceling,
 		appv1alpha1.ResumeFailed,
+		appv1alpha1.Initializing,
 	},
 	appv1alpha1.ResumingCanceling: {
 		appv1alpha1.Stopping,

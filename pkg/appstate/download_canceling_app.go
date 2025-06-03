@@ -40,7 +40,6 @@ func (p *DownloadingCancelingApp) Exec(ctx context.Context) (StatefulInProgressA
 	if ok := appFactory.cancelOperation(p.manager.Name); !ok {
 		klog.Errorf("app %s operation is not ", p.manager.Name)
 	}
-
 	updateErr := p.updateStatus(ctx, p.manager, appsv1.DownloadingCanceled, nil, appsv1.DownloadingCanceled.String())
 	if updateErr != nil {
 		klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.DownloadingCanceled.String(), updateErr)

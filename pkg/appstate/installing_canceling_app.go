@@ -157,7 +157,14 @@ func (p *installingCancelInProgressApp) poll(ctx context.Context) error {
 }
 
 func (p *installingCancelInProgressApp) WaitAsync(ctx context.Context) {
-	appFactory.waitForPolling(ctx, p, func() {
+	appFactory.waitForPolling(ctx, p, func(err error) {
+		if err != nil {
+			updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.InstallingCancelFailed, nil, appsv1.InstallingCancelFailed.String())
+			if updateErr != nil {
+				klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.InstallingCancelFailed.String(), updateErr)
+			}
+			return
+		}
 		updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.InstallingCanceled, nil, appsv1.InstallingCanceled.String())
 		if updateErr != nil {
 			klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.InstallingCanceled.String(), updateErr)

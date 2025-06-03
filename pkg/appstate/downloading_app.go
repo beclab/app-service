@@ -30,7 +30,27 @@ func (r *downloadingInProgressApp) poll(ctx context.Context) error {
 }
 
 func (r *downloadingInProgressApp) WaitAsync(ctx context.Context) {
-	appFactory.waitForPolling(ctx, r, func() {
+	appFactory.waitForPolling(ctx, r, func(err error) {
+		if err != nil {
+			e := r.imageClient.UpdateStatus(context.TODO(), r.manager.Name, appsv1.DownloadingCanceled.String(), appsv1.DownloadingCanceled.String())
+			if e != nil {
+				klog.Errorf("update im name=%s to downloadingCanceled state failed %v", err)
+				return
+			}
+			if errors.Is(err, context.Canceled) {
+				updateErr := r.updateStatus(context.TODO(), r.manager, appsv1.DownloadingCanceling, nil, appsv1.DownloadingCanceling.String())
+				if updateErr != nil {
+					klog.Errorf("update app manager %s to %s state failed %v", r.manager.Name, appsv1.DownloadingCanceling.String(), updateErr)
+				}
+			} else {
+				updateErr := r.updateStatus(context.TODO(), r.manager, appsv1.DownloadFailed, nil, appsv1.DownloadFailed.String())
+				if updateErr != nil {
+					klog.Errorf("update app manager %s to %s state failed %v", r.manager.Name, appsv1.DownloadFailed.String(), updateErr)
+				}
+			}
+			return
+		}
+
 		updateErr := r.updateStatus(context.TODO(), r.manager, appsv1.Installing, nil, appsv1.Installing.String())
 		if updateErr != nil {
 			klog.Errorf("update app manager %s to %s state failed %v", r.manager.Name, appsv1.Installing.String(), updateErr)

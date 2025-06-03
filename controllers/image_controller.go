@@ -138,10 +138,15 @@ func (r *ImageManagerController) reconcile(ctx context.Context, instance *appv1a
 		if errors.Is(err, context.Canceled) {
 			state = appv1alpha1.DownloadingCanceled.String()
 		}
-		err = r.updateStatus(ctx, instance, state, err.Error())
+		err = r.updateStatus(context.TODO(), instance, state, err.Error())
 		if err != nil {
 			klog.Infof("Failed to update status err=%v", err)
 		}
+		return err
+	}
+	err = r.updateStatus(context.TODO(), instance, "completed", "image download completed")
+	if err != nil {
+		klog.Infof("Failed to update status err=%v", err)
 		return err
 	}
 
@@ -160,7 +165,7 @@ func (r *ImageManagerController) preEnqueueCheckForCreate(obj client.Object) boo
 
 func (r *ImageManagerController) preEnqueueCheckForUpdate(old, new client.Object) bool {
 	im, _ := new.(*appv1alpha1.ImageManager)
-	if im.Status.State == "canceled" {
+	if im.Status.State == appv1alpha1.DownloadingCanceled.String() {
 		go r.cancel(im)
 	}
 	return false

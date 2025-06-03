@@ -78,7 +78,14 @@ func (p *resumingInProgressApp) Exec(ctx context.Context) (StatefulInProgressApp
 
 // WaitAsync implements PollableStatefulInProgressApp.
 func (p *resumingInProgressApp) WaitAsync(ctx context.Context) {
-	appFactory.waitForPolling(ctx, p, func() {
+	appFactory.waitForPolling(ctx, p, func(err error) {
+		if err != nil {
+			updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.ResumeFailed, nil, appsv1.ResumeFailed.String())
+			if updateErr != nil {
+				klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.ResumeFailed.String(), updateErr)
+			}
+			return
+		}
 		updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.Initializing, nil, appsv1.Initializing.String())
 		if updateErr != nil {
 			klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.Initializing.String(), updateErr)

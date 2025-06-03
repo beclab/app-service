@@ -65,7 +65,7 @@ func (f *statefulAppFactory) New(
 	return create(client, manager, ttl), nil
 }
 
-func (f *statefulAppFactory) waitForPolling(ctx context.Context, app PollableStatefulInProgressApp, finally func()) {
+func (f *statefulAppFactory) waitForPolling(ctx context.Context, app PollableStatefulInProgressApp, finally func(err error)) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -88,7 +88,7 @@ func (f *statefulAppFactory) waitForPolling(ctx context.Context, app PollableSta
 			delete(f.inProgress, app.GetManager().Name)
 			f.mu.Unlock()
 
-			finally()
+			finally(err)
 		}()
 
 	}
@@ -121,7 +121,7 @@ func (f *statefulAppFactory) execAndWatch(
 	go func() {
 		if done := inProgressApp.Done(); done != nil {
 			<-done
-			klog.Infof("app %s has completed", inProgressApp.GetManager().Name)
+			klog.Infof("app %s has completed, state: %v", inProgressApp.GetManager().Name, inProgressApp.GetManager().Status.State)
 		}
 
 		f.mu.Lock()
@@ -130,7 +130,7 @@ func (f *statefulAppFactory) execAndWatch(
 
 		// updating state whatever success or failure should be done in the finally block
 		// because of the new state will cause the new reconciling request,
-		// it will be confict of the current operation
+		// it will be conflicted of the current operation
 		inProgressApp.Finally()
 
 	}()
@@ -143,7 +143,6 @@ func (f *statefulAppFactory) cancelOperation(name string) bool {
 	defer f.mu.Unlock()
 
 	if app, ok := f.inProgress[name]; ok {
-		//
 		app.Cleanup(context.Background())
 		delete(f.inProgress, name)
 		return true
