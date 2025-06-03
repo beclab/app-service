@@ -8,6 +8,7 @@ import (
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
@@ -16,7 +17,6 @@ import (
 )
 
 type StatefulApp interface {
-	// GetApp() *appsv1.Application
 	GetManager() *appsv1.ApplicationManager
 	State() string
 	Finally()
@@ -139,10 +139,10 @@ type CancelOperationApp interface {
 type StatefulInProgressApp interface {
 	OperationApp
 
-	// update the app to cancel state, into the next phase phase
+	// Cancel update the app to cancel state, into the next phase
 	Cancel(ctx context.Context) error
 
-	// Stop the current operation immediately and clean up the resource if necessary.
+	// Cleanup Stop the current operation immediately and clean up the resource if necessary.
 	Cleanup(ctx context.Context)
 	Done() <-chan struct{}
 }
@@ -182,6 +182,7 @@ type PollableStatefulInProgressApp interface {
 	poll(ctx context.Context) error
 	stopPolling()
 	WaitAsync(ctx context.Context)
+	CreatePollContext() context.Context
 }
 
 type basePollableStatefulInProgressApp struct {
@@ -210,8 +211,8 @@ func (p *basePollableStatefulInProgressApp) Done() <-chan struct{} {
 	return p.ctxPoll.Done()
 }
 
-func (p *basePollableStatefulInProgressApp) createPollContext(ctx context.Context) context.Context {
-	pollCtx, cancel := context.WithCancel(ctx)
+func (p *basePollableStatefulInProgressApp) CreatePollContext() context.Context {
+	pollCtx, cancel := context.WithCancel(context.Background())
 	p.cancelPoll = cancel
 	p.ctxPoll = pollCtx
 

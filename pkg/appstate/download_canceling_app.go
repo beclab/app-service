@@ -5,6 +5,7 @@ import (
 	"time"
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/images"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -13,6 +14,7 @@ var _ CancelOperationApp = &DownloadingCancelingApp{}
 
 type DownloadingCancelingApp struct {
 	*baseOperationApp
+	imageClient images.ImageManager
 }
 
 func (p *DownloadingCancelingApp) IsAppCreated() bool {
@@ -32,15 +34,23 @@ func NewDownloadingCancelingApp(c client.Client,
 					},
 					ttl: ttl,
 				},
+				imageClient: images.NewImageManager(c),
 			}
 		})
 }
 
 func (p *DownloadingCancelingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
+	err := p.imageClient.UpdateStatus(ctx, p.manager.Name, appsv1.DownloadingCanceled.String(), appsv1.DownloadingCanceled.String())
+	if err != nil {
+		klog.Errorf("update im name=%s to downloadingCanceled state failed %v", err)
+		return nil, err
+	}
+
 	if ok := appFactory.cancelOperation(p.manager.Name); !ok {
 		klog.Errorf("app %s operation is not ", p.manager.Name)
 	}
 
+	// FIXME: should check if the image downloading is canceled successfully
 	updateErr := p.updateStatus(ctx, p.manager, appsv1.DownloadingCanceled, nil, appsv1.DownloadingCanceled.String())
 	if updateErr != nil {
 		klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.DownloadingCanceled.String(), updateErr)

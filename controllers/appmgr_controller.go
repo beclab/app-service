@@ -110,6 +110,7 @@ func (r *ApplicationManagerController) Reconcile(ctx context.Context, req ctrl.R
 	if operation, ok := statefulApp.(appstate.OperationApp); ok {
 		klog.Info("stateful app is doing something, ", statefulApp.State())
 		if operation.IsTimeout() {
+			klog.Errorf("stateful app is timeout: %v, state:%v", req.Name, statefulApp.State())
 			if inProgress, ok := statefulApp.(appstate.StatefulInProgressApp); ok {
 				klog.Info("stateful app is doing something timeout, should be canceled, ", statefulApp.GetManager().Name, ", ", statefulApp.State())
 				err := inProgress.Cancel(ctx)
@@ -132,7 +133,8 @@ func (r *ApplicationManagerController) Reconcile(ctx context.Context, req ctrl.R
 			if pollable, ok := inProgress.(appstate.PollableStatefulInProgressApp); ok {
 				// use background context to wait for the operation to finish
 				// current context `ctx` controlled by the app mgr controller
-				pollable.WaitAsync(context.Background())
+				c := pollable.CreatePollContext()
+				pollable.WaitAsync(c)
 			}
 		}
 
@@ -151,33 +153,6 @@ func (r *ApplicationManagerController) preEnqueueCheckForCreate(obj client.Objec
 	return am.Status.State != ""
 }
 
-func (r *ApplicationManagerController) handleCancel(am *appv1alpha1.ApplicationManager) (enqueue bool, err error) {
-	ctx := context.Background()
-	statefulApp, err := r.loadStatefulAppAndReconcile(ctx, am.Name)
-	if err != nil {
-		klog.Errorf("load stateful app failed in handle cancel %v", err)
-		return false, err
-	}
-
-	if statefulApp == nil {
-		// app not found
-		klog.Warningf("reconciling app %s not found", am.Name)
-		return false, nil
-	}
-
-	cancelOperation, ok := statefulApp.(appstate.CancelOperationApp)
-	if !ok {
-		return true, nil
-	}
-
-	klog.Infof("app %s is canceling state=%s, do it immediately", am.Name, statefulApp.State())
-
-	// like installing state, the function `reconcile` will do helm installing synchronously
-	// so we need to do cancel operation immediately
-	_, serr := cancelOperation.Exec(ctx)
-	return false, serr
-}
-
 func (r *ApplicationManagerController) preEnqueueCheckForUpdate(old, new client.Object) bool {
 	oldAppMgr, _ := old.(*appv1alpha1.ApplicationManager)
 	curAppMgr, _ := new.(*appv1alpha1.ApplicationManager)
@@ -189,12 +164,7 @@ func (r *ApplicationManagerController) preEnqueueCheckForUpdate(old, new client.
 		return false
 	}
 
-	enqueue, err := r.handleCancel(curAppMgr)
-	if err != nil {
-		klog.Errorf("handle cancel operation failed %v", err)
-	}
-
-	return enqueue
+	return true
 }
 
 func (r *ApplicationManagerController) loadStatefulAppAndReconcile(ctx context.Context, name string) (appstate.StatefulApp, error) {

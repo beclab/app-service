@@ -26,13 +26,23 @@ type downloadingInProgressApp struct {
 }
 
 func (r *downloadingInProgressApp) poll(ctx context.Context) error {
-	pollCtx := r.createPollContext(ctx)
-	return r.imageClient.PollDownloadProgress(pollCtx, r.manager)
+	return r.imageClient.PollDownloadProgress(ctx, r.manager)
 }
 
 func (r *downloadingInProgressApp) WaitAsync(ctx context.Context) {
-	appFactory.waitForPolling(ctx, r, func() {
-		updateErr := r.updateStatus(ctx, r.manager, appsv1.Installing, nil, appsv1.Installing.String())
+	appFactory.waitForPolling(ctx, r, func(err error) {
+		if err != nil {
+			if !errors.Is(err, context.Canceled) {
+				updateErr := r.updateStatus(context.TODO(), r.manager, appsv1.DownloadFailed, nil, appsv1.DownloadFailed.String())
+				if updateErr != nil {
+					klog.Errorf("update app manager %s to %s state failed %v", r.manager.Name, appsv1.DownloadFailed.String(), updateErr)
+				}
+			}
+			// if the download is finished with error, we should not update the status to installing
+			return
+		}
+
+		updateErr := r.updateStatus(context.TODO(), r.manager, appsv1.Installing, nil, appsv1.Installing.String())
 		if updateErr != nil {
 			klog.Errorf("update app manager %s to %s state failed %v", r.manager.Name, appsv1.Installing.String(), updateErr)
 		}
@@ -47,14 +57,9 @@ func (r *downloadingInProgressApp) Exec(ctx context.Context) (StatefulInProgress
 }
 
 func (p *downloadingInProgressApp) Cancel(ctx context.Context) error {
-	klog.Infof("call downloadingApp cancel....")
-	err := p.imageClient.UpdateStatus(ctx, p.manager.Name, appsv1.DownloadingCanceled.String(), appsv1.DownloadingCanceled.String())
-	if err != nil {
-		klog.Errorf("update im name=%s to downloadingCanceled state failed %v", err)
-		return err
-	}
-
-	err = p.updateStatus(ctx, p.manager, appsv1.DownloadingCanceling, nil, constants.OperationCanceledByTerminusTpl)
+	// only cancel the downloading operation when the app is timeout
+	klog.Infof("call timeout downloadingApp cancel....")
+	err := p.updateStatus(ctx, p.manager, appsv1.DownloadingCanceling, nil, constants.OperationCanceledByTerminusTpl)
 	if err != nil {
 		klog.Errorf("update app manager name=%s to downloadingCanceling state failed %v", err)
 		return err

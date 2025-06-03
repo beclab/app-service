@@ -74,7 +74,7 @@ func (p *InstallingCancelingApp) Exec(ctx context.Context) (StatefulInProgressAp
 
 func (p *InstallingCancelingApp) handleInstallCancel(ctx context.Context) error {
 	if ok := appFactory.cancelOperation(p.manager.Name); !ok {
-		klog.Errorf("app %s operation is not ", p.manager.Name)
+		klog.Errorf("app %s operation is not running", p.manager.Name)
 		return nil
 	}
 
@@ -134,8 +134,6 @@ func (p *installingCancelInProgressApp) Exec(ctx context.Context) (StatefulInPro
 }
 
 func (p *installingCancelInProgressApp) poll(ctx context.Context) error {
-	pctx := p.createPollContext(ctx)
-
 	if apputils.IsProtectedNamespace(p.manager.Spec.AppNamespace) {
 		return nil
 	}
@@ -146,21 +144,28 @@ func (p *installingCancelInProgressApp) poll(ctx context.Context) error {
 		select {
 		case <-timer.C:
 			var ns corev1.Namespace
-			err := p.client.Get(pctx, types.NamespacedName{Name: p.manager.Spec.AppNamespace}, &ns)
+			err := p.client.Get(ctx, types.NamespacedName{Name: p.manager.Spec.AppNamespace}, &ns)
 			klog.Infof("poll namespace %s err %v", p.manager.Spec.AppNamespace, err)
 			if apierrors.IsNotFound(err) {
 				return nil
 			}
 
-		case <-pctx.Done():
+		case <-ctx.Done():
 			return fmt.Errorf("app %s execute cancel operation failed %w", p.manager.Spec.AppName, ctx.Err())
 		}
 	}
 }
 
 func (p *installingCancelInProgressApp) WaitAsync(ctx context.Context) {
-	appFactory.waitForPolling(ctx, p, func() {
-		updateErr := p.updateStatus(ctx, p.manager, appsv1.InstallingCanceled, nil, appsv1.InstallingCanceled.String())
+	appFactory.waitForPolling(ctx, p, func(err error) {
+		if err != nil {
+			updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.InstallingCancelFailed, nil, appsv1.InstallingCancelFailed.String())
+			if updateErr != nil {
+				klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.InstallingCancelFailed.String(), updateErr)
+			}
+			return
+		}
+		updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.InstallingCanceled, nil, appsv1.InstallingCanceled.String())
 		if updateErr != nil {
 			klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.InstallingCanceled.String(), updateErr)
 		}
