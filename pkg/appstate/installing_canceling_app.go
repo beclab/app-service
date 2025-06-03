@@ -74,7 +74,7 @@ func (p *InstallingCancelingApp) Exec(ctx context.Context) (StatefulInProgressAp
 
 func (p *InstallingCancelingApp) handleInstallCancel(ctx context.Context) error {
 	if ok := appFactory.cancelOperation(p.manager.Name); !ok {
-		klog.Errorf("app %s operation is not ", p.manager.Name)
+		klog.Errorf("app %s operation is not running", p.manager.Name)
 		return nil
 	}
 
