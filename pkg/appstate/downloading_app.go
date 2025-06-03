@@ -26,8 +26,7 @@ type downloadingInProgressApp struct {
 }
 
 func (r *downloadingInProgressApp) poll(ctx context.Context) error {
-	pollCtx := r.createPollContext(ctx)
-	return r.imageClient.PollDownloadProgress(pollCtx, r.manager)
+	return r.imageClient.PollDownloadProgress(ctx, r.manager)
 }
 
 func (r *downloadingInProgressApp) WaitAsync(ctx context.Context) {

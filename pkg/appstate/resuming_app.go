@@ -88,8 +88,7 @@ func (p *resumingInProgressApp) WaitAsync(ctx context.Context) {
 
 // poll implements PollableStatefulInProgressApp.
 func (p *resumingInProgressApp) poll(ctx context.Context) error {
-	pollctx := p.createPollContext(ctx)
-	ok := p.IsStartUp(pollctx)
+	ok := p.IsStartUp(ctx)
 	if !ok {
 		return fmt.Errorf("wait for app %s startup failed", p.manager.Spec.AppName)
 	}

@@ -182,6 +182,7 @@ type PollableStatefulInProgressApp interface {
 	poll(ctx context.Context) error
 	stopPolling()
 	WaitAsync(ctx context.Context)
+	CreatePollContext() context.Context
 }
 
 type basePollableStatefulInProgressApp struct {
@@ -210,8 +211,8 @@ func (p *basePollableStatefulInProgressApp) Done() <-chan struct{} {
 	return p.ctxPoll.Done()
 }
 
-func (p *basePollableStatefulInProgressApp) createPollContext(ctx context.Context) context.Context {
-	pollCtx, cancel := context.WithCancel(ctx)
+func (p *basePollableStatefulInProgressApp) CreatePollContext() context.Context {
+	pollCtx, cancel := context.WithCancel(context.Background())
 	p.cancelPoll = cancel
 	p.ctxPoll = pollCtx
 
