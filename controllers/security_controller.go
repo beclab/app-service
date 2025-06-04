@@ -282,6 +282,11 @@ func (r *SecurityReconciler) reconcileNetworkPolicy(ctx context.Context, ns *cor
 	logger := ctx.Value(loggerKey).(logr.Logger)
 	finalizer := "finalizers.bytetrade.io/namespaces"
 
+	if security.IsPublicNamespace(ns.Name) {
+		// public namespace should not have network policy
+		return nil
+	}
+
 	if ns.ObjectMeta.DeletionTimestamp.IsZero() {
 		if !funk.Contains(ns.ObjectMeta.Finalizers, finalizer) {
 			ns.ObjectMeta.Finalizers = append(ns.ObjectMeta.Finalizers, finalizer)
