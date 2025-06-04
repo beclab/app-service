@@ -73,3 +73,11 @@ func IsUnderLayerNamespace(ns string) bool {
 func IsOSSystemNamespace(ns string) bool {
 	return funk.Contains(OSSystemNamespaces, ns)
 }
+
+func IsPublicNamespace(ns string) bool {
+	if funk.Contains(GPUSystemNamespaces, ns) {
+		return true
+	}
+
+	return false
+}
