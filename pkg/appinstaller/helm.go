@@ -900,7 +900,7 @@ func (h *HelmOps) upgrade() error {
 		return err
 	}
 
-	ok, err := h.waitForLaunch()
+	ok, err := h.waitForStartUp()
 	if !ok {
 		// canceled
 		//h.rollBack()
@@ -1012,10 +1012,6 @@ func (h *HelmOps) createOIDCClient(values map[string]interface{}, userZone, name
 }
 
 func (h *HelmOps) waitForLaunch() (bool, error) {
-	for i := 0; i < 20; i++ {
-		klog.Infof("wait for launch ..........xxxxx")
-		time.Sleep(time.Second)
-	}
 	ok, _ := h.waitForStartUp()
 	if !ok {
 		return false, api.ErrStartUpFailed
