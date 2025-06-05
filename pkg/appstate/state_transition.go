@@ -236,7 +236,6 @@ var OperationAllowedInState = map[appv1alpha1.ApplicationManagerState]map[appv1a
 	},
 	appv1alpha1.UpgradeFailed: {
 		appv1alpha1.UninstallOp: true,
-		appv1alpha1.ResumeOp:    true,
 		appv1alpha1.UpgradeOp:   true,
 	},
 	appv1alpha1.PendingCancelFailed: {
