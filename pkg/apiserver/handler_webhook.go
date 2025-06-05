@@ -705,18 +705,18 @@ func (h *Handler) appLabelMutate(ctx context.Context, req *admissionv1.Admission
 		UID:     req.UID,
 	}
 
-	appcfg, _ := h.sidecarWebhook.GetAppConfig(req.Namespace)
-	if appcfg == nil {
+	appCfg, _ := h.sidecarWebhook.GetAppConfig(req.Namespace)
+	if appCfg == nil {
 		klog.Error("get appcfg is empty")
 		return resp
 	}
 
-	appName := appcfg.AppName
+	appName := appCfg.AppName
 	if len(appName) == 0 || appName != object.Name {
 		return resp
 	}
 
-	patchBytes, err := makePatches(req)
+	patchBytes, err := makePatches(req, appCfg)
 	if err != nil {
 		klog.Errorf("make patches err=%v", patchBytes)
 		return h.sidecarWebhook.AdmissionError(req.UID, err)
@@ -727,7 +727,7 @@ func (h *Handler) appLabelMutate(ctx context.Context, req *admissionv1.Admission
 	return resp
 }
 
-func makePatches(req *admissionv1.AdmissionRequest) ([]byte, error) {
+func makePatches(req *admissionv1.AdmissionRequest, appCfg *appcfg.ApplicationConfig) ([]byte, error) {
 	original := req.Object.Raw
 	var patchBytes []byte
 	var tpl *corev1.PodTemplateSpec
@@ -743,6 +743,8 @@ func makePatches(req *admissionv1.AdmissionRequest) ([]byte, error) {
 			tpl.ObjectMeta.Labels = make(map[string]string)
 		}
 		tpl.ObjectMeta.Labels["io.bytetrade.app"] = "true"
+		tpl.ObjectMeta.Labels[constants.ApplicationNameLabel] = appCfg.AppName
+		tpl.ObjectMeta.Labels[constants.ApplicationOwnerLabel] = appCfg.OwnerName
 		current, err := json.Marshal(deploy)
 		if err != nil {
 			return []byte{}, err
@@ -763,6 +765,8 @@ func makePatches(req *admissionv1.AdmissionRequest) ([]byte, error) {
 			tpl.ObjectMeta.Labels = make(map[string]string)
 		}
 		tpl.ObjectMeta.Labels["io.bytetrade.app"] = "true"
+		tpl.ObjectMeta.Labels[constants.ApplicationNameLabel] = appCfg.AppName
+		tpl.ObjectMeta.Labels[constants.ApplicationOwnerLabel] = appCfg.OwnerName
 		current, err := json.Marshal(sts)
 		if err != nil {
 			return []byte{}, err
