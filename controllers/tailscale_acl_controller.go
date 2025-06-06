@@ -51,6 +51,12 @@ var defaultACLs = []v1alpha1.ACL{
 		Proto:  "",
 		Dst:    []string{"*:53"},
 	},
+	{
+		Action: "accept",
+		Src:    []string{"*"},
+		Proto:  "",
+		Dst:    []string{"*:80"},
+	},
 }
 var defaultSubRoutes = []string{"$(NODE_IP)/32", "$(COREDNS_SVC)/32"}
 
