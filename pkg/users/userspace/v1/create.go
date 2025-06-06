@@ -4,15 +4,18 @@ import (
 	"context"
 	"crypto"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/helm"
+	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace/templates"
 	"bytetrade.io/web3os/app-service/pkg/utils"
@@ -185,7 +188,6 @@ func (c *Creator) installSysApps(ctx context.Context, bflPod *corev1.Pod) error 
 	if err != nil {
 		return err
 	}
-
 	bflDocURL := fmt.Sprintf("//%s:%d/bfl/apidocs.json", ip, port)
 
 	vals["bfl"] = map[string]interface{}{
@@ -282,6 +284,12 @@ func (c *Creator) installSysApps(ctx context.Context, bflPod *corev1.Pod) error 
 	vals["terminusGlobalEnvs"] = map[string]interface{}{
 		"COREDNS_SVC": os.Getenv("COREDNS_SVC"),
 	}
+	userIndex, userSubnet, err := c.getUserSubnet(ctx)
+	if err != nil {
+		return err
+	}
+	vals["tailscaleUserIndex"] = userIndex
+	vals["tailscaleUserSubnet"] = userSubnet
 
 	sysApps, err := userspace.GetAppsFromDirectory(constants.UserChartsPath + "/apps")
 	if err != nil {
@@ -335,6 +343,26 @@ func (c *Creator) findBflAPIPort(ctx context.Context, namespace string) (int32, 
 	}
 
 	return port, nil
+}
+
+func (c *Creator) getUserSubnet(ctx context.Context) (string, string, error) {
+	userIndex, err := kubesphere.GetUserIndexByName(ctx, c.k8sConfig, c.user)
+	if err != nil {
+		return "0", "", err
+	}
+	userNum := os.Getenv("OLARES_MAX_USERS")
+	if userNum == "" {
+		userNum = "1024"
+	}
+	num, err := strconv.ParseInt(userNum, 10, 64)
+	if err != nil {
+		return "0", "", err
+	}
+	userSubnet := utils.SubnetSplit(int(num))[userIndex]
+	if userSubnet == nil || userSubnet.String() == "" {
+		return "0", "", errors.New("empty userSubnet")
+	}
+	return userIndex, userSubnet.String(), nil
 }
 
 func (c *Creator) checkDesktopRunning(ctx context.Context, userspace string) (int32, int32, error) {

@@ -20,6 +20,7 @@ var (
 	userAnnotationOwnerRole      = fmt.Sprintf("%s/owner-role", annotationGroup)
 	userAnnotationCPULimitKey    = "bytetrade.io/user-cpu-limit"
 	userAnnotationMemoryLimitKey = "bytetrade.io/user-memory-limit"
+	userIndex                    = "bytetrade.io/user-index"
 )
 
 type Options struct {
@@ -182,4 +183,8 @@ func GetAdminUsername(ctx context.Context, kubeConfig *rest.Config) (string, err
 	}
 
 	return admin, nil
+}
+
+func GetUserIndexByName(ctx context.Context, kubeConfig *rest.Config, name string) (string, error) {
+	return GetUserAnnotation(ctx, kubeConfig, name, userIndex)
 }
