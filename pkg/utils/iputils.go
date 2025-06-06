@@ -3,8 +3,10 @@ package utils
 import (
 	"encoding/json"
 	"io/ioutil"
+	"math"
 	"net"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -118,4 +120,39 @@ func GetMyExternalIPAddr() string {
 	}
 
 	return ""
+}
+
+func SubnetSplit(n int) map[string]*net.IPNet {
+	subnetMap := make(map[string]*net.IPNet)
+	log2n := int(math.Ceil(math.Log2(float64(n))))
+	alignedN := 1 << log2n
+	_, ipNet, _ := net.ParseCIDR("100.64.0.0/10")
+
+	baseIP := ipNet.IP.To4()
+	originalMaskLen, _ := ipNet.Mask.Size()
+
+	newMaskLen := originalMaskLen + log2n
+	ipsPerSubnet := 1 << (32 - newMaskLen)
+
+	for i := 0; i < alignedN; i++ {
+		offset := uint32(i * ipsPerSubnet)
+		subnetIP := make(net.IP, 4)
+		copy(subnetIP, baseIP)
+		for j := 3; j >= 0 && offset > 0; j-- {
+			subnetIP[j] += byte(offset & 0xFF)
+			offset >>= 8
+		}
+		firstUsableIP := make(net.IP, 4)
+		copy(firstUsableIP, subnetIP)
+		firstUsableIP[3]++
+
+		subnet := &net.IPNet{
+			IP:   subnetIP,
+			Mask: net.CIDRMask(newMaskLen, 32),
+		}
+		index := strconv.FormatInt(int64(i), 10)
+		subnetMap[index] = subnet
+	}
+
+	return subnetMap
 }
