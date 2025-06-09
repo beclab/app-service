@@ -1,6 +1,7 @@
 package appstate
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/constants"
 	"context"
 	"time"
 
@@ -45,13 +46,18 @@ func (p *DownloadingCancelingApp) Exec(ctx context.Context) (StatefulInProgressA
 		klog.Errorf("update im name=%s to downloadingCanceled state failed %v", err)
 		return nil, err
 	}
-
 	if ok := appFactory.cancelOperation(p.manager.Name); !ok {
 		klog.Errorf("app %s operation is not ", p.manager.Name)
 	}
+	message := constants.OperationCanceledByUserTpl
+	if p.manager.Status.Message == constants.OperationCanceledByTerminusTpl {
+		message = constants.OperationCanceledByTerminusTpl
+	}
+	opRecord := makeRecord(p.manager.Status.OpType, p.manager.Spec.Source, p.manager.Status.Payload["version"],
+		appsv1.DownloadingCanceled, message)
 
 	// FIXME: should check if the image downloading is canceled successfully
-	updateErr := p.updateStatus(ctx, p.manager, appsv1.DownloadingCanceled, nil, appsv1.DownloadingCanceled.String())
+	updateErr := p.updateStatus(ctx, p.manager, appsv1.DownloadingCanceled, opRecord, message)
 	if updateErr != nil {
 		klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.DownloadingCanceled.String(), updateErr)
 

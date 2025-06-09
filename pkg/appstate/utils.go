@@ -228,12 +228,14 @@ func isStartUp(am *appv1alpha1.ApplicationManager, cli client.Client) (bool, err
 	return false, nil
 }
 
-func MakeRecord(opType appv1alpha1.OpType, source string, version string, status appv1alpha1.ApplicationManagerState, message string) *appv1alpha1.OpRecord {
+func makeRecord(opType appv1alpha1.OpType, source string, version string, status appv1alpha1.ApplicationManagerState, message string) *appv1alpha1.OpRecord {
+	now := metav1.Now()
 	return &appv1alpha1.OpRecord{
-		OpType:  opType,
-		Source:  source,
-		Version: version,
-		Message: message,
-		Status:  status,
+		OpType:    opType,
+		Source:    source,
+		Version:   version,
+		Message:   message,
+		Status:    status,
+		StateTime: &now,
 	}
 }
