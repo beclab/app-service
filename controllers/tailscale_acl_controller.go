@@ -58,7 +58,7 @@ var defaultACLs = []v1alpha1.ACL{
 		Dst:    []string{"*:80"},
 	},
 }
-var defaultSubRoutes = []string{"$(NODE_IP)/32", "$(COREDNS_SVC)/32"}
+var defaultSubRoutes = []string{"$(COREDNS_SVC)/32"}
 
 type ACLPolicy struct {
 	ACLs          []v1alpha1.ACL `json:"acls"`
