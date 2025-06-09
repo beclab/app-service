@@ -1,7 +1,9 @@
 package appstate
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/constants"
 	"context"
+	"fmt"
 	"time"
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
@@ -61,7 +63,9 @@ func (p *UninstallingApp) Exec(ctx context.Context) (StatefulInProgressApp, erro
 				if err != nil {
 					p.finally = func() {
 						klog.Info("uninstalling app failed,", p.manager.Name)
-						updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.UninstallFailed, nil, appsv1.UninstallFailed.String())
+						opRecord := makeRecord(p.manager.Status.OpType, p.manager.Spec.Source, p.manager.Status.Payload["version"],
+							appsv1.UninstallFailed, fmt.Sprintf(constants.OperationFailedTpl, p.manager.Status.OpType, err.Error()))
+						updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.UninstallFailed, opRecord, err.Error())
 						if updateErr != nil {
 							klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.UninstallFailed.String(), err)
 							err = errors.Wrapf(err, "update status failed %v", updateErr)
@@ -71,8 +75,10 @@ func (p *UninstallingApp) Exec(ctx context.Context) (StatefulInProgressApp, erro
 				}
 
 				p.finally = func() {
-					klog.Info("uninstalling app success,", p.manager.Name)
-					updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.Uninstalled, nil, appsv1.Uninstalled.String())
+					klog.Info("uninstalled app %s success", p.manager.Spec.AppName)
+					opRecord := makeRecord(p.manager.Status.OpType, p.manager.Spec.Source, p.manager.Status.Payload["version"],
+						appsv1.Uninstalled, fmt.Sprintf(constants.UninstallOperationCompletedTpl, p.manager.Spec.Type, p.manager.Spec.AppName))
+					updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.Uninstalled, opRecord, appsv1.Uninstalled.String())
 					if updateErr != nil {
 						klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.Uninstalled.String(), err)
 					}

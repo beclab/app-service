@@ -12,18 +12,8 @@ const (
 	UninstallOperationCompletedTpl = "Successfully uninstalled %s: %s"
 	// UpgradeOperationCompletedTpl is for successful upgrade operation.
 	UpgradeOperationCompletedTpl = "Successfully upgraded %s: %s"
-	// SuspendOperationCompletedTpl is for suspend operation.
-	SuspendOperationCompletedTpl = "%s suspended."
-	// SuspendOperationForModelCompletedTpl is for successful unload operation.
-	SuspendOperationForModelCompletedTpl = "%s unloaded."
-	// SuspendOperationForModelFailedTpl is for failed upload operation.
-	SuspendOperationForModelFailedTpl = "Failed to unload: %s"
-	// ResumeOperationCompletedTpl is for successful resume operation.
-	ResumeOperationCompletedTpl = "%s resumed."
-	// ResumeOperationForModelCompletedTpl is for successful load operation.
-	ResumeOperationForModelCompletedTpl = "%s loaded."
-	// ResumeOperationForModelFailedTpl is for failed load operation.
-	ResumeOperationForModelFailedTpl = "Failed to load: %s"
+	// StopOperationCompletedTpl is for suspend operation.
+	StopOperationCompletedTpl = "%s stopped."
 
 	// OperationFailedTpl is for failed opration.
 	OperationFailedTpl = "Failed to %s: %s"

@@ -1,6 +1,7 @@
 package appstate
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/constants"
 	"context"
 	"errors"
 	"fmt"
@@ -115,7 +116,6 @@ func (p *installingCancelInProgressApp) Cancel(ctx context.Context) error {
 	ok := appFactory.cancelOperation(p.manager.Name)
 	if !ok {
 		klog.Errorf("app %s operation is not ", p.manager.Name)
-
 	}
 
 	state := appsv1.InstallingCancelFailed
@@ -165,7 +165,13 @@ func (p *installingCancelInProgressApp) WaitAsync(ctx context.Context) {
 			}
 			return
 		}
-		updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.InstallingCanceled, nil, appsv1.InstallingCanceled.String())
+		message := constants.OperationCanceledByUserTpl
+		if p.manager.Status.Message == constants.OperationCanceledByTerminusTpl {
+			message = constants.OperationCanceledByTerminusTpl
+		}
+		opRecord := makeRecord(p.manager.Status.OpType, p.manager.Spec.Source, p.manager.Status.Payload["version"],
+			appsv1.InstallingCanceled, message)
+		updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.InstallingCanceled, opRecord, message)
 		if updateErr != nil {
 			klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.InstallingCanceled.String(), updateErr)
 		}

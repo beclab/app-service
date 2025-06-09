@@ -3,6 +3,7 @@ package appstate
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
@@ -91,14 +92,18 @@ func (p *InitializingApp) Exec(ctx context.Context) (StatefulInProgressApp, erro
 							}
 						}
 					}
-
 					return
-
 				}
 
 				p.finally = func() {
 					klog.Info("update app manager status to running, ", p.manager.Name)
-					updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.Running, nil, appsv1.Running.String())
+					message := fmt.Sprintf(constants.InstallOperationCompletedTpl, p.manager.Spec.Type.String(), p.manager.Spec.AppName)
+					if p.manager.Status.OpType == appsv1.UpgradeOp {
+						message = fmt.Sprintf(constants.UpgradeOperationCompletedTpl, p.manager.Spec.Type.String(), p.manager.Spec.AppName)
+					}
+					opRecord := makeRecord(p.manager.Status.OpType, p.manager.Spec.Source, p.manager.Status.Payload["version"],
+						appsv1.Running, message)
+					updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.Running, opRecord, appsv1.Running.String())
 					if updateErr != nil {
 						klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.Running, updateErr)
 					}

@@ -72,8 +72,6 @@ const (
 
 	//SuspendingCancelFailed ApplicationManagerState = "suspendingCancelFailed"
 
-	// Canceling means that the cancel operation is underway.
-	// Canceling ApplicationManagerState = "canceling"
 	Failed ApplicationManagerState = "failed"
 	// Canceled  ApplicationManagerState = "canceled"
 )

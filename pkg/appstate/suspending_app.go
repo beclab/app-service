@@ -1,6 +1,7 @@
 package appstate
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/constants"
 	"context"
 	"fmt"
 	"time"
@@ -38,15 +39,18 @@ func (p *SuspendingApp) Exec(ctx context.Context) (StatefulInProgressApp, error)
 	err := p.exec(ctx)
 	if err != nil {
 		klog.Errorf("suspend app %s failed %v", p.manager.Spec.AppName, err)
-		updateErr := p.updateStatus(ctx, p.manager, appsv1.StopFailed, nil, appsv1.StopFailed.String())
+		opRecord := makeRecord(p.manager.Status.OpType, p.manager.Spec.Source, p.manager.Status.Payload["version"],
+			appsv1.StopFailed, fmt.Sprintf(constants.OperationFailedTpl, p.manager.Status.OpType, err.Error()))
+		updateErr := p.updateStatus(ctx, p.manager, appsv1.StopFailed, opRecord, err.Error())
 		if updateErr != nil {
 			klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.StopFailed, err)
 		}
 		return nil, updateErr
 	}
-	//message := fmt.Sprintf(constants.SuspendOperationCompletedTpl, p.manager.Spec.AppName)
-	//opRecord := MakeRecord(appsv1.StopOp, p.manager.Spec.Source, p.manager.Status.Payload["version"], appsv1.Stopped, message)
-	updateErr := p.updateStatus(ctx, p.manager, appsv1.Stopped, nil, appsv1.Stopped.String())
+
+	opRecord := makeRecord(p.manager.Status.OpType, p.manager.Spec.Source, p.manager.Status.Payload["version"],
+		appsv1.Stopped, fmt.Sprintf(constants.StopOperationCompletedTpl, p.manager.Spec.AppName))
+	updateErr := p.updateStatus(ctx, p.manager, appsv1.Stopped, opRecord, appsv1.Stopped.String())
 	if updateErr != nil {
 		klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.Stopped.String(), err)
 	}

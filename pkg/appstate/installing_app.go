@@ -1,6 +1,7 @@
 package appstate
 
 import (
+	"fmt"
 	"time"
 
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
@@ -102,7 +103,9 @@ func (p *InstallingApp) Exec(ctx context.Context) (StatefulInProgressApp, error)
 
 					p.finally = func() {
 						klog.Errorf("app %s install failed, update app state to installFailed", p.manager.Spec.AppName)
-						updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.InstallFailed, nil, appsv1.InstallFailed.String())
+						opRecord := makeRecord(p.manager.Status.OpType, p.manager.Spec.Source, p.manager.Status.Payload["version"],
+							appsv1.InstallFailed, fmt.Sprintf(constants.OperationFailedTpl, p.manager.Status.OpType, err.Error()))
+						updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.InstallFailed, opRecord, err.Error())
 						if updateErr != nil {
 							klog.Errorf("update status failed %v", updateErr)
 						}
