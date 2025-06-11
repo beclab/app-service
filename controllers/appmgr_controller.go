@@ -127,6 +127,11 @@ func (r *ApplicationManagerController) Reconcile(ctx context.Context, req ctrl.R
 		inProgress, err := operation.Exec(ctx)
 		if err != nil {
 			klog.Error("execute stateful app operation error, ", err, ", ", statefulApp.GetManager().Name, ", ", statefulApp.State())
+
+			if waiting, ok := err.(appstate.RequeueError); ok {
+				// if the error is a requeue error, we should requeue the request
+				return ctrl.Result{RequeueAfter: waiting.RequeueAfter()}, nil
+			}
 		}
 
 		if inProgress != nil {

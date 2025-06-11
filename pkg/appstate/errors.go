@@ -1,6 +1,9 @@
 package appstate
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type StateError interface {
 	error
@@ -103,4 +106,35 @@ func NewStateError(msg string) StateError {
 		baseStateError: baseStateError{},
 		error:          func() string { return msg },
 	}
+}
+
+type RequeueError interface {
+	error
+	RequeueAfter() time.Duration
+}
+
+var _ RequeueError = &WaitingInLine{}
+
+type WaitingInLine struct {
+	RequeueAfterSeconds int
+}
+
+func (w *WaitingInLine) Error() string {
+	return "waiting in line"
+}
+
+func (w *WaitingInLine) RequeueAfter() time.Duration {
+	return time.Duration(w.RequeueAfterSeconds) * time.Second
+}
+
+// NewWaitingInLine creates a new WaitingInLine error that indicates the operation should be requeued after a specified number of seconds.
+func NewWaitingInLine(requeueAfterSeconds int) RequeueError {
+	return &WaitingInLine{
+		RequeueAfterSeconds: requeueAfterSeconds,
+	}
+}
+
+func IsWaitingInLine(err error) bool {
+	_, ok := err.(*WaitingInLine)
+	return ok
 }
