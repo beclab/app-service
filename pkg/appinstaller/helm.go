@@ -230,6 +230,7 @@ func (h *HelmOps) addApplicationLabelsToDeployment() error {
 				constants.ApplicationPortsKey:     ports,
 				constants.ApplicationSourceLabel:  h.options.Source,
 				constants.ApplicationTailScaleKey: tailScale,
+				constants.ApplicationRequiredGPU:  h.app.RequiredGPU,
 			},
 		},
 	}

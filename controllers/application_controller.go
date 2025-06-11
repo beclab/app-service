@@ -551,6 +551,7 @@ func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, app
 	}
 
 	settings["clusterScoped"] = "false"
+	settings["requiredGPU"] = deployment.GetAnnotations()[constants.ApplicationRequiredGPU]
 	//clusterScoped, ok := deployment.GetAnnotations()[constants.ApplicationClusterScoped]
 	//if ok && clusterScoped == "true" {
 	//	settings["clusterScoped"] = "true"

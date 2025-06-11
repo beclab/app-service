@@ -81,4 +81,5 @@ type ApplicationConfig struct {
 	ApiTimeout           *int64
 	RunAsUser            bool
 	AllowedOutboundPorts []int
+	RequiredGPU          string
 }

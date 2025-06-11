@@ -410,7 +410,7 @@ func (h *Handler) apps(req *restful.Request, resp *restful.Response) {
 		stateSet.Insert(s)
 	}
 	filteredApps := make([]v1alpha1.Application, 0)
-	appsMap := make(map[string]v1alpha1.Application)
+	appsMap := make(map[string]*v1alpha1.Application)
 
 	// get pending app's from app managers
 	ams, err := h.appmgrLister.List(labels.Everything())
@@ -444,7 +444,7 @@ func (h *Handler) apps(req *restful.Request, resp *restful.Response) {
 		}
 		now := metav1.Now()
 		name, _ := apputils.FmtAppMgrName(am.Spec.AppName, owner, appconfig.Namespace)
-		app := v1alpha1.Application{
+		app := &v1alpha1.Application{
 			TypeMeta: metav1.TypeMeta{},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:              name,
@@ -484,12 +484,16 @@ func (h *Handler) apps(req *restful.Request, resp *restful.Response) {
 				continue
 			}
 			if a.Spec.IsSysApp {
-				appsMap[a.Name] = *a
+				appsMap[a.Name] = a
+				continue
+			}
+			if v, ok := appsMap[a.Name]; ok {
+				v.Spec.Settings = a.Spec.Settings
 			}
 		}
 	}
 	for _, app := range appsMap {
-		filteredApps = append(filteredApps, app)
+		filteredApps = append(filteredApps, *app)
 	}
 
 	// sort by create time desc
