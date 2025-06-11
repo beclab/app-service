@@ -23,6 +23,7 @@ const (
 	ApplicationVersionLabel       = "applications.app.bytetrade.io/version"
 	ApplicationSourceLabel        = "applications.app.bytetrade.io/source"
 	ApplicationTailScaleKey       = "applications.app.bytetrade.io/tailscale"
+	ApplicationRequiredGPU        = "applications.app.bytetrade.io/required_gpu"
 	ApplicationAnalytics          = "applications.app.bytetrade.io/analytics"
 	ApplicationPolicies           = "applications.app.bytetrade.io/policies"
 	ApplicationMobileSupported    = "applications.app.bytetrade.io/mobile_supported"

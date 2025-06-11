@@ -751,6 +751,7 @@ func toApplicationConfig(app, chart string, cfg *appcfg.AppConfiguration) (*appc
 		ApiTimeout:           cfg.Options.ApiTimeout,
 		RunAsUser:            cfg.Spec.RunAsUser,
 		AllowedOutboundPorts: cfg.Options.AllowedOutboundPorts,
+		RequiredGPU:          cfg.Spec.RequiredGPU,
 	}, chart, nil
 }
 
