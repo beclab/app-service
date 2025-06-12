@@ -150,3 +150,17 @@ func (f *statefulAppFactory) cancelOperation(name string) bool {
 
 	return false
 }
+
+func (f *statefulAppFactory) countInProgressApp(state string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	count := 0
+	for _, app := range f.inProgress {
+		if app.State() == state {
+			count++
+		}
+	}
+
+	return count
+}

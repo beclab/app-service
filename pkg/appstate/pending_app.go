@@ -62,6 +62,9 @@ func NewPendingApp(ctx context.Context, c client.Client,
 }
 
 func (p *PendingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
+	if appFactory.countInProgressApp(appsv1.Downloading.String()) >= 2 {
+		return nil, NewWaitingInLine(2)
+	}
 
 	p.manager.Status.State = appsv1.Downloading
 	now := metav1.Now()
