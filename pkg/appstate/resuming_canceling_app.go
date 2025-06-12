@@ -50,3 +50,7 @@ func (p *ResumingCancelingApp) Exec(ctx context.Context) (StatefulInProgressApp,
 
 	return nil, nil
 }
+
+func (p *ResumingCancelingApp) Cancel(ctx context.Context) error {
+	return p.updateStatus(ctx, p.manager, appsv1.ResumingCancelFailed, nil, appsv1.ResumingCancelFailed.String())
+}

@@ -38,6 +38,8 @@ func NewInstallingApp(c client.Client,
 						manager: manager,
 						client:  c,
 					},
+
+					ttl: ttl,
 				},
 			}
 		})
@@ -128,6 +130,15 @@ func (p *InstallingApp) Exec(ctx context.Context) (StatefulInProgressApp, error)
 	)
 }
 
+func (p *InstallingApp) Cancel(ctx context.Context) error {
+	err := p.updateStatus(ctx, p.manager, appsv1.InstallingCanceling, nil, constants.OperationCanceledByTerminusTpl)
+	if err != nil {
+		klog.Errorf("update appmgr state to installingCanceling state failed %v", err)
+		return err
+	}
+	return nil
+}
+
 var _ StatefulInProgressApp = &installingInProgressApp{}
 
 type installingInProgressApp struct {
@@ -138,13 +149,4 @@ type installingInProgressApp struct {
 // override to avoid duplicate exec
 func (p *installingInProgressApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
 	return nil, nil
-}
-
-func (p *installingInProgressApp) Cancel(ctx context.Context) error {
-	err := p.updateStatus(ctx, p.manager, appsv1.InstallingCanceling, nil, constants.OperationCanceledByTerminusTpl)
-	if err != nil {
-		klog.Errorf("update appmgr state to installingCanceling state failed %v", err)
-		return err
-	}
-	return nil
 }

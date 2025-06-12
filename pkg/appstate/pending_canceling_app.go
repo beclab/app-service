@@ -49,3 +49,7 @@ func (p *PendingCancelingApp) Exec(ctx context.Context) (StatefulInProgressApp, 
 
 	return nil, nil
 }
+
+func (p *PendingCancelingApp) Cancel(ctx context.Context) error {
+	return p.updateStatus(ctx, p.manager, appsv1.PendingCancelFailed, nil, appsv1.PendingCancelFailed.String())
+}

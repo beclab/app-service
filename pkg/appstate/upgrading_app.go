@@ -191,20 +191,20 @@ func (p *UpgradingApp) exec(ctx context.Context) error {
 	return nil
 }
 
-var _ StatefulInProgressApp = &upgradingInProgressApp{}
-
-type upgradingInProgressApp struct {
-	*UpgradingApp
-	*baseStatefulInProgressApp
-}
-
-func (p *upgradingInProgressApp) Cancel(ctx context.Context) error {
+func (p *UpgradingApp) Cancel(ctx context.Context) error {
 	err := p.updateStatus(ctx, p.manager, appsv1.UpgradingCanceling, nil, constants.OperationCanceledByTerminusTpl)
 	if err != nil {
 		klog.Errorf("update appmgr state to upgradingCanceling state failed %v", err)
 		return err
 	}
 	return nil
+}
+
+var _ StatefulInProgressApp = &upgradingInProgressApp{}
+
+type upgradingInProgressApp struct {
+	*UpgradingApp
+	*baseStatefulInProgressApp
 }
 
 // override to avoid duplicate exec

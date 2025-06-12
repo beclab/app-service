@@ -63,6 +63,15 @@ func (p *ResumingApp) exec(ctx context.Context) error {
 	return nil
 }
 
+func (p *ResumingApp) Cancel(ctx context.Context) error {
+	err := p.updateStatus(ctx, p.manager, appsv1.ResumingCanceling, nil, constants.OperationCanceledByTerminusTpl)
+	if err != nil {
+		klog.Errorf("update appmgr state to resumingCanceling state failed %v", err)
+		return err
+	}
+	return nil
+}
+
 var _ PollableStatefulInProgressApp = &resumingInProgressApp{}
 
 type resumingInProgressApp struct {
@@ -102,15 +111,6 @@ func (p *resumingInProgressApp) poll(ctx context.Context) error {
 		return fmt.Errorf("wait for app %s startup failed", p.manager.Spec.AppName)
 	}
 
-	return nil
-}
-
-func (p *resumingInProgressApp) Cancel(ctx context.Context) error {
-	err := p.updateStatus(ctx, p.manager, appsv1.ResumingCanceling, nil, constants.OperationCanceledByTerminusTpl)
-	if err != nil {
-		klog.Errorf("update appmgr state to resumingCanceling state failed %v", err)
-		return err
-	}
 	return nil
 }
 

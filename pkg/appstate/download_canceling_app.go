@@ -1,9 +1,10 @@
 package appstate
 
 import (
-	"bytetrade.io/web3os/app-service/pkg/constants"
 	"context"
 	"time"
+
+	"bytetrade.io/web3os/app-service/pkg/constants"
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/images"
@@ -67,6 +68,6 @@ func (p *DownloadingCancelingApp) Exec(ctx context.Context) (StatefulInProgressA
 	return nil, nil
 }
 
-// func (p *DownloadingCancelingApp) Cancel(ctx context.Context) error {
-// 	return p.updateStatus(ctx, p.manager, appsv1.DownloadingCancelFailed, nil, appsv1.DownloadingCancelFailed.String())
-// }
+func (p *DownloadingCancelingApp) Cancel(ctx context.Context) error {
+	return p.updateStatus(ctx, p.manager, appsv1.DownloadingCancelFailed, nil, appsv1.DownloadingCancelFailed.String())
+}
