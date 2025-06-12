@@ -34,6 +34,8 @@ func NewInitializingApp(c client.Client,
 						manager: manager,
 						client:  c,
 					},
+
+					ttl: ttl,
 				},
 			}
 		})

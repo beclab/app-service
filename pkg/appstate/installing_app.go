@@ -38,6 +38,8 @@ func NewInstallingApp(c client.Client,
 						manager: manager,
 						client:  c,
 					},
+
+					ttl: ttl,
 				},
 			}
 		})
