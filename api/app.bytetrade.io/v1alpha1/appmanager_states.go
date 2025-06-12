@@ -68,7 +68,7 @@ const (
 	InstallingCancelFailed  ApplicationManagerState = "installingCancelFailed"
 	//InitializingCancelFailed ApplicationManagerState = "initializingCancelFailed"
 	UpgradingCancelFailed ApplicationManagerState = "upgradingCancelFailed"
-	//ResumingCancelFailed  ApplicationManagerState = "resumingCancelFailed"
+	ResumingCancelFailed  ApplicationManagerState = "resumingCancelFailed"
 
 	//SuspendingCancelFailed ApplicationManagerState = "suspendingCancelFailed"
 

@@ -116,6 +116,9 @@ type OperationApp interface {
 	StatefulApp
 	IsTimeout() bool
 	Exec(ctx context.Context) (StatefulInProgressApp, error)
+
+	// Cancel update the app to cancel state, into the next phase
+	Cancel(ctx context.Context) error
 }
 
 type baseOperationApp struct {
@@ -138,9 +141,6 @@ type CancelOperationApp interface {
 
 type StatefulInProgressApp interface {
 	OperationApp
-
-	// Cancel update the app to cancel state, into the next phase
-	Cancel(ctx context.Context) error
 
 	// Cleanup Stop the current operation immediately and clean up the resource if necessary.
 	Cleanup(ctx context.Context)

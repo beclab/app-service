@@ -1,10 +1,11 @@
 package appstate
 
 import (
-	"bytetrade.io/web3os/app-service/pkg/constants"
 	"context"
 	"fmt"
 	"time"
+
+	"bytetrade.io/web3os/app-service/pkg/constants"
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
@@ -143,14 +144,7 @@ func (p *UninstallingApp) exec(ctx context.Context) error {
 	return nil
 }
 
-var _ StatefulInProgressApp = &uninstallingInProgressApp{}
-
-type uninstallingInProgressApp struct {
-	*UninstallingApp
-	*baseStatefulInProgressApp
-}
-
-func (p *uninstallingInProgressApp) Cancel(ctx context.Context) error {
+func (p *UninstallingApp) Cancel(ctx context.Context) error {
 	klog.Infof("cancel uninstalling operation appName=%s", p.manager.Spec.AppName)
 	if ok := appFactory.cancelOperation(p.manager.Name); !ok {
 		klog.Errorf("app %s operation is not ", p.manager.Name)
@@ -161,6 +155,13 @@ func (p *uninstallingInProgressApp) Cancel(ctx context.Context) error {
 		klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.UninstallFailed.String(), err)
 	}
 	return err
+}
+
+var _ StatefulInProgressApp = &uninstallingInProgressApp{}
+
+type uninstallingInProgressApp struct {
+	*UninstallingApp
+	*baseStatefulInProgressApp
 }
 
 // override to avoid duplicate exec

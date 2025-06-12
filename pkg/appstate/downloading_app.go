@@ -57,17 +57,6 @@ func (r *downloadingInProgressApp) Exec(ctx context.Context) (StatefulInProgress
 	return nil, nil
 }
 
-func (p *downloadingInProgressApp) Cancel(ctx context.Context) error {
-	// only cancel the downloading operation when the app is timeout
-	klog.Infof("call timeout downloadingApp cancel....")
-	err := p.updateStatus(ctx, p.manager, appsv1.DownloadingCanceling, nil, constants.OperationCanceledByTerminusTpl)
-	if err != nil {
-		klog.Errorf("update app manager name=%s to downloadingCanceling state failed %v", err)
-		return err
-	}
-	return nil
-}
-
 type DownloadingApp struct {
 	*baseOperationApp
 	imageClient images.ImageManager
@@ -92,6 +81,17 @@ func NewDownloadingApp(c client.Client,
 				imageClient: images.NewImageManager(c),
 			}
 		})
+}
+
+func (p *DownloadingApp) Cancel(ctx context.Context) error {
+	// only cancel the downloading operation when the app is timeout
+	klog.Infof("call timeout downloadingApp cancel....")
+	err := p.updateStatus(ctx, p.manager, appsv1.DownloadingCanceling, nil, constants.OperationCanceledByTerminusTpl)
+	if err != nil {
+		klog.Errorf("update app manager name=%s to downloadingCanceling state failed %v", err)
+		return err
+	}
+	return nil
 }
 
 func (p *DownloadingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {

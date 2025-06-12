@@ -118,6 +118,15 @@ func (p *InitializingApp) Exec(ctx context.Context) (StatefulInProgressApp, erro
 
 }
 
+func (p *InitializingApp) Cancel(ctx context.Context) error {
+	err := p.updateStatus(ctx, p.manager, appsv1.InitializingCanceling, nil, constants.OperationCanceledByTerminusTpl)
+	if err != nil {
+		klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.InitializingCanceling, err)
+		return err
+	}
+	return nil
+}
+
 var _ StatefulInProgressApp = &initializingInProgressApp{}
 
 type initializingInProgressApp struct {
@@ -128,13 +137,4 @@ type initializingInProgressApp struct {
 // override to avoid duplicate exec
 func (p *initializingInProgressApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
 	return nil, nil
-}
-
-func (p *initializingInProgressApp) Cancel(ctx context.Context) error {
-	err := p.updateStatus(ctx, p.manager, appsv1.InitializingCanceling, nil, constants.OperationCanceledByTerminusTpl)
-	if err != nil {
-		klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.InitializingCanceling, err)
-		return err
-	}
-	return nil
 }

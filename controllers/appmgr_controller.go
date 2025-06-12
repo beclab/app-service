@@ -111,17 +111,12 @@ func (r *ApplicationManagerController) Reconcile(ctx context.Context, req ctrl.R
 		klog.Info("stateful app is doing something, ", statefulApp.State())
 		if operation.IsTimeout() {
 			klog.Errorf("stateful app is timeout: %v, state:%v", req.Name, statefulApp.State())
-			if inProgress, ok := statefulApp.(appstate.StatefulInProgressApp); ok {
-				klog.Info("stateful app is doing something timeout, should be canceled, ", statefulApp.GetManager().Name, ", ", statefulApp.State())
-				err := inProgress.Cancel(ctx)
-				if err != nil {
-					klog.Info("cancel stateful app operation error, ", err, ", ", statefulApp.GetManager().Name)
-				}
-
-				return ctrl.Result{}, err
+			err := operation.Cancel(ctx)
+			if err != nil {
+				klog.Info("cancel stateful app operation error, ", err, ", ", statefulApp.GetManager().Name)
 			}
 
-			return ctrl.Result{}, nil
+			return ctrl.Result{}, err
 		}
 
 		inProgress, err := operation.Exec(ctx)

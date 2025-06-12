@@ -1,11 +1,12 @@
 package appstate
 
 import (
-	"bytetrade.io/web3os/app-service/pkg/constants"
 	"context"
 	"errors"
 	"fmt"
 	"time"
+
+	"bytetrade.io/web3os/app-service/pkg/constants"
 
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
@@ -105,14 +106,7 @@ func (p *InstallingCancelingApp) handleInstallCancel(ctx context.Context) error 
 	return nil
 }
 
-var _ PollableStatefulInProgressApp = &installingCancelInProgressApp{}
-
-type installingCancelInProgressApp struct {
-	*InstallingCancelingApp
-	*basePollableStatefulInProgressApp
-}
-
-func (p *installingCancelInProgressApp) Cancel(ctx context.Context) error {
+func (p *InstallingCancelingApp) Cancel(ctx context.Context) error {
 	ok := appFactory.cancelOperation(p.manager.Name)
 	if !ok {
 		klog.Errorf("app %s operation is not ", p.manager.Name)
@@ -127,6 +121,13 @@ func (p *installingCancelInProgressApp) Cancel(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+var _ PollableStatefulInProgressApp = &installingCancelInProgressApp{}
+
+type installingCancelInProgressApp struct {
+	*InstallingCancelingApp
+	*basePollableStatefulInProgressApp
 }
 
 func (p *installingCancelInProgressApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
