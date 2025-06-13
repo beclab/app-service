@@ -31,7 +31,7 @@ const (
 	StatusUnschedulable = "unschedulable"
 
 	UpgradeJobName = "system-upgrade"
-	JobNamespace   = "os-system"
+	JobNamespace   = "os-system" // deprecated,
 )
 
 type ResultResponse struct {

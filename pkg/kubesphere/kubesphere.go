@@ -70,7 +70,7 @@ func getLLdapJwtKey(ctx context.Context, kubeConfig *rest.Config) ([]byte, error
 	}
 
 	secret, err := kubeClientInService.Kubernetes().
-		CoreV1().Secrets("os-system").
+		CoreV1().Secrets("os-framework").
 		Get(ctx, "lldap-credentials", metav1.GetOptions{})
 	if err != nil {
 		return nil, err

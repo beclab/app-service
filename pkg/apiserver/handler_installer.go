@@ -599,7 +599,7 @@ type KnowledgeInstallMsg struct {
 }
 
 func (h *Handler) notifyKnowledgeInstall(title, name, owner string) error {
-	knowledgeAPI := "http://rss-svc.os-system:3010/knowledge/algorithm/recommend/install"
+	knowledgeAPI := "http://rss-svc.os-framework:3010/knowledge/algorithm/recommend/install"
 	klog.Info("Start to notify knowledge to Install ", knowledgeAPI, title, name)
 
 	msg := KnowledgeInstallMsg{
@@ -626,7 +626,7 @@ func (h *Handler) notifyKnowledgeInstall(title, name, owner string) error {
 }
 
 func (h *Handler) notifyKnowledgeUnInstall(name, owner string) error {
-	knowledgeAPI := "http://rss-svc.os-system:3010/knowledge/algorithm/recommend/uninstall"
+	knowledgeAPI := "http://rss-svc.os-framework:3010/knowledge/algorithm/recommend/uninstall"
 
 	msg := KnowledgeInstallMsg{
 		ID: name,
