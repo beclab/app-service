@@ -11,6 +11,7 @@ const (
 	NamespaceTypeLabel  = "bytetrade.io/ns-type"
 	NamespaceOwnerLabel = "bytetrade.io/ns-owner"
 	System              = "system"
+	Network             = "network"
 	Internal            = "user-internal"
 )
 
@@ -69,8 +70,43 @@ var (
 		},
 	} // end NPUnderLayerSystem
 
-	// NPOSSystem is a network policy template for os-system.
+	// NPOSSystem is a network policy template for os-framework and os-platform.
 	NPOSSystem = netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{},
+			Ingress: []netv1.NetworkPolicyIngressRule{
+				{
+					From: []netv1.NetworkPolicyPeer{
+						{
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									NamespaceTypeLabel: Internal,
+								},
+							},
+						},
+						{
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"kubesphere.io/namespace": "kube-system",
+								},
+							},
+						},
+						{
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"kubesphere.io/namespace": "kubesphere-system",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	} // end NPOSSystem
+
+	// NPOSNetwork is a network policy template for os-network.
+	NPOSNetwork = netv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{},
 		Spec: netv1.NetworkPolicySpec{
 			PodSelector: metav1.LabelSelector{},
@@ -152,6 +188,13 @@ var (
 							NamespaceSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{
 									NamespaceTypeLabel: System,
+								},
+							},
+						},
+						{
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									NamespaceTypeLabel: Network,
 								},
 							},
 						},

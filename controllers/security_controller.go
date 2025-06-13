@@ -179,6 +179,16 @@ func (r *SecurityReconciler) reconcileNamespaceLabels(ctx context.Context, ns *c
 			ns.Labels[security.NamespaceTypeLabel] = security.System
 			updated = true
 		}
+	} else if security.IsOSNetworkNamespace(ns.Name) {
+		// make os network namespace can access other namespaces' network
+		if ns.Labels == nil {
+			ns.Labels = make(map[string]string)
+		}
+
+		if label, ok := ns.Labels[security.NamespaceTypeLabel]; !ok || label != security.Network {
+			ns.Labels[security.NamespaceTypeLabel] = security.Network
+			updated = true
+		}
 	} else if ok, owner := security.IsUserInternalNamespaces(ns.Name); ok {
 		if ns.Labels == nil {
 			ns.Labels = make(map[string]string)
@@ -305,6 +315,10 @@ func (r *SecurityReconciler) reconcileNetworkPolicy(ctx context.Context, ns *cor
 		} else if security.IsOSSystemNamespace(ns.Name) {
 			npName = "os-system-np"
 			networkPolicy = security.NPOSSystem.DeepCopy()
+			npFix = nil
+		} else if security.IsOSNetworkNamespace(ns.Name) {
+			npName = "os-network-np"
+			networkPolicy = security.NPOSNetwork.DeepCopy()
 			npFix = func(np *netv1.NetworkPolicy) {
 				np.Spec.Ingress = append(np.Spec.Ingress, netv1.NetworkPolicyIngressRule{
 					From: security.NodeTunnelRule(),
@@ -512,7 +526,7 @@ func (r *SecurityReconciler) namespacesShouldAllowNodeTunnel(ctx context.Context
 	reqs := []reconcile.Request{
 		{
 			NamespacedName: types.NamespacedName{
-				Name: "os-system",
+				Name: "os-network",
 			},
 		},
 	}

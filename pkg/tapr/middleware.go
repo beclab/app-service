@@ -87,7 +87,7 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 		return statusCode == 404 || statusCode == 429 || statusCode >= 500
 	})
 	getMiddlewareRequest := func(middlewareType MiddlewareType) (*MiddlewareRequestResp, error) {
-		url := "http://middleware-service.os-system/middleware/v1/request/info"
+		url := "http://middleware-service.os-platform/middleware/v1/request/info"
 		request := MiddlewareReq{
 			App:          appName,
 			AppNamespace: appNamespace,

@@ -43,7 +43,7 @@ func Install(ctx context.Context, kubeConfig *rest.Config, workflow *WorkflowCon
 	}
 	klog.Infof("install workflow old instanceID: %s", "user-space-"+workflow.OwnerName)
 	//instanceID := "user-space-" + workflow.OwnerName
-	instanceID := "os-system"
+	instanceID := "os-framework"
 
 	return argo.UpdateWorkflowInNamespace(ctx, kubeConfig, workflow.WorkflowName,
 		workflow.Namespace, instanceID, workflow.OwnerName, workflow.Cfg.Metadata.Title, workflow.Cfg.Options.SyncProvider)
@@ -99,7 +99,7 @@ func Upgrade(ctx context.Context, kubeConfig *rest.Config, workflow *WorkflowCon
 
 	//instanceID := "user-space-" + workflow.OwnerName
 	klog.Infof("install workflow old instanceID: %s", "user-space-"+workflow.OwnerName)
-	instanceID := "os-system"
+	instanceID := "os-framework"
 	return argo.UpdateWorkflowInNamespace(ctx, kubeConfig, workflow.WorkflowName,
 		workflow.Namespace, instanceID, workflow.OwnerName, workflow.Cfg.Metadata.Title, workflow.Cfg.Options.SyncProvider)
 }

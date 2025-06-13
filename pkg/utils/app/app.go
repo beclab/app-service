@@ -60,7 +60,9 @@ var protectedNamespace = []string{
 	"kubesphere-system",
 	"user-space-",
 	"user-system-",
-	"os-system",
+	"os-platform",
+	"os-framework",
+	"os-network",
 }
 
 var forbidNamespace = []string{

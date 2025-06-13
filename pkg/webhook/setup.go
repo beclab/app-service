@@ -29,7 +29,7 @@ const (
 	mutatingWebhookGpuLimitName           = "gpu-limit-inject-webhook.bytetrade.io"
 	mutatingWebhookAppLabelName           = "app-label-inject-webhook.bytetrade.io"
 	webhookServiceName                    = "app-service"
-	webhookServiceNamespace               = "os-system"
+	webhookServiceNamespace               = "os-framework"
 	defaultCaPath                         = "/etc/certs/ca.crt"
 	evictionWebhookName                   = "kubelet-eviction-webhook"
 	evictionValidatingWebhookName         = "kubelet-eviction-webhook.bytetrade.io"

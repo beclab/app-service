@@ -22,11 +22,16 @@ var (
 
 	// OSSystemNamespaces indicates the namespaces that used by terminus of system applications.
 	OSSystemNamespaces = []string{
-		"os-system",
+		"os-framework",
+		"os-platform",
 	}
 	// GPUSystemNamespaces indicates the namespaces that for gpu system.
 	GPUSystemNamespaces = []string{
-		"gpu-system",
+		"os-gpu",
+	}
+
+	OSNetworkNamespaces = []string{
+		"os-network",
 	}
 )
 
@@ -72,6 +77,10 @@ func IsUnderLayerNamespace(ns string) bool {
 // IsOSSystemNamespace returns true if ns is contained by OSSystemNamespaces, false otherwise.
 func IsOSSystemNamespace(ns string) bool {
 	return funk.Contains(OSSystemNamespaces, ns)
+}
+
+func IsOSNetworkNamespace(ns string) bool {
+	return funk.Contains(OSNetworkNamespaces, ns)
 }
 
 func IsPublicNamespace(ns string) bool {

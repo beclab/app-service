@@ -360,7 +360,7 @@ func getValue(m *kubesphere.Metric) float64 {
 	return m.MetricData.MetricValues[0].Sample[1]
 }
 func isInPrivateNamespace(namespace string) bool {
-	privateNamespaces := []string{"os-system", "user-space-", "user-system-"}
+	privateNamespaces := []string{"os-framework", "os-network", "os-platform", "user-space-", "user-system-"}
 	for _, ns := range privateNamespaces {
 		if strings.HasPrefix(namespace, ns) {
 			return true
@@ -490,7 +490,7 @@ func CheckMiddlewareRequirement(ctx context.Context, kubeConfig *rest.Config, mi
 		if err != nil {
 			return false, err
 		}
-		u, err := dClient.Get(ctx, "os-system", "mongo-cluster", metav1.GetOptions{})
+		u, err := dClient.Get(ctx, "os-platform", "mongo-cluster", metav1.GetOptions{})
 		if err != nil && !apierrors.IsNotFound(err) {
 			return false, err
 		}
