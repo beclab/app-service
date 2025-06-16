@@ -168,7 +168,9 @@ func (r *SecurityReconciler) Reconcile(rootCtx context.Context, req ctrl.Request
 func (r *SecurityReconciler) reconcileNamespaceLabels(ctx context.Context, ns *corev1.Namespace) error {
 	logger := ctx.Value(loggerKey).(logr.Logger)
 	updated := false
-	if security.IsOSSystemNamespace(ns.Name) || security.IsUnderLayerNamespace(ns.Name) {
+	if security.IsOSSystemNamespace(ns.Name) ||
+		security.IsUnderLayerNamespace(ns.Name) ||
+		security.IsOSGpuNamespace(ns.Name) {
 		// make underlay namespaces can access other namespaces' network
 		// especially for prometheus exporters
 		if ns.Labels == nil {
