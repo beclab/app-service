@@ -83,6 +83,10 @@ func IsOSNetworkNamespace(ns string) bool {
 	return funk.Contains(OSNetworkNamespaces, ns)
 }
 
+func IsOSGpuNamespace(ns string) bool {
+	return funk.Contains(GPUSystemNamespaces, ns)
+}
+
 func IsPublicNamespace(ns string) bool {
 	if funk.Contains(GPUSystemNamespaces, ns) {
 		return true
