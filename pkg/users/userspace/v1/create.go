@@ -275,7 +275,7 @@ func (c *Creator) installSysApps(ctx context.Context, bflPod *corev1.Pod) error 
 		"redis_password": string(redisSecret.Data["auth"]),
 	}
 
-	gpuType, err := utils.FindGpuTypeFromNodes(ctx, clientSet)
+	gpuType, err := utils.FindGpuTypeFromNodes(nodes)
 	if err != nil {
 		return err
 	}

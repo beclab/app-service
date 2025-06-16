@@ -12,6 +12,7 @@ import (
 
 type AppV1alpha1Interface interface {
 	RESTClient() rest.Interface
+	AppImagesGetter
 	ApplicationsGetter
 	ApplicationManagersGetter
 	ImageManagersGetter
@@ -20,6 +21,10 @@ type AppV1alpha1Interface interface {
 // AppV1alpha1Client is used to interact with features provided by the app.bytetrade.io group.
 type AppV1alpha1Client struct {
 	restClient rest.Interface
+}
+
+func (c *AppV1alpha1Client) AppImages() AppImageInterface {
+	return newAppImages(c)
 }
 
 func (c *AppV1alpha1Client) Applications() ApplicationInterface {

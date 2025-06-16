@@ -138,3 +138,8 @@ type ResponseWithMsg struct {
 	Response
 	Message string `json:"message"`
 }
+
+type ImageInfoRequest struct {
+	Name   string   `json:"name"`
+	Images []string `json:"images"`
+}

@@ -8,6 +8,8 @@ import (
 
 // Interface provides access to all the informers in this group version.
 type Interface interface {
+	// AppImages returns a AppImageInformer.
+	AppImages() AppImageInformer
 	// Applications returns a ApplicationInformer.
 	Applications() ApplicationInformer
 	// ApplicationManagers returns a ApplicationManagerInformer.
@@ -25,6 +27,11 @@ type version struct {
 // New returns a new Interface.
 func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakListOptions internalinterfaces.TweakListOptionsFunc) Interface {
 	return &version{factory: f, namespace: namespace, tweakListOptions: tweakListOptions}
+}
+
+// AppImages returns a AppImageInformer.
+func (v *version) AppImages() AppImageInformer {
+	return &appImageInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }
 
 // Applications returns a ApplicationInformer.

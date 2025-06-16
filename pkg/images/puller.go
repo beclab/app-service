@@ -26,11 +26,11 @@ import (
 const maxRetries = 6
 
 var sock = "/var/run/containerd/containerd.sock"
-var mirrorsEndpoint []string
+var MirrorsEndpoint []string
 
 func init() {
-	mirrorsEndpoint = utils.GetMirrorsEndpoint()
-	klog.Infof("mirrorsEndPoint: %v", mirrorsEndpoint)
+	MirrorsEndpoint = utils.GetMirrorsEndpoint()
+	klog.Infof("mirrorsEndPoint: %v", MirrorsEndpoint)
 }
 
 type PullOptions struct {
@@ -72,7 +72,7 @@ func (is *imageService) PullImage(ctx context.Context, ref appv1alpha1.Ref, opts
 	}
 	ref.Name = originNamed.String()
 	// replaced image ref
-	replacedRef, plainHTTP := utils.ReplacedImageRef(mirrorsEndpoint, originNamed.String(), false)
+	replacedRef, plainHTTP := utils.ReplacedImageRef(MirrorsEndpoint, originNamed.String(), false)
 	config := newFetchConfig(plainHTTP)
 
 	ongoing := newJobs(replacedRef, originNamed.String())

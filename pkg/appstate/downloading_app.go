@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
@@ -12,7 +13,9 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/images"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/utils"
+
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -138,6 +141,23 @@ func (p *DownloadingApp) exec(ctx context.Context) error {
 			"username": p.manager.Spec.AppOwner,
 		},
 	}
+
+	var nodes corev1.NodeList
+	err = p.client.List(ctx, &nodes, &client.ListOptions{})
+	if err != nil {
+		klog.Errorf("list node failed %v", err)
+		return err
+	}
+	gpuType, err := utils.FindGpuTypeFromNodes(&nodes)
+	if err != nil {
+		klog.Errorf("get gpu type failed %v", gpuType)
+		return err
+	}
+	values["GPU"] = map[string]interface{}{
+		"Type": gpuType,
+		"Cuda": os.Getenv("CUDA_VERSION"),
+	}
+
 	refs, err := utils.GetRefFromResourceList(appConfig.ChartsName, values)
 	if err != nil {
 		klog.Errorf("get image refs from resources failed %v", err)

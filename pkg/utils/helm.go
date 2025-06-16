@@ -151,7 +151,6 @@ func GetResourceListFromChart(chartPath string, values map[string]interface{}) (
 		"subjects": map[string]interface{}{},
 		"refs":     map[string]interface{}{},
 	}
-	values["GPU"] = map[string]interface{}{}
 
 	ret, err := instAction.RunWithContext(context.Background(), chartRequested, values)
 	if err != nil {

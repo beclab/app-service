@@ -55,6 +55,12 @@ func main() {
 		imageLog.Error(err, "Unable to create image controller")
 		os.Exit(1)
 	}
+	if err = (&controllers.AppImageInfoController{
+		Client: mgr.GetClient(),
+	}).SetupWithManager(mgr); err != nil {
+		imageLog.Error(err, "Unable to create app image controller")
+		os.Exit(1)
+	}
 
 	if err = mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		imageLog.Error(err, "Unable to set up health check")

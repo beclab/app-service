@@ -2,6 +2,10 @@
 
 package v1alpha1
 
+// AppImageListerExpansion allows custom methods to be added to
+// AppImageLister.
+type AppImageListerExpansion interface{}
+
 // ApplicationListerExpansion allows custom methods to be added to
 // ApplicationLister.
 type ApplicationListerExpansion interface{}
