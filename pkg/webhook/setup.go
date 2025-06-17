@@ -88,6 +88,11 @@ func (wh *Webhook) CreateOrUpdateSandboxMutatingWebhook() error {
 						{
 							Key:      "kubernetes.io/metadata.name",
 							Operator: metav1.LabelSelectorOpNotIn,
+							Values:   security.OSNetworkNamespaces,
+						},
+						{
+							Key:      "kubernetes.io/metadata.name",
+							Operator: metav1.LabelSelectorOpNotIn,
 							Values:   security.GPUSystemNamespaces,
 						},
 					},
