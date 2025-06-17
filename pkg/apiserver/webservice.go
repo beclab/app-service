@@ -492,6 +492,21 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "success to get an app", nil))
 
+	ws.Route(ws.GET("/apps/oamvalues").
+		To(handler.oamValues).
+		Doc("get an app oam values").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Param(ws.PathParameter(ParamAppName, "the name of application")).
+		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
+		Returns(http.StatusOK, "success to get an app oamvalues", nil))
+
+	ws.Route(ws.POST("/apps/image-info").
+		To(handler.imageInfo).
+		Doc("get an app image info").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
+		Returns(http.StatusOK, "success to get an app image info", nil))
+
 	ws.Route(ws.GET("/perms").
 		To(handler.applicationPermissionList).
 		Doc("get app permissions list").

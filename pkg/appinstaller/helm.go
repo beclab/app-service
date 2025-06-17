@@ -454,7 +454,7 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 	values["cluster"] = map[string]interface{}{
 		"arch": arch,
 	}
-	gpuType, err := utils.FindGpuTypeFromNodes(h.ctx, kClient)
+	gpuType, err := utils.FindGpuTypeFromNodes(nodes)
 	if err != nil {
 		klog.Errorf("Failed to get gpuType err=%v", err)
 		return values, err

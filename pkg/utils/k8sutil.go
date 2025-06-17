@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/url"
 	"strings"
@@ -13,7 +14,6 @@ import (
 	srvconfig "github.com/containerd/containerd/services/server/config"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
@@ -83,11 +83,10 @@ func GetAllNodesTunnelIPCIDRs() (cidrs []string) {
 	return cidrs
 }
 
-func FindGpuTypeFromNodes(ctx context.Context, clientSet *kubernetes.Clientset) (string, error) {
+func FindGpuTypeFromNodes(nodes *corev1.NodeList) (string, error) {
 	gpuType := "none"
-	nodes, err := clientSet.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return gpuType, err
+	if nodes == nil {
+		return gpuType, errors.New("empty node list")
 	}
 	for _, n := range nodes.Items {
 		if _, ok := n.Status.Capacity[constants.NvidiaGPU]; ok {

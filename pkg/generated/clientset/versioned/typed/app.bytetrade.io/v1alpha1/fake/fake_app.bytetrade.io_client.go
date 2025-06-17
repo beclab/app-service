@@ -12,6 +12,10 @@ type FakeAppV1alpha1 struct {
 	*testing.Fake
 }
 
+func (c *FakeAppV1alpha1) AppImages() v1alpha1.AppImageInterface {
+	return &FakeAppImages{c}
+}
+
 func (c *FakeAppV1alpha1) Applications() v1alpha1.ApplicationInterface {
 	return &FakeApplications{c}
 }

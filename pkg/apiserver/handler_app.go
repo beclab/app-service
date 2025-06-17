@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -44,24 +45,6 @@ func (h *Handler) status(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
-	//key := types.NamespacedName{Name: name}
-	//err = h.ctrlClient.Get(req.Request.Context(), key, &a)
-	//if err != nil && !apierrors.IsNotFound(err) {
-	//	api.HandleError(resp, req, err)
-	//	return
-	//}
-	//source := a.Spec.Settings["source"]
-	//if source == "" {
-	//	source = api.Unknown.String()
-	//}
-	//sts := appinstaller.Status{
-	//	Name:              a.Spec.Name,
-	//	AppID:             a.Spec.Appid,
-	//	Namespace:         a.Spec.Namespace,
-	//	CreationTimestamp: a.CreationTimestamp,
-	//	Source:            source,
-	//	AppStatus:         a.Status,
-	//}
 
 	var am v1alpha1.ApplicationManager
 	e := h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: name}, &am)
@@ -107,39 +90,8 @@ func (h *Handler) appsStatus(req *restful.Request, resp *restful.Response) {
 		stateSet.Insert(s)
 	}
 
-	//allApps, err := h.appLister.List(labels.Everything())
-	//if err != nil {
-	//	api.HandleError(resp, req, err)
-	//	return
-	//}
-
 	// filter by application's owner
 	filteredApps := make([]appinstaller.Status, 0)
-	//appsMap := make(map[string]appinstaller.Status)
-
-	//for _, a := range allApps {
-	//	if a.Spec.Owner == owner {
-	//		if !stateSet.Has(a.Status.State) {
-	//			continue
-	//		}
-	//		if len(isSysApp) > 0 && strconv.FormatBool(a.Spec.IsSysApp) != isSysApp {
-	//			continue
-	//		}
-	//		source := a.Spec.Settings["source"]
-	//		if source == "" {
-	//			source = api.Unknown.String()
-	//		}
-	//		status := appinstaller.Status{
-	//			Name:              a.Spec.Name,
-	//			AppID:             a.Spec.Appid,
-	//			Namespace:         a.Spec.Namespace,
-	//			CreationTimestamp: a.CreationTimestamp,
-	//			Source:            source,
-	//			AppStatus:         a.Status,
-	//		}
-	//		appsMap[a.Name] = status
-	//	}
-	//}
 
 	appAms, err := h.appmgrLister.List(labels.Everything())
 	if err != nil {
@@ -869,4 +821,91 @@ func (h *Handler) adminUsername(req *restful.Request, resp *restful.Response) {
 		Response: api.Response{Code: 200},
 		Data:     api.AdminUsernameRespData{Username: username},
 	})
+}
+
+func (h *Handler) oamValues(req *restful.Request, resp *restful.Response) {
+	//app := req.PathParameter(ParamAppName)
+	owner := req.Attribute(constants.UserContextAttribute).(string)
+	//token := req.HeaderParameter(constants.AuthorizationTokenKey)
+
+	//insReq := &api.InstallRequest{}
+	//err := req.ReadEntity(insReq)
+	//if err != nil {
+	//	api.HandleBadRequest(resp, req, err)
+	//	return
+	//}
+
+	admin, err := kubesphere.GetAdminUsername(req.Request.Context(), h.kubeConfig)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+
+	//_, _, err = apputils.GetAppConfig(req.Request.Context(), app, owner,
+	//	insReq.CfgURL, insReq.RepoURL, "", token, admin)
+	//if err != nil {
+	//	klog.Errorf("Failed to get appconfig err=%v", err)
+	//	api.HandleBadRequest(resp, req, err)
+	//	return
+	//}
+
+	values := map[string]interface{}{
+		"admin": admin,
+		"bfl": map[string]string{
+			"username": owner,
+		},
+	}
+
+	var nodes corev1.NodeList
+	err = h.ctrlClient.List(req.Request.Context(), &nodes, &client.ListOptions{})
+	if err != nil {
+		klog.Errorf("list node failed %v", err)
+		api.HandleError(resp, req, err)
+		return
+	}
+	gpuType, err := utils.FindGpuTypeFromNodes(&nodes)
+	if err != nil {
+		klog.Errorf("get gpu type failed %v", gpuType)
+		api.HandleError(resp, req, err)
+		return
+	}
+	values["GPU"] = map[string]interface{}{
+		"Type": gpuType,
+		"Cuda": os.Getenv("CUDA_VERSION"),
+	}
+	values["user"] = map[string]interface{}{
+		"zone": "user-zone",
+	}
+	values["schedule"] = map[string]interface{}{
+		"nodeName": "node",
+	}
+	values["oidc"] = map[string]interface{}{
+		"client": map[string]interface{}{},
+		"issuer": "issuer",
+	}
+	values["userspace"] = map[string]interface{}{
+		"appCache": "appcache",
+		"userData": "userspace/Home",
+	}
+	values["os"] = map[string]interface{}{
+		"appKey":    "appKey",
+		"appSecret": "appSecret",
+	}
+
+	values["domain"] = map[string]string{}
+	values["cluster"] = map[string]string{}
+	values["dep"] = map[string]interface{}{}
+	values["postgres"] = map[string]interface{}{
+		"databases": map[string]interface{}{},
+	}
+	values["redis"] = map[string]interface{}{}
+	values["mongodb"] = map[string]interface{}{
+		"databases": map[string]interface{}{},
+	}
+	values["svcs"] = map[string]interface{}{}
+	values["nats"] = map[string]interface{}{
+		"subjects": map[string]interface{}{},
+		"refs":     map[string]interface{}{},
+	}
+	resp.WriteAsJson(values)
 }
