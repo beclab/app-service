@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"time"
 
+	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
+	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/helm"
 	"bytetrade.io/web3os/app-service/pkg/images"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
@@ -15,15 +17,12 @@ import (
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 	"bytetrade.io/web3os/app-service/pkg/utils/config"
 	"bytetrade.io/web3os/app-service/pkg/utils/download"
+
 	"github.com/pkg/errors"
 	"helm.sh/helm/v3/pkg/action"
-	ctrl "sigs.k8s.io/controller-runtime"
-
-	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
-	"bytetrade.io/web3os/app-service/pkg/constants"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	"k8s.io/klog/v2"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var _ OperationApp = &UpgradingApp{}
@@ -75,13 +74,15 @@ func (p *UpgradingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) 
 				if err != nil {
 					p.finally = func() {
 						klog.Info("upgrade app failed, update app status to upgradeFailed, ", p.manager.Name)
-						opRecord := makeRecord(p.manager.Status.OpType, p.manager.Spec.Source, p.manager.Status.Payload["version"],
-							appsv1.UpgradeFailed, fmt.Sprintf(constants.OperationFailedTpl, p.manager.Status.OpType, err.Error()))
+						opRecord := makeRecord(p.manager, appsv1.UpgradeFailed, fmt.Sprintf(constants.OperationFailedTpl, p.manager.Status.OpType, err.Error()))
 
 						updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.UpgradeFailed, opRecord, err.Error())
 						if updateErr != nil {
 							klog.Errorf("update appmgr state to upgradeFailed state failed %v", updateErr)
+							return
 						}
+						utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.UpgradeFailed, p.manager.Status)
+
 					}
 					return
 				}
@@ -91,7 +92,10 @@ func (p *UpgradingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) 
 					updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.Initializing, nil, appsv1.Initializing.String())
 					if updateErr != nil {
 						klog.Errorf("update appmgr state to initializing state failed %v", updateErr)
+						return
 					}
+					utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.Initializing, p.manager.Status)
+
 				}
 
 			}()

@@ -119,6 +119,14 @@ func (imc *ImageManagerClient) PollDownloadProgress(ctx context.Context, am *app
 			if im.Status.State == "failed" {
 				return errors.New(im.Status.Message)
 			}
+			if im.Status.State == "completed" {
+				updateErr := imc.updateProgress(ctx, am.Name, am.Spec.AppName, 100)
+				if updateErr != nil {
+					klog.Infof("update appmgr %v completed progress failed %v", am.Name, err)
+					continue
+				}
+				return nil
+			}
 
 			type progress struct {
 				offset int64
@@ -161,32 +169,40 @@ func (imc *ImageManagerClient) PollDownloadProgress(ctx context.Context, am *app
 				}
 
 			}
-
-			var cur appv1alpha1.ApplicationManager
-			err = imc.Get(ctx, types.NamespacedName{Name: am.Name}, &cur)
-			if err != nil {
-				klog.Infof("Failed to get applicationmanagers name=%v, err=%v", am.Name, err)
-				continue
-			}
-
-			appMgrCopy := cur.DeepCopy()
-			oldProgress, _ := strconv.ParseFloat(cur.Status.Progress, 64)
-			if oldProgress > ret {
-				continue
-			}
-			cur.Status.Progress = strconv.FormatFloat(ret, 'f', 2, 64)
-			err = imc.Status().Patch(ctx, &cur, client.MergeFrom(appMgrCopy))
-			if err != nil {
-				klog.Infof("Failed to patch applicationmanagers name=%v, err=%v", am.Name, err)
-				continue
-			}
-
-			klog.Infof("app %s download progress.... %v", am.Spec.AppName, cur.Status.Progress)
-			if cur.Status.Progress == "100.00" {
+			err = imc.updateProgress(ctx, am.Name, am.Spec.AppName, ret)
+			if err == nil {
 				return nil
 			}
+
 		case <-ctx.Done():
 			return context.Canceled
 		}
 	}
+}
+
+func (imc *ImageManagerClient) updateProgress(ctx context.Context, name string, appName string, progress float64) error {
+	var cur appv1alpha1.ApplicationManager
+	err := imc.Get(ctx, types.NamespacedName{Name: name}, &cur)
+	if err != nil {
+		klog.Infof("Failed to get applicationmanagers name=%v, err=%v", name, err)
+		return err
+	}
+
+	appMgrCopy := cur.DeepCopy()
+	oldProgress, _ := strconv.ParseFloat(cur.Status.Progress, 64)
+	if oldProgress > progress {
+		return errors.New("no need to update progress")
+	}
+	cur.Status.Progress = strconv.FormatFloat(progress, 'f', 2, 64)
+	err = imc.Status().Patch(ctx, &cur, client.MergeFrom(appMgrCopy))
+	if err != nil {
+		klog.Infof("Failed to patch applicationmanagers name=%v, err=%v", name, err)
+		return err
+	}
+
+	klog.Infof("app %s download progress.... %v", appName, cur.Status.Progress)
+	if cur.Status.Progress == "100.00" {
+		return nil
+	}
+	return errors.New("under downloading")
 }

@@ -2,9 +2,12 @@ package appstate
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/utils"
+
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -49,10 +52,18 @@ func (p *InitializingCancelingApp) Exec(ctx context.Context) (StatefulInProgress
 		klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.Stopping.String(), err)
 		return nil, err
 	}
+	utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.Stopping, p.manager.Status)
 
 	return nil, nil
 }
 
 func (p *InitializingCancelingApp) Cancel(ctx context.Context) error {
-	return p.updateStatus(ctx, p.manager, appsv1.InstallingCancelFailed, nil, appsv1.InstallingCancelFailed.String())
+	err := p.updateStatus(ctx, p.manager, appsv1.InstallingCancelFailed, nil, appsv1.InstallingCancelFailed.String())
+	if err != nil {
+		klog.Errorf("update name %s to state %s failed %v", p.manager.Name, appsv1.InstallingCancelFailed, err)
+		return err
+	}
+	utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.InstallingCancelFailed, p.manager.Status)
+	return err
+
 }

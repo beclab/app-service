@@ -278,7 +278,8 @@ func (r *AppImageInfoController) GetImageInfo(ctx context.Context, refs []string
 
 		manifest, err := r.GetManifest(ctx, replacedRef)
 		if err != nil {
-			return imageInfos, nil
+			klog.Infof("get image %s manifest failed %v", name.String(), err)
+			return imageInfos, err
 		}
 
 		imageInfo := appv1alpha1.ImageInfo{
@@ -299,6 +300,7 @@ func (r *AppImageInfoController) GetImageInfo(ctx context.Context, refs []string
 			_, err = r.imageClient.ContentStore().Info(ctx, layer.Digest)
 			if err == nil {
 				imageLayer.Offset = layer.Size
+				imageLayers = append(imageLayers, imageLayer)
 				// go next layer
 				continue
 			}
@@ -312,6 +314,7 @@ func (r *AppImageInfoController) GetImageInfo(ctx context.Context, refs []string
 					s := "layer-" + layer.Digest.String()
 					if s == status.Ref {
 						imageLayer.Offset = status.Offset
+						break
 					}
 				}
 			} else {

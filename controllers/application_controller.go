@@ -401,7 +401,7 @@ func (r *ApplicationReconciler) updateApplication(ctx context.Context, req ctrl.
 	}
 
 	owner := deployment.GetLabels()[constants.ApplicationOwnerLabel]
-	klog.Infof("in updateApplication ....")
+	klog.Infof("in updateApplication ....appname: %v", app.Spec.Name)
 	icons := getAppIcon(deployment)
 	var icon string
 

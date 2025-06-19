@@ -10,10 +10,11 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/constants"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"bytetrade.io/web3os/app-service/pkg/utils"
 
 	"k8s.io/klog/v2"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var _ OperationApp = &InitializingApp{}
@@ -92,6 +93,8 @@ func (p *InitializingApp) Exec(ctx context.Context) (StatefulInProgressApp, erro
 								klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.InitializingCanceling, updateErr)
 								return
 							}
+							utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.InitializingCanceling, p.manager.Status)
+
 						}
 					}
 					return
@@ -103,12 +106,14 @@ func (p *InitializingApp) Exec(ctx context.Context) (StatefulInProgressApp, erro
 					if p.manager.Status.OpType == appsv1.UpgradeOp {
 						message = fmt.Sprintf(constants.UpgradeOperationCompletedTpl, p.manager.Spec.Type.String(), p.manager.Spec.AppName)
 					}
-					opRecord := makeRecord(p.manager.Status.OpType, p.manager.Spec.Source, p.manager.Status.Payload["version"],
-						appsv1.Running, message)
+					opRecord := makeRecord(p.manager, appsv1.Running, message)
 					updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.Running, opRecord, appsv1.Running.String())
 					if updateErr != nil {
 						klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.Running, updateErr)
+						return
 					}
+					utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.Running, p.manager.Status)
+
 				}
 			}()
 

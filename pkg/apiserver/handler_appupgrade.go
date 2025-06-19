@@ -123,6 +123,7 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 	now := metav1.Now()
 	status := appv1alpha1.ApplicationManagerStatus{
 		OpType:  appv1alpha1.UpgradeOp,
+		OpID:    a.ResourceVersion,
 		State:   appv1alpha1.Upgrading,
 		Message: "waiting for upgrade",
 		Payload: map[string]string{
@@ -135,13 +136,15 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		UpdateTime: &now,
 	}
 
-	_, err = apputils.UpdateAppMgrStatus(appMgrName, status)
+	am, err := apputils.UpdateAppMgrStatus(appMgrName, status)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
+	utils.PublishAsync(fmt.Sprintf("os.application.%s", am.Spec.AppOwner), am.Spec.AppName, appv1alpha1.Upgrading, am.Status)
+
 	resp.WriteEntity(api.InstallationResponse{
 		Response: api.Response{Code: 200},
-		Data:     api.InstallationResponseData{UID: app},
+		Data:     api.InstallationResponseData{UID: app, OpID: status.OpID},
 	})
 }

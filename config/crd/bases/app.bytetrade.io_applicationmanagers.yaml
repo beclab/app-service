@@ -89,11 +89,15 @@ spec:
               opGeneration:
                 format: int64
                 type: integer
+              opId:
+                type: string
               opRecords:
                 items:
                   description: OpRecord contains details of an operation.
                   properties:
                     message:
+                      type: string
+                    opId:
                       type: string
                     opType:
                       description: OpType represents the type of operation being performed.

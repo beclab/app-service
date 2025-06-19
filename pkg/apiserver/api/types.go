@@ -13,7 +13,8 @@ type InstallationResponse struct {
 
 // InstallationResponseData represents the installation response uid.
 type InstallationResponseData struct {
-	UID string `json:"uid"`
+	UID  string `json:"uid"`
+	OpID string `json:"opID"`
 }
 
 // DependenciesRespData represents the dependencies of an application.

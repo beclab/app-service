@@ -1,23 +1,22 @@
 package appstate
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
+	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
-	"bytetrade.io/web3os/app-service/pkg/errcode"
-
-	"context"
-	"encoding/json"
-
-	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/constants"
+	"bytetrade.io/web3os/app-service/pkg/errcode"
+	"bytetrade.io/web3os/app-service/pkg/utils"
+
 	"github.com/pkg/errors"
+	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"k8s.io/klog/v2"
 )
 
 var _ OperationApp = &InstallingApp{}
@@ -97,7 +96,10 @@ func (p *InstallingApp) Exec(ctx context.Context) (StatefulInProgressApp, error)
 							updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.Stopping, nil, err.Error())
 							if updateErr != nil {
 								klog.Errorf("update status failed %v", updateErr)
+								return
 							}
+							utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.Stopping, p.manager.Status)
+
 						}
 
 						return
@@ -105,12 +107,14 @@ func (p *InstallingApp) Exec(ctx context.Context) (StatefulInProgressApp, error)
 
 					p.finally = func() {
 						klog.Errorf("app %s install failed, update app state to installFailed", p.manager.Spec.AppName)
-						opRecord := makeRecord(p.manager.Status.OpType, p.manager.Spec.Source, p.manager.Status.Payload["version"],
-							appsv1.InstallFailed, fmt.Sprintf(constants.OperationFailedTpl, p.manager.Status.OpType, err.Error()))
+						opRecord := makeRecord(p.manager, appsv1.InstallFailed, fmt.Sprintf(constants.OperationFailedTpl, p.manager.Status.OpType, err.Error()))
 						updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.InstallFailed, opRecord, err.Error())
 						if updateErr != nil {
 							klog.Errorf("update status failed %v", updateErr)
+							return
 						}
+						utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.InstallFailed, p.manager.Status)
+
 					}
 
 					return
@@ -121,7 +125,10 @@ func (p *InstallingApp) Exec(ctx context.Context) (StatefulInProgressApp, error)
 					updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.Initializing, nil, appsv1.Initializing.String())
 					if updateErr != nil {
 						klog.Errorf("update status failed %v", updateErr)
+						return
 					}
+					utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.Initializing, p.manager.Status)
+
 				}
 			}()
 
@@ -136,6 +143,8 @@ func (p *InstallingApp) Cancel(ctx context.Context) error {
 		klog.Errorf("update appmgr state to installingCanceling state failed %v", err)
 		return err
 	}
+	utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.InitializingCanceling, p.manager.Status)
+
 	return nil
 }
 
