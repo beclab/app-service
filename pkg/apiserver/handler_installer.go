@@ -5,16 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"net/http"
 	"time"
 
-	"bytetrade.io/web3os/app-service/pkg/appcfg"
-	"bytetrade.io/web3os/app-service/pkg/appstate"
-
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
+	"bytetrade.io/web3os/app-service/pkg/appstate"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
@@ -26,9 +23,11 @@ import (
 
 	"github.com/emicklei/go-restful/v3"
 	"github.com/go-resty/resty/v2"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -213,7 +212,6 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		}
 		if !appstate.IsOperationAllowed(a.Status.State, v1alpha1.InstallOp) {
 			api.HandleBadRequest(resp, req, fmt.Errorf("%s operation is not allowed for %s state", v1alpha1.InstallOp, a.Status.State))
-
 			return
 		}
 	}
@@ -222,6 +220,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 	status := v1alpha1.ApplicationManagerStatus{
 		OpType:  v1alpha1.InstallOp,
 		State:   v1alpha1.Pending,
+		OpID:    a.ResourceVersion,
 		Message: "waiting for install",
 		Payload: map[string]string{
 			"token":   token,
@@ -240,9 +239,12 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
+
+	utils.PublishAsync(fmt.Sprintf("os.application.%s", a.Spec.AppOwner), a.Spec.AppName, v1alpha1.Pending, a.Status)
+
 	resp.WriteEntity(api.InstallationResponse{
 		Response: api.Response{Code: 200},
-		Data:     api.InstallationResponseData{UID: app},
+		Data:     api.InstallationResponseData{UID: app, OpID: status.OpID},
 	})
 }
 
@@ -287,6 +289,7 @@ func (h *Handler) uninstall(req *restful.Request, resp *restful.Response) {
 	status := v1alpha1.ApplicationManagerStatus{
 		OpType: v1alpha1.UninstallOp,
 		State:  v1alpha1.Uninstalling,
+		OpID:   am.ResourceVersion,
 		Payload: map[string]string{
 			"token": token,
 		},
@@ -295,14 +298,16 @@ func (h *Handler) uninstall(req *restful.Request, resp *restful.Response) {
 		UpdateTime: &now,
 	}
 
-	_, err = apputils.UpdateAppMgrStatus(name, status)
+	a, err := apputils.UpdateAppMgrStatus(name, status)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
+	utils.PublishAsync(fmt.Sprintf("os.application.%s", a.Spec.AppOwner), a.Spec.AppName, v1alpha1.Uninstalling, a.Status)
+
 	resp.WriteEntity(api.InstallationResponse{
 		Response: api.Response{Code: 200},
-		Data:     api.InstallationResponseData{UID: app},
+		Data:     api.InstallationResponseData{UID: app, OpID: status.OpID},
 	})
 }
 
@@ -347,6 +352,7 @@ func (h *Handler) cancel(req *restful.Request, resp *restful.Response) {
 	now := metav1.Now()
 	status := v1alpha1.ApplicationManagerStatus{
 		OpType:     v1alpha1.CancelOp,
+		OpID:       am.ResourceVersion,
 		LastState:  am.Status.LastState,
 		State:      cancelState,
 		Progress:   "0.00",
@@ -358,16 +364,16 @@ func (h *Handler) cancel(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
-	_, err = apputils.UpdateAppMgrStatus(name, status)
-
+	a, err := apputils.UpdateAppMgrStatus(name, status)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
+	utils.PublishAsync(fmt.Sprintf("os.application.%s", a.Spec.AppOwner), a.Spec.AppName, cancelState, a.Status)
 
 	resp.WriteAsJson(api.InstallationResponse{
 		Response: api.Response{Code: 200},
-		Data:     api.InstallationResponseData{UID: app},
+		Data:     api.InstallationResponseData{UID: app, OpID: status.OpID},
 	})
 }
 

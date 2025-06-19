@@ -4,9 +4,8 @@ import (
 	"context"
 	"time"
 
-	"bytetrade.io/web3os/app-service/pkg/constants"
-
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/images"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -54,20 +53,22 @@ func (p *DownloadingCancelingApp) Exec(ctx context.Context) (StatefulInProgressA
 	if p.manager.Status.Message == constants.OperationCanceledByTerminusTpl {
 		message = constants.OperationCanceledByTerminusTpl
 	}
-	opRecord := makeRecord(p.manager.Status.OpType, p.manager.Spec.Source, p.manager.Status.Payload["version"],
-		appsv1.DownloadingCanceled, message)
+	opRecord := makeRecord(p.manager, appsv1.DownloadingCanceled, message)
 
 	// FIXME: should check if the image downloading is canceled successfully
 	updateErr := p.updateStatus(ctx, p.manager, appsv1.DownloadingCanceled, opRecord, message)
 	if updateErr != nil {
 		klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.DownloadingCanceled.String(), updateErr)
-
 		return nil, updateErr
 	}
-
 	return nil, nil
 }
 
 func (p *DownloadingCancelingApp) Cancel(ctx context.Context) error {
-	return p.updateStatus(ctx, p.manager, appsv1.DownloadingCancelFailed, nil, appsv1.DownloadingCancelFailed.String())
+	err := p.updateStatus(ctx, p.manager, appsv1.DownloadingCancelFailed, nil, appsv1.DownloadingCancelFailed.String())
+	if err != nil {
+		klog.Errorf("update state to %s failed %v", appsv1.DownloadingCancelFailed.String(), err)
+		return err
+	}
+	return nil
 }

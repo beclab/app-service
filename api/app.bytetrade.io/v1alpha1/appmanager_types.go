@@ -31,6 +31,7 @@ type ApplicationManagerStatus struct {
 
 	OpType       OpType                  `json:"opType"`
 	OpGeneration int64                   `json:"opGeneration"`
+	OpID         string                  `json:"opId,omitempty"`
 	State        ApplicationManagerState `json:"state,omitempty"`
 	OpRecords    []OpRecord              `json:"opRecords,omitempty"`
 	Message      string                  `json:"message,omitempty"`
@@ -56,6 +57,7 @@ type ApplicationManagerSpec struct {
 // OpRecord contains details of an operation.
 type OpRecord struct {
 	OpType    OpType                  `json:"opType"`
+	OpID      string                  `json:"opId,omitempty"`
 	Message   string                  `json:"message"`
 	Version   string                  `json:"version"`
 	Source    string                  `json:"source"`

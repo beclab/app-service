@@ -49,7 +49,6 @@ func (p *UpgradingCancelingApp) Exec(ctx context.Context) (StatefulInProgressApp
 		klog.Errorf("update appmgr state to suspending state failed %v", err)
 		return nil, err
 	}
-
 	return nil, nil
 }
 

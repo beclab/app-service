@@ -23,6 +23,7 @@ type Operate struct {
 	AppOwner          string                           `json:"appOwner,omitempty"`
 	State             v1alpha1.ApplicationManagerState `json:"state"`
 	OpType            v1alpha1.OpType                  `json:"opType"`
+	OpID              string                           `json:"opID"`
 	Message           string                           `json:"message"`
 	ResourceType      string                           `json:"resourceType"`
 	CreationTimestamp metav1.Time                      `json:"creationTimestamp"`

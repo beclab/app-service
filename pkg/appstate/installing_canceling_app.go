@@ -6,13 +6,12 @@ import (
 	"fmt"
 	"time"
 
-	"bytetrade.io/web3os/app-service/pkg/constants"
-
+	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
+	"bytetrade.io/web3os/app-service/pkg/appinstaller"
+	"bytetrade.io/web3os/app-service/pkg/constants"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
-	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
-	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"helm.sh/helm/v3/pkg/storage/driver"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -162,18 +161,21 @@ func (p *installingCancelInProgressApp) WaitAsync(ctx context.Context) {
 			updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.InstallingCancelFailed, nil, appsv1.InstallingCancelFailed.String())
 			if updateErr != nil {
 				klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.InstallingCancelFailed.String(), updateErr)
+				return
 			}
+
 			return
 		}
 		message := constants.OperationCanceledByUserTpl
 		if p.manager.Status.Message == constants.OperationCanceledByTerminusTpl {
 			message = constants.OperationCanceledByTerminusTpl
 		}
-		opRecord := makeRecord(p.manager.Status.OpType, p.manager.Spec.Source, p.manager.Status.Payload["version"],
-			appsv1.InstallingCanceled, message)
+		opRecord := makeRecord(p.manager, appsv1.InstallingCanceled, message)
 		updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.InstallingCanceled, opRecord, message)
 		if updateErr != nil {
 			klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.InstallingCanceled.String(), updateErr)
+			return
 		}
+
 	})
 }

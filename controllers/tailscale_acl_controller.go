@@ -131,6 +131,10 @@ func (r *TailScaleACLController) Reconcile(ctx context.Context, req ctrl.Request
 		filteredApps = append(filteredApps, app)
 	}
 
+	sort.Slice(filteredApps, func(i, j int) bool {
+		return filteredApps[j].CreationTimestamp.Before(&filteredApps[i].CreationTimestamp)
+	})
+
 	tailScaleACLConfig := "tailscale-acl"
 	headScaleNamespace := fmt.Sprintf("user-space-%s", req.Namespace)
 
@@ -240,8 +244,10 @@ func (r *TailScaleACLController) Reconcile(ctx context.Context, req ctrl.Request
 	}
 	headScaleACLMd5 := ""
 	if deploy.Spec.Template.Annotations != nil {
+		klog.Infof("headscaleaclmd5..: %s", deploy.Spec.Template.Annotations[tailScaleACLPolicyMd5Key])
 		headScaleACLMd5 = deploy.Spec.Template.Annotations[tailScaleACLPolicyMd5Key]
 	}
+	klog.Infof("oldheadscaleACLmd5: %v, newmd5: %v", headScaleACLMd5, curTailScaleACLPolicyMd5Sum)
 	if headScaleACLMd5 != curTailScaleACLPolicyMd5Sum {
 		if deploy.Spec.Template.Annotations == nil {
 			deploy.Spec.Template.Annotations = make(map[string]string)
@@ -251,6 +257,7 @@ func (r *TailScaleACLController) Reconcile(ctx context.Context, req ctrl.Request
 		deploy.Spec.Template.Annotations[tailScaleACLPolicyMd5Key] = curTailScaleACLPolicyMd5Sum
 		err = r.Update(ctx, deploy)
 		if err != nil {
+			klog.Errorf("update headscale deploy failed: %v", err)
 			return ctrl.Result{}, err
 		}
 		klog.Infof("rolling update headscale...")

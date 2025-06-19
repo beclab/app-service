@@ -40,6 +40,7 @@ func (r *downloadingInProgressApp) WaitAsync(ctx context.Context) {
 				updateErr := r.updateStatus(context.TODO(), r.manager, appsv1.DownloadFailed, nil, appsv1.DownloadFailed.String())
 				if updateErr != nil {
 					klog.Errorf("update app manager %s to %s state failed %v", r.manager.Name, appsv1.DownloadFailed.String(), updateErr)
+					return
 				}
 			}
 			// if the download is finished with error, we should not update the status to installing
@@ -49,7 +50,9 @@ func (r *downloadingInProgressApp) WaitAsync(ctx context.Context) {
 		updateErr := r.updateStatus(context.TODO(), r.manager, appsv1.Installing, nil, appsv1.Installing.String())
 		if updateErr != nil {
 			klog.Errorf("update app manager %s to %s state failed %v", r.manager.Name, appsv1.Installing.String(), updateErr)
+			return
 		}
+
 	})
 }
 
@@ -101,8 +104,7 @@ func (p *DownloadingApp) Exec(ctx context.Context) (StatefulInProgressApp, error
 	err := p.exec(ctx)
 	if err != nil {
 		klog.Errorf("app %s downloading failed %v", p.manager.Spec.AppName, err)
-		opRecord := makeRecord(p.manager.Status.OpType, p.manager.Spec.Source, p.manager.Status.Payload["version"],
-			appsv1.DownloadFailed, fmt.Sprintf(constants.OperationFailedTpl, p.manager.Status.OpType, err.Error()))
+		opRecord := makeRecord(p.manager, appsv1.DownloadFailed, fmt.Sprintf(constants.OperationFailedTpl, p.manager.Status.OpType, err.Error()))
 		updateErr := p.updateStatus(ctx, p.manager, appsv1.DownloadFailed, opRecord, err.Error())
 		if updateErr != nil {
 			klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.DownloadFailed.String(), updateErr)

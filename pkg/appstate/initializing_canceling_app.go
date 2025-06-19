@@ -54,5 +54,10 @@ func (p *InitializingCancelingApp) Exec(ctx context.Context) (StatefulInProgress
 }
 
 func (p *InitializingCancelingApp) Cancel(ctx context.Context) error {
-	return p.updateStatus(ctx, p.manager, appsv1.InstallingCancelFailed, nil, appsv1.InstallingCancelFailed.String())
+	err := p.updateStatus(ctx, p.manager, appsv1.InstallingCancelFailed, nil, appsv1.InstallingCancelFailed.String())
+	if err != nil {
+		klog.Errorf("update name %s to state %s failed %v", p.manager.Name, appsv1.InstallingCancelFailed, err)
+		return err
+	}
+	return nil
 }
