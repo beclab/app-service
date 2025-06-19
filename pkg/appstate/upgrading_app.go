@@ -81,7 +81,6 @@ func (p *UpgradingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) 
 							klog.Errorf("update appmgr state to upgradeFailed state failed %v", updateErr)
 							return
 						}
-						utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.UpgradeFailed, p.manager.Status)
 
 					}
 					return
@@ -94,7 +93,6 @@ func (p *UpgradingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) 
 						klog.Errorf("update appmgr state to initializing state failed %v", updateErr)
 						return
 					}
-					utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.Initializing, p.manager.Status)
 
 				}
 

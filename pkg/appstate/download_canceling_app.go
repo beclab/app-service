@@ -2,14 +2,11 @@ package appstate
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/images"
-	"bytetrade.io/web3os/app-service/pkg/utils"
-
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -64,8 +61,6 @@ func (p *DownloadingCancelingApp) Exec(ctx context.Context) (StatefulInProgressA
 		klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.DownloadingCanceled.String(), updateErr)
 		return nil, updateErr
 	}
-	utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.DownloadingCanceled, p.manager.Status)
-
 	return nil, nil
 }
 
@@ -75,6 +70,5 @@ func (p *DownloadingCancelingApp) Cancel(ctx context.Context) error {
 		klog.Errorf("update state to %s failed %v", appsv1.DownloadingCancelFailed.String(), err)
 		return err
 	}
-	utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.DownloadingCancelFailed, p.manager.Status)
-	return err
+	return nil
 }

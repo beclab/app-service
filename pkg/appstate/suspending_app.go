@@ -7,8 +7,6 @@ import (
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/constants"
-	"bytetrade.io/web3os/app-service/pkg/utils"
-
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -47,7 +45,6 @@ func (p *SuspendingApp) Exec(ctx context.Context) (StatefulInProgressApp, error)
 			klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.StopFailed, err)
 			return nil, updateErr
 		}
-		utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.StopFailed, p.manager.Status)
 
 		return nil, nil
 	}
@@ -58,7 +55,6 @@ func (p *SuspendingApp) Exec(ctx context.Context) (StatefulInProgressApp, error)
 		klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.Stopped.String(), err)
 		return nil, updateErr
 	}
-	utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.Stopped, p.manager.Status)
 
 	return nil, nil
 }

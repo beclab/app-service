@@ -7,8 +7,6 @@ import (
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/constants"
-	"bytetrade.io/web3os/app-service/pkg/utils"
-
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -69,7 +67,6 @@ func (p *ResumingApp) Cancel(ctx context.Context) error {
 		klog.Errorf("update appmgr state to resumingCanceling state failed %v", err)
 		return err
 	}
-	utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.ResumingCanceling, p.manager.Status)
 
 	return nil
 }
@@ -97,7 +94,6 @@ func (p *resumingInProgressApp) WaitAsync(ctx context.Context) {
 				klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.ResumeFailed.String(), updateErr)
 				return
 			}
-			utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.ResumeFailed, p.manager.Status)
 
 			return
 		}
@@ -106,7 +102,6 @@ func (p *resumingInProgressApp) WaitAsync(ctx context.Context) {
 			klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.Initializing.String(), updateErr)
 			return
 		}
-		utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.Initializing, p.manager.Status)
 		return
 	})
 }

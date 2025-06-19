@@ -10,8 +10,6 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/constants"
-	"bytetrade.io/web3os/app-service/pkg/utils"
-
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -93,7 +91,6 @@ func (p *InitializingApp) Exec(ctx context.Context) (StatefulInProgressApp, erro
 								klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.InitializingCanceling, updateErr)
 								return
 							}
-							utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.InitializingCanceling, p.manager.Status)
 
 						}
 					}
@@ -112,8 +109,6 @@ func (p *InitializingApp) Exec(ctx context.Context) (StatefulInProgressApp, erro
 						klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.Running, updateErr)
 						return
 					}
-					utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.Running, p.manager.Status)
-
 				}
 			}()
 

@@ -42,8 +42,6 @@ func (r *downloadingInProgressApp) WaitAsync(ctx context.Context) {
 					klog.Errorf("update app manager %s to %s state failed %v", r.manager.Name, appsv1.DownloadFailed.String(), updateErr)
 					return
 				}
-				utils.PublishAsync(fmt.Sprintf("os.application.%s", r.manager.Spec.AppOwner), r.manager.Spec.AppName, appsv1.DownloadFailed, r.manager.Status)
-
 			}
 			// if the download is finished with error, we should not update the status to installing
 			return
@@ -54,7 +52,6 @@ func (r *downloadingInProgressApp) WaitAsync(ctx context.Context) {
 			klog.Errorf("update app manager %s to %s state failed %v", r.manager.Name, appsv1.Installing.String(), updateErr)
 			return
 		}
-		utils.PublishAsync(fmt.Sprintf("os.application.%s", r.manager.Spec.AppOwner), r.manager.Spec.AppName, appsv1.Installing, r.manager.Status)
 
 	})
 }

@@ -2,10 +2,7 @@ package appstate
 
 import (
 	"context"
-	"fmt"
 	"time"
-
-	"bytetrade.io/web3os/app-service/pkg/utils"
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"k8s.io/klog/v2"
@@ -52,8 +49,6 @@ func (p *UpgradingCancelingApp) Exec(ctx context.Context) (StatefulInProgressApp
 		klog.Errorf("update appmgr state to suspending state failed %v", err)
 		return nil, err
 	}
-	utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.Stopping, p.manager.Status)
-
 	return nil, nil
 }
 

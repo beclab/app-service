@@ -10,7 +10,6 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/constants"
-	"bytetrade.io/web3os/app-service/pkg/utils"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
 	"helm.sh/helm/v3/pkg/storage/driver"
@@ -164,7 +163,6 @@ func (p *installingCancelInProgressApp) WaitAsync(ctx context.Context) {
 				klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.InstallingCancelFailed.String(), updateErr)
 				return
 			}
-			utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.InstallingCancelFailed, p.manager.Status)
 
 			return
 		}
@@ -178,7 +176,6 @@ func (p *installingCancelInProgressApp) WaitAsync(ctx context.Context) {
 			klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.InstallingCanceled.String(), updateErr)
 			return
 		}
-		utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.InstallingCanceled, p.manager.Status)
 
 	})
 }

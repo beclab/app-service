@@ -5,12 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"bytetrade.io/web3os/app-service/pkg/constants"
-	"bytetrade.io/web3os/app-service/pkg/utils"
-
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
+	"bytetrade.io/web3os/app-service/pkg/constants"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -72,7 +70,6 @@ func (p *UninstallingApp) Exec(ctx context.Context) (StatefulInProgressApp, erro
 							err = errors.Wrapf(err, "update status failed %v", updateErr)
 							return
 						}
-						utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.UninstallFailed, p.manager.Status)
 
 					}
 					return
@@ -86,7 +83,6 @@ func (p *UninstallingApp) Exec(ctx context.Context) (StatefulInProgressApp, erro
 						klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.Uninstalled.String(), err)
 						return
 					}
-					utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.Uninstalled, p.manager.Status)
 
 				}
 			}()

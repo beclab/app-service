@@ -2,12 +2,14 @@ package appstate
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
+	"bytetrade.io/web3os/app-service/pkg/utils"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -65,16 +67,10 @@ func (b *baseStatefulApp) updateStatus(ctx context.Context, am *appsv1.Applicati
 	}
 	err = b.client.Status().Patch(ctx, amCopy, client.MergeFrom(am))
 	if err != nil {
+		klog.Errorf("patch appmgr's  %s status failed %v", am.Name, err)
 		return err
 	}
-
-	//TODO: remove after
-	var nn appsv1.ApplicationManager
-	err = b.client.Get(context.TODO(), types.NamespacedName{Name: am.Name}, &nn)
-	if err != nil {
-		return err
-	}
-	klog.Infof("nnnn... %v", nn.Status)
+	utils.PublishAsync(fmt.Sprintf("os.application.%s", am.Spec.AppOwner), am.Spec.AppName, state, am.Status)
 
 	return nil
 }
