@@ -7,6 +7,7 @@ import (
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/helm"
+	"bytetrade.io/web3os/app-service/pkg/utils"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
 	corev1 "k8s.io/api/core/v1"
@@ -62,7 +63,7 @@ func NewPendingApp(ctx context.Context, c client.Client,
 }
 
 func (p *PendingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
-	if appFactory.countInProgressApp(appsv1.Downloading.String()) >= 2 {
+	if appFactory.countInProgressApp(appsv1.Downloading.String()) >= 1 {
 		return nil, NewWaitingInLine(2)
 	}
 
@@ -74,9 +75,11 @@ func (p *PendingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
 	err := p.client.Status().Update(ctx, p.manager)
 	if err != nil {
 		klog.Error("update app manager status error, ", err, ", ", p.manager.Name)
+		return nil, err
 	}
+	utils.PublishAsync(p.manager.Spec.AppOwner, p.manager.Spec.AppName, string(p.manager.Status.OpType), p.manager.Status.OpID, appsv1.Downloading.String(), "", nil)
 
-	return nil, err
+	return nil, nil
 }
 
 func (p *PendingApp) Cancel(ctx context.Context) error {

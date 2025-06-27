@@ -7,6 +7,7 @@ import (
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/utils"
+
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -229,12 +230,16 @@ func isStartUp(am *appv1alpha1.ApplicationManager, cli client.Client) (bool, err
 	return false, nil
 }
 
-func makeRecord(opType appv1alpha1.OpType, source string, version string, status appv1alpha1.ApplicationManagerState, message string) *appv1alpha1.OpRecord {
+func makeRecord(am *appv1alpha1.ApplicationManager, status appv1alpha1.ApplicationManagerState, message string) *appv1alpha1.OpRecord {
+	if am == nil {
+		return nil
+	}
 	now := metav1.Now()
 	return &appv1alpha1.OpRecord{
-		OpType:    opType,
-		Source:    source,
-		Version:   version,
+		OpType:    am.Status.OpType,
+		OpID:      am.Status.OpID,
+		Source:    am.Spec.Source,
+		Version:   am.Status.Payload["version"],
 		Message:   message,
 		Status:    status,
 		StateTime: &now,

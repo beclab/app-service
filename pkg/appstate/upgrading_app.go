@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"time"
 
+	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
+	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/helm"
 	"bytetrade.io/web3os/app-service/pkg/images"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
@@ -14,16 +16,12 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/utils"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 	"bytetrade.io/web3os/app-service/pkg/utils/config"
-	"bytetrade.io/web3os/app-service/pkg/utils/download"
+
 	"github.com/pkg/errors"
 	"helm.sh/helm/v3/pkg/action"
-	ctrl "sigs.k8s.io/controller-runtime"
-
-	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
-	"bytetrade.io/web3os/app-service/pkg/constants"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	"k8s.io/klog/v2"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var _ OperationApp = &UpgradingApp{}
@@ -75,13 +73,14 @@ func (p *UpgradingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) 
 				if err != nil {
 					p.finally = func() {
 						klog.Info("upgrade app failed, update app status to upgradeFailed, ", p.manager.Name)
-						opRecord := makeRecord(p.manager.Status.OpType, p.manager.Spec.Source, p.manager.Status.Payload["version"],
-							appsv1.UpgradeFailed, fmt.Sprintf(constants.OperationFailedTpl, p.manager.Status.OpType, err.Error()))
+						opRecord := makeRecord(p.manager, appsv1.UpgradeFailed, fmt.Sprintf(constants.OperationFailedTpl, p.manager.Status.OpType, err.Error()))
 
 						updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.UpgradeFailed, opRecord, err.Error())
 						if updateErr != nil {
 							klog.Errorf("update appmgr state to upgradeFailed state failed %v", updateErr)
+							return
 						}
+
 					}
 					return
 				}
@@ -91,7 +90,9 @@ func (p *UpgradingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) 
 					updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.Initializing, nil, appsv1.Initializing.String())
 					if updateErr != nil {
 						klog.Errorf("update appmgr state to initializing state failed %v", updateErr)
+						return
 					}
+
 				}
 
 			}()
@@ -131,6 +132,7 @@ func (p *UpgradingApp) exec(ctx context.Context) error {
 	cfgURL := payload["cfgURL"]
 	repoURL := payload["repoURL"]
 	token := payload["token"]
+	marketSource := payload["marketSource"]
 	var chartPath string
 	admin, err := kubesphere.GetAdminUsername(ctx, kubeConfig)
 	if err != nil {
@@ -138,13 +140,13 @@ func (p *UpgradingApp) exec(ctx context.Context) error {
 		return err
 	}
 	if !userspace.IsSysApp(p.manager.Spec.AppName) {
-		appConfig, chartPath, err = config.GetAppConfig(ctx, p.manager.Spec.AppName, p.manager.Spec.AppOwner, cfgURL, repoURL, version, token, admin)
+		appConfig, chartPath, err = config.GetAppConfig(ctx, p.manager.Spec.AppName, p.manager.Spec.AppOwner, cfgURL, repoURL, version, token, admin, marketSource)
 		if err != nil {
 			klog.Errorf("get app config failed %v", err)
 			return err
 		}
 	} else {
-		chartPath, err = download.GetIndexAndDownloadChart(ctx, p.manager.Spec.AppName, repoURL, version, token)
+		chartPath, err = apputils.GetIndexAndDownloadChart(ctx, p.manager.Spec.AppName, repoURL, version, token, p.manager.Spec.AppOwner, marketSource)
 		if err != nil {
 			klog.Errorf("download chart failed %v", err)
 			return err

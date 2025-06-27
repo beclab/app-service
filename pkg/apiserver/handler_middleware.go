@@ -37,8 +37,9 @@ func (h *Handler) installMiddleware(req *restful.Request, resp *restful.Response
 	app := req.PathParameter(ParamAppName)
 	token := req.HeaderParameter(constants.AuthorizationTokenKey)
 	owner := req.Attribute(constants.UserContextAttribute).(string)
+	marketSource := req.HeaderParameter(constants.MarketSource)
 
-	middlewareConfig, err := getMiddlewareConfigFromRepo(req.Request.Context(), owner, app, insReq.RepoURL, "", token)
+	middlewareConfig, err := getMiddlewareConfigFromRepo(req.Request.Context(), owner, app, insReq.RepoURL, "", token, marketSource)
 	if err != nil {
 		api.HandleBadRequest(resp, req, err)
 		return
@@ -136,7 +137,8 @@ func (h *Handler) installMiddleware(req *restful.Request, resp *restful.Response
 		State:   v1alpha1.Installing,
 		Message: "installing middleware",
 		Payload: map[string]string{
-			"version": middlewareConfig.Cfg.Metadata.Version,
+			"version":      middlewareConfig.Cfg.Metadata.Version,
+			"marketSource": marketSource,
 		},
 		StatusTime: &now,
 		UpdateTime: &now,

@@ -674,6 +674,7 @@ func (h *HelmOps) Uninstall() error {
 
 	err = helm.UninstallCharts(h.actionConfig, h.app.AppName)
 	if err != nil && !errors.Is(err, driver.ErrReleaseNotFound) {
+		klog.Errorf("failed to uninstall app %s, err=%v", h.app.AppName, err)
 		return err
 	}
 	err = h.unregisterAppPerm()
@@ -723,6 +724,7 @@ func (h *HelmOps) Uninstall() error {
 	}
 
 	if !apputils.IsProtectedNamespace(h.app.Namespace) {
+		klog.Infof("deleting namespace %s", h.app.Namespace)
 		err = client.CoreV1().Namespaces().Delete(context.TODO(), h.app.Namespace, metav1.DeleteOptions{})
 		if apierrors.IsNotFound(err) {
 			return nil
@@ -1249,6 +1251,7 @@ func (h *HelmOps) Install() error {
 	err = h.install(values)
 	if err != nil && !errors.Is(err, driver.ErrReleaseExists) {
 		klog.Errorf("Failed to install chart err=%v", err)
+		h.Uninstall()
 		return err
 	}
 	err = h.addApplicationLabelsToDeployment()
@@ -1310,7 +1313,7 @@ func (h *HelmOps) WaitForLaunch() (bool, error) {
 	//
 	//klog.Infof("dequeue username:%s,appname:%s", h.app.OwnerName, h.app.AppName)
 
-	timer := time.NewTicker(2 * time.Second)
+	timer := time.NewTicker(1 * time.Second)
 	entrances := h.app.Entrances
 	entranceCount := len(entrances)
 	for {

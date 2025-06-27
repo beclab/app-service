@@ -157,6 +157,7 @@ func (h *Handler) operate(req *restful.Request, resp *restful.Response) {
 		AppNamespace:      am.Spec.AppNamespace,
 		AppOwner:          am.Spec.AppOwner,
 		OpType:            am.Status.OpType,
+		OpID:              am.Status.OpID,
 		ResourceType:      am.Spec.Type.String(),
 		State:             am.Status.State,
 		Message:           am.Status.Message,
@@ -191,6 +192,7 @@ func (h *Handler) appsOperate(req *restful.Request, resp *restful.Response) {
 				AppOwner:          am.Spec.AppOwner,
 				State:             am.Status.State,
 				OpType:            am.Status.OpType,
+				OpID:              am.Status.OpID,
 				ResourceType:      am.Spec.Type.String(),
 				Message:           am.Status.Message,
 				CreationTimestamp: am.CreationTimestamp,
@@ -239,6 +241,7 @@ func (h *Handler) operateHistory(req *restful.Request, resp *restful.Response) {
 			ResourceType: am.Spec.Type.String(),
 			OpRecord: v1alpha1.OpRecord{
 				OpType:    r.OpType,
+				OpID:      r.OpID,
 				Message:   r.Message,
 				Source:    r.Source,
 				Version:   r.Version,
@@ -363,6 +366,7 @@ func (h *Handler) apps(req *restful.Request, resp *restful.Response) {
 	}
 	filteredApps := make([]v1alpha1.Application, 0)
 	appsMap := make(map[string]*v1alpha1.Application)
+	appsEntranceMap := make(map[string]*v1alpha1.Application)
 
 	// get pending app's from app managers
 	ams, err := h.appmgrLister.List(labels.Everything())
@@ -435,6 +439,8 @@ func (h *Handler) apps(req *restful.Request, resp *restful.Response) {
 			if len(isSysApp) > 0 && isSysApp == "true" && strconv.FormatBool(a.Spec.IsSysApp) != isSysApp {
 				continue
 			}
+			appsEntranceMap[a.Name] = a
+
 			if a.Spec.IsSysApp {
 				appsMap[a.Name] = a
 				continue
@@ -445,6 +451,9 @@ func (h *Handler) apps(req *restful.Request, resp *restful.Response) {
 		}
 	}
 	for _, app := range appsMap {
+		if v, ok := appsEntranceMap[app.Name]; ok {
+			app.Status.EntranceStatuses = v.Status.EntranceStatuses
+		}
 		filteredApps = append(filteredApps, *app)
 	}
 
@@ -643,15 +652,30 @@ func (h *Handler) allOperateRecommendHistory(req *restful.Request, resp *restful
 }
 
 func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
-	owner := req.Attribute(constants.UserContextAttribute).(string)
+	//owner := req.Attribute(constants.UserContextAttribute).(string)
 	isSysApp := req.QueryParameter("issysapp")
 	state := req.QueryParameter("state")
 
 	//kClient, _ := utils.GetClient()
-	role, err := kubesphere.GetUserRole(req.Request.Context(), h.kubeConfig, owner)
-	if err != nil {
-		api.HandleError(resp, req, err)
-		return
+	//role, err := kubesphere.GetUserRole(req.Request.Context(), h.kubeConfig, owner)
+	//if err != nil {
+	//	api.HandleError(resp, req, err)
+	//	return
+	//}
+	genEntranceURL := func(entrances []v1alpha1.Entrance, owner, appName string) ([]v1alpha1.Entrance, error) {
+		zone, err := kubesphere.GetUserZone(req.Request.Context(), h.kubeConfig, owner)
+		if err != nil {
+			return nil, err
+		}
+		appid := apputils.GetAppID(appName)
+		for i := range entrances {
+			if len(entrances) == 1 {
+				entrances[i].URL = fmt.Sprintf("%s.%s", appid, zone)
+			} else {
+				entrances[i].URL = fmt.Sprintf("%s%d.%s", appid, i, zone)
+			}
+		}
+		return entrances, nil
 	}
 
 	ss := make([]string, 0)
@@ -671,7 +695,8 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 	}
 
 	filteredApps := make([]v1alpha1.Application, 0)
-	appsMap := make(map[string]v1alpha1.Application)
+	appsMap := make(map[string]*v1alpha1.Application)
+	appsEntranceMap := make(map[string]*v1alpha1.Application)
 	// get pending app's from app managers
 	ams, err := h.appmgrLister.List(labels.Everything())
 
@@ -679,49 +704,47 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 		if am.Spec.Type != v1alpha1.App {
 			continue
 		}
-		if role != "platform-admin" && am.Spec.AppOwner != owner {
+
+		if !stateSet.Has(am.Status.State.String()) {
+			continue
+		}
+		if len(isSysApp) > 0 && isSysApp == "true" {
+			continue
+		}
+		if userspace.IsSysApp(am.Spec.AppName) {
 			continue
 		}
 
-		if am.Status.State == v1alpha1.Pending || am.Status.State == v1alpha1.Installing ||
-			am.Status.State == v1alpha1.Downloading {
-			if !stateSet.Has(v1alpha1.Pending.String()) || !stateSet.Has(v1alpha1.Installing.String()) ||
-				!stateSet.Has(v1alpha1.Downloading.String()) {
-				continue
-			}
-			if len(isSysApp) > 0 && isSysApp == "true" {
-				continue
-			}
-			var appconfig appcfg.ApplicationConfig
-			err = json.Unmarshal([]byte(am.Spec.Config), &appconfig)
-			if err != nil {
-				api.HandleError(resp, req, err)
-				return
-			}
-			now := metav1.Now()
-			app := v1alpha1.Application{
-				TypeMeta: metav1.TypeMeta{},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:              am.Name,
-					CreationTimestamp: am.CreationTimestamp,
-				},
-				Spec: v1alpha1.ApplicationSpec{
-					Name:      am.Spec.AppName,
-					Appid:     apputils.GetAppID(am.Spec.AppName),
-					IsSysApp:  userspace.IsSysApp(am.Spec.AppName),
-					Namespace: am.Spec.AppNamespace,
-					Owner:     am.Spec.AppOwner,
-					Entrances: appconfig.Entrances,
-					Icon:      appconfig.Icon,
-				},
-				Status: v1alpha1.ApplicationStatus{
-					State:      am.Status.State.String(),
-					StatusTime: &now,
-					UpdateTime: &now,
-				},
-			}
-			appsMap[fmt.Sprintf("%s-%s", am.Spec.AppName, am.Spec.AppOwner)] = app
+		var appconfig appcfg.ApplicationConfig
+		err = json.Unmarshal([]byte(am.Spec.Config), &appconfig)
+		if err != nil {
+			api.HandleError(resp, req, err)
+			return
 		}
+
+		now := metav1.Now()
+		app := v1alpha1.Application{
+			TypeMeta: metav1.TypeMeta{},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              am.Name,
+				CreationTimestamp: am.CreationTimestamp,
+			},
+			Spec: v1alpha1.ApplicationSpec{
+				Name:      am.Spec.AppName,
+				Appid:     apputils.GetAppID(am.Spec.AppName),
+				IsSysApp:  userspace.IsSysApp(am.Spec.AppName),
+				Namespace: am.Spec.AppNamespace,
+				Owner:     am.Spec.AppOwner,
+				Entrances: appconfig.Entrances,
+				Icon:      appconfig.Icon,
+			},
+			Status: v1alpha1.ApplicationStatus{
+				State:      am.Status.State.String(),
+				StatusTime: &now,
+				UpdateTime: &now,
+			},
+		}
+		appsMap[am.Name] = &app
 	}
 
 	allApps, err := h.appLister.List(labels.Everything())
@@ -735,17 +758,35 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 		if !stateSet.Has(a.Status.State) {
 			continue
 		}
-		if role != "platform-admin" && a.Spec.Owner != owner {
-			continue
-		}
+		//if role != "platform-admin" && a.Spec.Owner != owner {
+		//	continue
+		//}
 		if len(isSysApp) > 0 && strconv.FormatBool(a.Spec.IsSysApp) != isSysApp {
 			continue
 		}
-		appsMap[fmt.Sprintf("%s-%s", a.Spec.Name, a.Spec.Owner)] = *a
+		appsEntranceMap[a.Name] = a
+
+		if a.Spec.IsSysApp {
+			appsMap[a.Name] = a
+			continue
+		}
+		if v, ok := appsMap[a.Name]; ok {
+			v.Spec.Settings = a.Spec.Settings
+		}
 	}
 
 	for _, app := range appsMap {
-		filteredApps = append(filteredApps, app)
+		entrances, err := genEntranceURL(app.Spec.Entrances, app.Spec.Owner, app.Spec.Name)
+		if err != nil {
+			api.HandleError(resp, req, err)
+			return
+		}
+		app.Spec.Entrances = entrances
+		if v, ok := appsEntranceMap[app.Name]; ok {
+			klog.Infof("app: %s, appEntrance: %#v", app.Name, v.Status.EntranceStatuses)
+			app.Status.EntranceStatuses = v.Status.EntranceStatuses
+		}
+		filteredApps = append(filteredApps, *app)
 	}
 
 	// sort by create time desc
@@ -825,7 +866,7 @@ func (h *Handler) adminUsername(req *restful.Request, resp *restful.Response) {
 
 func (h *Handler) oamValues(req *restful.Request, resp *restful.Response) {
 	//app := req.PathParameter(ParamAppName)
-	owner := req.Attribute(constants.UserContextAttribute).(string)
+	//owner := req.Attribute(constants.UserContextAttribute).(string)
 	//token := req.HeaderParameter(constants.AuthorizationTokenKey)
 
 	//insReq := &api.InstallRequest{}
@@ -852,7 +893,7 @@ func (h *Handler) oamValues(req *restful.Request, resp *restful.Response) {
 	values := map[string]interface{}{
 		"admin": admin,
 		"bfl": map[string]string{
-			"username": owner,
+			"username": admin,
 		},
 	}
 

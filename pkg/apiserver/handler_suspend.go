@@ -4,12 +4,12 @@ import (
 	"errors"
 	"fmt"
 
-	"bytetrade.io/web3os/app-service/pkg/appstate"
-
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
+	"bytetrade.io/web3os/app-service/pkg/appstate"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
+	"bytetrade.io/web3os/app-service/pkg/utils"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
 	"github.com/emicklei/go-restful/v3"
@@ -43,18 +43,21 @@ func (h *Handler) suspend(req *restful.Request, resp *restful.Response) {
 	now := metav1.Now()
 	status := v1alpha1.ApplicationManagerStatus{
 		OpType:     v1alpha1.StopOp,
+		OpID:       am.ResourceVersion,
 		State:      v1alpha1.Stopping,
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
-	_, err = apputils.UpdateAppMgrStatus(name, status)
+	a, err := apputils.UpdateAppMgrStatus(name, status)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
+	utils.PublishAsync(a.Spec.AppOwner, a.Spec.AppName, string(a.Status.OpType), a.Status.OpID, v1alpha1.Stopping.String(), "", nil)
+
 	resp.WriteEntity(api.InstallationResponse{
 		Response: api.Response{Code: 200},
-		Data:     api.InstallationResponseData{UID: app},
+		Data:     api.InstallationResponseData{UID: app, OpID: status.OpID},
 	})
 }
 
@@ -82,18 +85,20 @@ func (h *Handler) resume(req *restful.Request, resp *restful.Response) {
 	now := metav1.Now()
 	status := v1alpha1.ApplicationManagerStatus{
 		OpType:     v1alpha1.ResumeOp,
+		OpID:       am.ResourceVersion,
 		State:      v1alpha1.Resuming,
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
-	_, err = apputils.UpdateAppMgrStatus(name, status)
+	a, err := apputils.UpdateAppMgrStatus(name, status)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
+	utils.PublishAsync(a.Spec.AppOwner, a.Spec.AppName, string(a.Status.OpType), a.Status.OpID, v1alpha1.Resuming.String(), "", nil)
 
 	resp.WriteEntity(api.InstallationResponse{
 		Response: api.Response{Code: 200},
-		Data:     api.InstallationResponseData{UID: app},
+		Data:     api.InstallationResponseData{UID: app, OpID: status.OpID},
 	})
 }

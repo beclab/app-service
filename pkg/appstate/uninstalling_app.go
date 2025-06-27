@@ -5,21 +5,20 @@ import (
 	"fmt"
 	"time"
 
-	"bytetrade.io/web3os/app-service/pkg/constants"
-
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
+	"bytetrade.io/web3os/app-service/pkg/constants"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
+
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	utilwait "k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"k8s.io/klog/v2"
 )
 
 var _ OperationApp = &UninstallingApp{}
@@ -63,26 +62,28 @@ func (p *UninstallingApp) Exec(ctx context.Context) (StatefulInProgressApp, erro
 				err := p.exec(c)
 				if err != nil {
 					p.finally = func() {
-						klog.Info("uninstalling app failed,", p.manager.Name)
-						opRecord := makeRecord(p.manager.Status.OpType, p.manager.Spec.Source, p.manager.Status.Payload["version"],
-							appsv1.UninstallFailed, fmt.Sprintf(constants.OperationFailedTpl, p.manager.Status.OpType, err.Error()))
+						klog.Infof("uninstalling app %s failed,", p.manager.Spec.AppName)
+						opRecord := makeRecord(p.manager, appsv1.UninstallFailed, fmt.Sprintf(constants.OperationFailedTpl, p.manager.Status.OpType, err.Error()))
 						updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.UninstallFailed, opRecord, err.Error())
 						if updateErr != nil {
 							klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.UninstallFailed.String(), err)
 							err = errors.Wrapf(err, "update status failed %v", updateErr)
+							return
 						}
+
 					}
 					return
 				}
 
 				p.finally = func() {
-					klog.Info("uninstalled app %s success", p.manager.Spec.AppName)
-					opRecord := makeRecord(p.manager.Status.OpType, p.manager.Spec.Source, p.manager.Status.Payload["version"],
-						appsv1.Uninstalled, fmt.Sprintf(constants.UninstallOperationCompletedTpl, p.manager.Spec.Type, p.manager.Spec.AppName))
+					klog.Infof("uninstalled app %s success", p.manager.Spec.AppName)
+					opRecord := makeRecord(p.manager, appsv1.Uninstalled, fmt.Sprintf(constants.UninstallOperationCompletedTpl, p.manager.Spec.Type, p.manager.Spec.AppName))
 					updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.Uninstalled, opRecord, appsv1.Uninstalled.String())
 					if updateErr != nil {
 						klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.Uninstalled.String(), err)
+						return
 					}
+
 				}
 			}()
 
@@ -97,6 +98,7 @@ func (p *UninstallingApp) waitForDeleteNamespace(ctx context.Context) error {
 		return nil
 	}
 	err := utilwait.PollImmediate(time.Second, 15*time.Minute, func() (done bool, err error) {
+		klog.Infof("waiting for namespace %s to be deleted", p.manager.Spec.AppNamespace)
 		nsName := p.manager.Spec.AppNamespace
 		var ns corev1.Namespace
 		err = p.client.Get(ctx, types.NamespacedName{Name: nsName}, &ns)

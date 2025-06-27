@@ -1,26 +1,26 @@
 package controllers
 
 import (
-	"bytetrade.io/web3os/app-service/pkg/images"
-	"bytetrade.io/web3os/app-service/pkg/utils"
 	"context"
 	"errors"
 	"fmt"
-	"github.com/containerd/containerd"
-	"github.com/containerd/containerd/errdefs"
-	"github.com/containers/image/v5/image"
+
 	"os"
 	"time"
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/images"
+	"bytetrade.io/web3os/app-service/pkg/utils"
 	imagetypes "github.com/containers/image/v5/types"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 
+	"github.com/containerd/containerd"
+	"github.com/containerd/containerd/errdefs"
 	refdocker "github.com/containerd/containerd/reference/docker"
-
+	"github.com/containers/image/v5/image"
 	"github.com/containers/image/v5/transports/alltransports"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -278,7 +278,8 @@ func (r *AppImageInfoController) GetImageInfo(ctx context.Context, refs []string
 
 		manifest, err := r.GetManifest(ctx, replacedRef)
 		if err != nil {
-			return imageInfos, nil
+			klog.Infof("get image %s manifest failed %v", name.String(), err)
+			return imageInfos, err
 		}
 
 		imageInfo := appv1alpha1.ImageInfo{
@@ -299,6 +300,7 @@ func (r *AppImageInfoController) GetImageInfo(ctx context.Context, refs []string
 			_, err = r.imageClient.ContentStore().Info(ctx, layer.Digest)
 			if err == nil {
 				imageLayer.Offset = layer.Size
+				imageLayers = append(imageLayers, imageLayer)
 				// go next layer
 				continue
 			}
@@ -312,6 +314,7 @@ func (r *AppImageInfoController) GetImageInfo(ctx context.Context, refs []string
 					s := "layer-" + layer.Digest.String()
 					if s == status.Ref {
 						imageLayer.Offset = status.Offset
+						break
 					}
 				}
 			} else {
