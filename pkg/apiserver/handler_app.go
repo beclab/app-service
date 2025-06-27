@@ -3,6 +3,7 @@ package apiserver
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"sort"
 	"strconv"
@@ -365,6 +366,7 @@ func (h *Handler) apps(req *restful.Request, resp *restful.Response) {
 	}
 	filteredApps := make([]v1alpha1.Application, 0)
 	appsMap := make(map[string]*v1alpha1.Application)
+	appsEntranceMap := make(map[string]*v1alpha1.Application)
 
 	// get pending app's from app managers
 	ams, err := h.appmgrLister.List(labels.Everything())
@@ -437,6 +439,8 @@ func (h *Handler) apps(req *restful.Request, resp *restful.Response) {
 			if len(isSysApp) > 0 && isSysApp == "true" && strconv.FormatBool(a.Spec.IsSysApp) != isSysApp {
 				continue
 			}
+			appsEntranceMap[a.Name] = a
+
 			if a.Spec.IsSysApp {
 				appsMap[a.Name] = a
 				continue
@@ -447,6 +451,9 @@ func (h *Handler) apps(req *restful.Request, resp *restful.Response) {
 		}
 	}
 	for _, app := range appsMap {
+		if v, ok := appsEntranceMap[app.Name]; ok {
+			app.Status.EntranceStatuses = v.Status.EntranceStatuses
+		}
 		filteredApps = append(filteredApps, *app)
 	}
 
@@ -655,6 +662,21 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 	//	api.HandleError(resp, req, err)
 	//	return
 	//}
+	genEntranceURL := func(entrances []v1alpha1.Entrance, owner, appName string) ([]v1alpha1.Entrance, error) {
+		zone, err := kubesphere.GetUserZone(req.Request.Context(), h.kubeConfig, owner)
+		if err != nil {
+			return nil, err
+		}
+		appid := apputils.GetAppID(appName)
+		for i := range entrances {
+			if len(entrances) == 1 {
+				entrances[i].URL = fmt.Sprintf("%s.%s", appid, zone)
+			} else {
+				entrances[i].URL = fmt.Sprintf("%s%d.%s", appid, i, zone)
+			}
+		}
+		return entrances, nil
+	}
 
 	ss := make([]string, 0)
 	if state != "" {
@@ -674,6 +696,7 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 
 	filteredApps := make([]v1alpha1.Application, 0)
 	appsMap := make(map[string]*v1alpha1.Application)
+	appsEntranceMap := make(map[string]*v1alpha1.Application)
 	// get pending app's from app managers
 	ams, err := h.appmgrLister.List(labels.Everything())
 
@@ -698,6 +721,7 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 			api.HandleError(resp, req, err)
 			return
 		}
+
 		now := metav1.Now()
 		app := v1alpha1.Application{
 			TypeMeta: metav1.TypeMeta{},
@@ -740,6 +764,8 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 		if len(isSysApp) > 0 && strconv.FormatBool(a.Spec.IsSysApp) != isSysApp {
 			continue
 		}
+		appsEntranceMap[a.Name] = a
+
 		if a.Spec.IsSysApp {
 			appsMap[a.Name] = a
 			continue
@@ -750,6 +776,16 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 	}
 
 	for _, app := range appsMap {
+		entrances, err := genEntranceURL(app.Spec.Entrances, app.Spec.Owner, app.Spec.Name)
+		if err != nil {
+			api.HandleError(resp, req, err)
+			return
+		}
+		app.Spec.Entrances = entrances
+		if v, ok := appsEntranceMap[app.Name]; ok {
+			klog.Infof("app: %s, appEntrance: %#v", app.Name, v.Status.EntranceStatuses)
+			app.Status.EntranceStatuses = v.Status.EntranceStatuses
+		}
 		filteredApps = append(filteredApps, *app)
 	}
 
@@ -830,7 +866,7 @@ func (h *Handler) adminUsername(req *restful.Request, resp *restful.Response) {
 
 func (h *Handler) oamValues(req *restful.Request, resp *restful.Response) {
 	//app := req.PathParameter(ParamAppName)
-	owner := req.Attribute(constants.UserContextAttribute).(string)
+	//owner := req.Attribute(constants.UserContextAttribute).(string)
 	//token := req.HeaderParameter(constants.AuthorizationTokenKey)
 
 	//insReq := &api.InstallRequest{}
@@ -857,7 +893,7 @@ func (h *Handler) oamValues(req *restful.Request, resp *restful.Response) {
 	values := map[string]interface{}{
 		"admin": admin,
 		"bfl": map[string]string{
-			"username": owner,
+			"username": admin,
 		},
 	}
 

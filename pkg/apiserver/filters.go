@@ -99,6 +99,8 @@ func (h *Handler) authenticate(req *restful.Request, resp *restful.Response, cha
 		"/app-service/v1/app-label/inject",
 		"/app-service/v1/apps/image-info",
 		"/app-service/v1/all/apps",
+		"/app-service/v1/apps/oamvalues",
+		"/app-service/v1/users/admin/username",
 	}
 
 	needAuth := true

@@ -10,7 +10,8 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/utils"
-	"bytetrade.io/web3os/app-service/pkg/utils/download"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
+
 	"github.com/Masterminds/semver/v3"
 	"github.com/go-resty/resty/v2"
 	"gopkg.in/yaml.v2"
@@ -25,7 +26,7 @@ const (
 )
 
 // GetAppConfig get app installation configuration from app store
-func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, token, admin string) (*appcfg.ApplicationConfig, string, error) {
+func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, token, admin, marketSource string) (*appcfg.ApplicationConfig, string, error) {
 	if repoURL == "" {
 		return nil, "", fmt.Errorf("url info is empty, cfg [%s], repo [%s]", cfgURL, repoURL)
 	}
@@ -42,7 +43,7 @@ func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, tok
 			return nil, "", err
 		}
 	} else {
-		appcfg, chartPath, err = getAppConfigFromRepo(ctx, app, repoURL, version, token, owner, admin)
+		appcfg, chartPath, err = getAppConfigFromRepo(ctx, app, repoURL, version, token, owner, admin, marketSource)
 		if err != nil {
 			return nil, chartPath, err
 		}
@@ -95,8 +96,8 @@ func getAppConfigFromURL(ctx context.Context, app, url string) (*appcfg.Applicat
 	return toApplicationConfig(app, app, &cfg)
 }
 
-func getAppConfigFromRepo(ctx context.Context, app, repoURL, version, token, owner, admin string) (*appcfg.ApplicationConfig, string, error) {
-	chartPath, err := download.GetIndexAndDownloadChart(ctx, app, repoURL, version, token)
+func getAppConfigFromRepo(ctx context.Context, app, repoURL, version, token, owner, admin, marketSource string) (*appcfg.ApplicationConfig, string, error) {
+	chartPath, err := apputils.GetIndexAndDownloadChart(ctx, app, repoURL, version, token, owner, marketSource)
 	if err != nil {
 		return nil, chartPath, err
 	}

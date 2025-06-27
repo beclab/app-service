@@ -87,6 +87,18 @@ func (r *EvictionManagerController) Reconcile(ctx context.Context, req ctrl.Requ
 	if podNamespace == "" || ignoredNs.Has(podNamespace) {
 		return ctrl.Result{}, nil
 	}
+	//for _, v := range pod.Status.ContainerStatuses {
+	//	if v.State.Terminated != nil {
+	//		if v.State.Terminated.Reason == "Unknown" || v.State.Terminated.Reason == "ContainerStatusUnknown" {
+	//			now := metav1.Now()
+	//			err = r.Delete(ctx, &pod)
+	//			if err != nil && !apierrors.IsNotFound(err) {
+	//				return ctrl.Result{}, err
+	//			}
+	//			return ctrl.Result{}, nil
+	//		}
+	//	}
+	//}
 
 	if pod.Status.Reason != "Evicted" {
 		return ctrl.Result{}, nil

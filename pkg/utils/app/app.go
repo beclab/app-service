@@ -14,24 +14,23 @@ import (
 	"strings"
 	"time"
 
+	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/constants"
+	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
 	"bytetrade.io/web3os/app-service/pkg/middlewareinstaller"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 	"bytetrade.io/web3os/app-service/pkg/utils/files"
-	"github.com/go-resty/resty/v2"
-	"github.com/hashicorp/go-getter"
-	"helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/repo"
-	"k8s.io/apimachinery/pkg/api/resource"
-
-	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
-	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/go-resty/resty/v2"
+	"github.com/hashicorp/go-getter"
 	"helm.sh/helm/v3/pkg/action"
+	"helm.sh/helm/v3/pkg/chart"
+	"helm.sh/helm/v3/pkg/repo"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/kubernetes"
@@ -565,7 +564,7 @@ func GetFirstSubDir(fullPath, basePath string) string {
 }
 
 // GetAppConfig get app installation configuration from app store
-func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, token, admin string) (*appcfg.ApplicationConfig, string, error) {
+func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, token, admin, marketSource string) (*appcfg.ApplicationConfig, string, error) {
 	if repoURL == "" {
 		return nil, "", fmt.Errorf("url info is empty, cfg [%s], repo [%s]", cfgURL, repoURL)
 	}
@@ -582,7 +581,7 @@ func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, tok
 			return nil, "", err
 		}
 	} else {
-		appcfg, chartPath, err = getAppConfigFromRepo(ctx, app, repoURL, version, token, owner, admin)
+		appcfg, chartPath, err = getAppConfigFromRepo(ctx, app, repoURL, version, token, owner, admin, marketSource)
 		if err != nil {
 			return nil, chartPath, err
 		}
@@ -621,8 +620,8 @@ func getAppConfigFromURL(ctx context.Context, app, url string) (*appcfg.Applicat
 	return toApplicationConfig(app, app, &cfg)
 }
 
-func getAppConfigFromRepo(ctx context.Context, app, repoURL, version, token, owner, admin string) (*appcfg.ApplicationConfig, string, error) {
-	chartPath, err := GetIndexAndDownloadChart(ctx, app, repoURL, version, token)
+func getAppConfigFromRepo(ctx context.Context, app, repoURL, version, token, owner, admin, marketSource string) (*appcfg.ApplicationConfig, string, error) {
+	chartPath, err := GetIndexAndDownloadChart(ctx, app, repoURL, version, token, owner, marketSource)
 	if err != nil {
 		return nil, chartPath, err
 	}
@@ -762,6 +761,9 @@ func getAppConfigFromConfigurationFile(app, chart, owner, admin string) (*appcfg
 	if err != nil {
 		return nil, chart, err
 	}
+	klog.Infof("----------------------------------------------")
+	klog.Infof("olaresmanifest.yaml: %s", data)
+	klog.Infof("----------------------------------------------")
 
 	var cfg appcfg.AppConfiguration
 	if err := yaml.Unmarshal([]byte(data), &cfg); err != nil {
@@ -780,18 +782,22 @@ func checkVersionFormat(constraint string) error {
 }
 
 // GetIndexAndDownloadChart download a chart and returns download chart path.
-func GetIndexAndDownloadChart(ctx context.Context, app, repoURL, version, token string) (string, error) {
+func GetIndexAndDownloadChart(ctx context.Context, app, repoURL, version, token, owner, marketSource string) (string, error) {
 	terminusNonce, err := utils.GenTerminusNonce()
 	if err != nil {
 		return "", err
 	}
 	client := resty.New().SetTimeout(10*time.Second).
 		SetHeader(constants.AuthorizationTokenKey, token).
-		SetHeader("Terminus-Nonce", terminusNonce)
+		SetHeader("Terminus-Nonce", terminusNonce).
+		SetHeader(constants.MarketUser, owner).
+		SetHeader(constants.MarketSource, marketSource)
 	indexFileURL := repoURL
 	if repoURL[len(repoURL)-1] != '/' {
 		indexFileURL += "/"
 	}
+	klog.Infof("GetIndexAndDownloadChart: user: %v, source: %v", owner, marketSource)
+
 	indexFileURL += "index.yaml"
 	resp, err := client.R().Get(indexFileURL)
 	if err != nil {
@@ -834,19 +840,22 @@ func GetIndexAndDownloadChart(ctx context.Context, app, repoURL, version, token 
 			return "", err
 		}
 	}
-	_, err = downloadAndUnpack(ctx, url, token, terminusNonce)
+	_, err = downloadAndUnpack(ctx, url, token, terminusNonce, owner, marketSource)
 	if err != nil {
 		return "", err
 	}
 	return chartPath, nil
 }
 
-func downloadAndUnpack(ctx context.Context, tgz *url.URL, token, terminusNonce string) (string, error) {
+func downloadAndUnpack(ctx context.Context, tgz *url.URL, token, terminusNonce, owner, marketSource string) (string, error) {
 	dst := appcfg.ChartsPath
 	g := new(getter.HttpGetter)
 	g.Header = make(http.Header)
 	g.Header.Set(constants.AuthorizationTokenKey, token)
 	g.Header.Set("Terminus-Nonce", terminusNonce)
+	g.Header.Set(constants.MarketUser, owner)
+	g.Header.Set(constants.MarketSource, marketSource)
+
 	downloader := &getter.Client{
 		Ctx:       ctx,
 		Dst:       dst,
@@ -897,8 +906,8 @@ func loadIndex(data []byte) (*repo.IndexFile, error) {
 	return i, nil
 }
 
-func GetMiddlewareConfigFromRepo(ctx context.Context, owner, app, repoURL, version, token string) (*middlewareinstaller.MiddlewareConfig, error) {
-	chartPath, err := GetIndexAndDownloadChart(ctx, app, repoURL, version, token)
+func GetMiddlewareConfigFromRepo(ctx context.Context, owner, app, repoURL, version, token, marketSource string) (*middlewareinstaller.MiddlewareConfig, error) {
+	chartPath, err := GetIndexAndDownloadChart(ctx, app, repoURL, version, token, owner, marketSource)
 	if err != nil {
 		return nil, err
 	}

@@ -87,6 +87,7 @@ type Entrance struct {
 	Title     string `yaml:"title" json:"title,omitempty"`
 	AuthLevel string `yaml:"authLevel,omitempty" json:"authLevel,omitempty"`
 	Invisible bool   `yaml:"invisible,omitempty" json:"invisible,omitempty"`
+	URL       string `yaml:"url,omitempty" json:"url,omitempty"`
 
 	// openMethod has three choices default, iframe, window
 	// Optional. if invisible=true.

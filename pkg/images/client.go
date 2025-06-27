@@ -1,21 +1,22 @@
 package images
 
 import (
-	"bytetrade.io/web3os/app-service/pkg/utils"
 	"context"
 	"errors"
-	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/klog/v2"
 	"math"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strconv"
 	"strings"
 	"time"
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/utils"
+
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/klog/v2"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type ImageManager interface {
@@ -119,14 +120,6 @@ func (imc *ImageManagerClient) PollDownloadProgress(ctx context.Context, am *app
 			if im.Status.State == "failed" {
 				return errors.New(im.Status.Message)
 			}
-			if im.Status.State == "completed" {
-				updateErr := imc.updateProgress(ctx, am.Name, am.Spec.AppName, 100)
-				if updateErr != nil {
-					klog.Infof("update appmgr %v completed progress failed %v", am.Name, err)
-					continue
-				}
-				return nil
-			}
 
 			type progress struct {
 				offset int64
@@ -169,7 +162,7 @@ func (imc *ImageManagerClient) PollDownloadProgress(ctx context.Context, am *app
 				}
 
 			}
-			err = imc.updateProgress(ctx, am.Name, am.Spec.AppName, ret)
+			err = imc.updateProgress(ctx, am, ret)
 			if err == nil {
 				return nil
 			}
@@ -180,11 +173,11 @@ func (imc *ImageManagerClient) PollDownloadProgress(ctx context.Context, am *app
 	}
 }
 
-func (imc *ImageManagerClient) updateProgress(ctx context.Context, name string, appName string, progress float64) error {
+func (imc *ImageManagerClient) updateProgress(ctx context.Context, am *appv1alpha1.ApplicationManager, progress float64) error {
 	var cur appv1alpha1.ApplicationManager
-	err := imc.Get(ctx, types.NamespacedName{Name: name}, &cur)
+	err := imc.Get(ctx, types.NamespacedName{Name: am.Name}, &cur)
 	if err != nil {
-		klog.Infof("Failed to get applicationmanagers name=%v, err=%v", name, err)
+		klog.Infof("Failed to get applicationmanagers name=%v, err=%v", am.Name, err)
 		return err
 	}
 
@@ -196,11 +189,12 @@ func (imc *ImageManagerClient) updateProgress(ctx context.Context, name string, 
 	cur.Status.Progress = strconv.FormatFloat(progress, 'f', 2, 64)
 	err = imc.Status().Patch(ctx, &cur, client.MergeFrom(appMgrCopy))
 	if err != nil {
-		klog.Infof("Failed to patch applicationmanagers name=%v, err=%v", name, err)
+		klog.Infof("Failed to patch applicationmanagers name=%v, err=%v", am.Name, err)
 		return err
 	}
+	utils.PublishAsync(am.Spec.AppOwner, am.Spec.AppName, string(am.Status.OpType), am.Status.OpID, appv1alpha1.Downloading.String(), cur.Status.Progress, nil)
 
-	klog.Infof("app %s download progress.... %v", appName, cur.Status.Progress)
+	klog.Infof("app %s download progress.... %v", am.Spec.AppName, cur.Status.Progress)
 	if cur.Status.Progress == "100.00" {
 		return nil
 	}

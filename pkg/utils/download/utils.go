@@ -21,18 +21,21 @@ import (
 )
 
 // GetIndexAndDownloadChart download a chart and returns download chart path.
-func GetIndexAndDownloadChart(ctx context.Context, app, repoURL, version, token string) (string, error) {
+func GetIndexAndDownloadChart(ctx context.Context, app, repoURL, version, token, owner, marketSource string) (string, error) {
 	terminusNonce, err := utils.GenTerminusNonce()
 	if err != nil {
 		return "", err
 	}
 	client := resty.New().SetTimeout(10*time.Second).
 		SetHeader(constants.AuthorizationTokenKey, token).
-		SetHeader("Terminus-Nonce", terminusNonce)
+		SetHeader("Terminus-Nonce", terminusNonce).
+		SetHeader(constants.MarketUser, owner).
+		SetHeader(constants.MarketSource, marketSource)
 	indexFileURL := repoURL
 	if repoURL[len(repoURL)-1] != '/' {
 		indexFileURL += "/"
 	}
+	klog.Infof("GetIndexAndDownloadChart: user: %v, source: %v", owner, marketSource)
 	indexFileURL += "index.yaml"
 	resp, err := client.R().Get(indexFileURL)
 	if err != nil {
@@ -75,19 +78,21 @@ func GetIndexAndDownloadChart(ctx context.Context, app, repoURL, version, token 
 			return "", err
 		}
 	}
-	_, err = downloadAndUnpack(ctx, url, token, terminusNonce)
+	_, err = downloadAndUnpack(ctx, url, token, terminusNonce, owner, marketSource)
 	if err != nil {
 		return "", err
 	}
 	return chartPath, nil
 }
 
-func downloadAndUnpack(ctx context.Context, tgz *url.URL, token, terminusNonce string) (string, error) {
+func downloadAndUnpack(ctx context.Context, tgz *url.URL, token, terminusNonce, owner, marketSource string) (string, error) {
 	dst := appcfg.ChartsPath
 	g := new(getter.HttpGetter)
 	g.Header = make(http.Header)
 	g.Header.Set(constants.AuthorizationTokenKey, token)
 	g.Header.Set("Terminus-Nonce", terminusNonce)
+	g.Header.Set(constants.MarketUser, owner)
+	g.Header.Set(constants.MarketSource, marketSource)
 	downloader := &getter.Client{
 		Ctx:       ctx,
 		Dst:       dst,

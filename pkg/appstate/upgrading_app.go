@@ -16,7 +16,6 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/utils"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 	"bytetrade.io/web3os/app-service/pkg/utils/config"
-	"bytetrade.io/web3os/app-service/pkg/utils/download"
 
 	"github.com/pkg/errors"
 	"helm.sh/helm/v3/pkg/action"
@@ -133,6 +132,7 @@ func (p *UpgradingApp) exec(ctx context.Context) error {
 	cfgURL := payload["cfgURL"]
 	repoURL := payload["repoURL"]
 	token := payload["token"]
+	marketSource := payload["marketSource"]
 	var chartPath string
 	admin, err := kubesphere.GetAdminUsername(ctx, kubeConfig)
 	if err != nil {
@@ -140,13 +140,13 @@ func (p *UpgradingApp) exec(ctx context.Context) error {
 		return err
 	}
 	if !userspace.IsSysApp(p.manager.Spec.AppName) {
-		appConfig, chartPath, err = config.GetAppConfig(ctx, p.manager.Spec.AppName, p.manager.Spec.AppOwner, cfgURL, repoURL, version, token, admin)
+		appConfig, chartPath, err = config.GetAppConfig(ctx, p.manager.Spec.AppName, p.manager.Spec.AppOwner, cfgURL, repoURL, version, token, admin, marketSource)
 		if err != nil {
 			klog.Errorf("get app config failed %v", err)
 			return err
 		}
 	} else {
-		chartPath, err = download.GetIndexAndDownloadChart(ctx, p.manager.Spec.AppName, repoURL, version, token)
+		chartPath, err = apputils.GetIndexAndDownloadChart(ctx, p.manager.Spec.AppName, repoURL, version, token, p.manager.Spec.AppOwner, marketSource)
 		if err != nil {
 			klog.Errorf("download chart failed %v", err)
 			return err

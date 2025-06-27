@@ -12,23 +12,36 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func PublishAsync(subject string, name string, state v1alpha1.ApplicationManagerState, status v1alpha1.ApplicationManagerStatus) {
-	now := time.Now()
-	data := map[string]interface{}{
-		"name":       name,
-		"state":      state,
-		"opID":       status.OpID,
-		"opType":     status.OpType,
-		"createTime": now,
-	}
-	go func() {
-		if err := publish(subject, data); err != nil {
-			klog.Errorf("async publish subject %s,data %v, failed %v", subject, data, err)
-		}
-	}()
+type Event struct {
+	EventID          string                    `json:"eventID"`
+	CreateTime       time.Time                 `json:"createTime"`
+	Name             string                    `json:"name"`
+	OpType           string                    `json:"opType,omitempty"`
+	OpID             string                    `json:"opID,omitempty"`
+	State            string                    `json:"state"`
+	Progress         string                    `json:"progress,omitempty"`
+	User             string                    `json:"user"`
+	EntranceStatuses []v1alpha1.EntranceStatus `json:"entranceStatuses,omitempty"`
 }
 
-func publishAsync(subject string, data interface{}) {
+func PublishAsync(owner, name, opType, opID, state, progress string, entranceStatuses []v1alpha1.EntranceStatus) {
+	subject := fmt.Sprintf("os.application.%s", owner)
+
+	now := time.Now()
+	data := Event{
+		EventID:    fmt.Sprintf("%s-%s-%d", owner, name, now.UnixMilli()),
+		CreateTime: now,
+		Name:       name,
+		OpType:     opType,
+		OpID:       opID,
+		State:      state,
+		Progress:   progress,
+		User:       owner,
+	}
+	if len(entranceStatuses) > 0 {
+		data.EntranceStatuses = entranceStatuses
+	}
+
 	go func() {
 		if err := publish(subject, data); err != nil {
 			klog.Errorf("async publish subject %s,data %v, failed %v", subject, data, err)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/utils"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -218,6 +219,7 @@ func (r *EntranceStatusManagerController) updateEntranceStatus(pod *corev1.Pod) 
 				appCopy.Status.EntranceStatuses[i].StatusTime = &now
 			}
 		}
+
 		patchApp := client.MergeFrom(&selectedApp)
 		err = r.Status().Patch(context.TODO(), appCopy, patchApp)
 		klog.Infof("updateEntrances ...:name: %v", appCopy.Name)
@@ -226,6 +228,14 @@ func (r *EntranceStatusManagerController) updateEntranceStatus(pod *corev1.Pod) 
 			klog.Errorf("failed to patch err=%v", err)
 			return err
 		}
+		var am v1alpha1.ApplicationManager
+		err = r.Get(context.TODO(), types.NamespacedName{Name: selectedApp.Name}, &am)
+		if err != nil {
+			klog.Errorf("failed to get am name=%s, err=%v", selectedApp.Name, err)
+			return err
+		}
+
+		utils.PublishAsync(appCopy.Spec.Owner, appCopy.Spec.Name, "", "", am.Status.State.String(), "", appCopy.Status.EntranceStatuses)
 	}
 	return nil
 }

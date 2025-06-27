@@ -2,7 +2,6 @@ package appstate
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
@@ -78,7 +77,7 @@ func (p *PendingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
 		klog.Error("update app manager status error, ", err, ", ", p.manager.Name)
 		return nil, err
 	}
-	utils.PublishAsync(fmt.Sprintf("os.application.%s", p.manager.Spec.AppOwner), p.manager.Spec.AppName, appsv1.Downloading, p.manager.Status)
+	utils.PublishAsync(p.manager.Spec.AppOwner, p.manager.Spec.AppName, string(p.manager.Status.OpType), p.manager.Status.OpID, appsv1.Downloading.String(), "", nil)
 
 	return nil, nil
 }

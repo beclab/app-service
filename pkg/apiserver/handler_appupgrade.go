@@ -47,6 +47,7 @@ func (h *Handler) releaseVersion(req *restful.Request, resp *restful.Response) {
 func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 	app := req.PathParameter(ParamAppName)
 	owner := req.Attribute(constants.UserContextAttribute).(string)
+	marketSource := req.HeaderParameter(constants.MarketSource)
 
 	request := &api.UpgradeRequest{}
 	err := req.ReadEntity(request)
@@ -84,7 +85,7 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	appConfig, _, err := config.GetAppConfig(req.Request.Context(), app, owner, request.CfgURL, request.RepoURL, request.Version, token, admin)
+	appConfig, _, err := config.GetAppConfig(req.Request.Context(), app, owner, request.CfgURL, request.RepoURL, request.Version, token, admin, marketSource)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -127,10 +128,11 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		State:   appv1alpha1.Upgrading,
 		Message: "waiting for upgrade",
 		Payload: map[string]string{
-			"cfgURL":  request.CfgURL,
-			"repoURL": request.RepoURL,
-			"version": request.Version,
-			"token":   token,
+			"cfgURL":       request.CfgURL,
+			"repoURL":      request.RepoURL,
+			"version":      request.Version,
+			"token":        token,
+			"marketSource": marketSource,
 		},
 		StatusTime: &now,
 		UpdateTime: &now,
@@ -141,7 +143,7 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
-	utils.PublishAsync(fmt.Sprintf("os.application.%s", am.Spec.AppOwner), am.Spec.AppName, appv1alpha1.Upgrading, am.Status)
+	utils.PublishAsync(am.Spec.AppOwner, am.Spec.AppName, string(am.Status.OpType), am.Status.OpID, appv1alpha1.Upgrading.String(), "", nil)
 
 	resp.WriteEntity(api.InstallationResponse{
 		Response: api.Response{Code: 200},

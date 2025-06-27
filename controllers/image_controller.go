@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"errors"
+	"os"
 	"sync"
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
@@ -24,6 +25,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
+
+var thisNode string
+
+func init() {
+	thisNode = os.Getenv("NODE_NAME")
+}
 
 // ImageManagerController represents a controller for managing the lifecycle of applicationmanager.
 type ImageManagerController struct {
@@ -124,7 +131,7 @@ func (r *ImageManagerController) reconcile(ctx context.Context, instance *appv1a
 	}
 	imageManager[instance.Name] = cancel
 	if cur.Status.State != appv1alpha1.Downloading.String() {
-		err = r.updateStatus(ctx, &cur, appv1alpha1.Downloading.String(), "downloading")
+		err = r.updateStatus(ctx, &cur, appv1alpha1.Downloading.String(), "start downloading")
 		if err != nil {
 			klog.Infof("Failed to update imagemanager status name=%v, err=%v", cur.Name, err)
 			return err
@@ -156,10 +163,11 @@ func (r *ImageManagerController) reconcile(ctx context.Context, instance *appv1a
 
 func (r *ImageManagerController) preEnqueueCheckForCreate(obj client.Object) bool {
 	im, _ := obj.(*appv1alpha1.ImageManager)
-	klog.Infof("enqueue check: %v", im.Status.State)
-	if im.Status.State == "failed" || im.Status.State == appv1alpha1.DownloadingCanceled.String() || im.Status.State == "completed" {
+	if im.Status.State == "failed" || im.Status.State == appv1alpha1.DownloadingCanceled.String() ||
+		im.Status.State == "completed" {
 		return false
 	}
+	klog.Infof("enqueue check: %v", im.Status.State)
 	return true
 }
 
@@ -214,10 +222,59 @@ func (r *ImageManagerController) updateStatus(ctx context.Context, im *appv1alph
 
 		now := metav1.Now()
 		imCopy := im.DeepCopy()
-		imCopy.Status.State = state
+		if state != "completed" {
+			imCopy.Status.State = state
+		}
 		imCopy.Status.Message = message
 		imCopy.Status.StatusTime = &now
 		imCopy.Status.UpdateTime = &now
+
+		//if imCopy.Status.NodeDownloadStatus == nil {
+		//	imCopy.Status.NodeDownloadStatus = make(map[string]string)
+		//}
+		//imCopy.Status.NodeDownloadStatus[thisNode] = state
+		if state == "completed" {
+			if _, ok := imCopy.Status.Conditions[thisNode]; !ok {
+				if imCopy.Status.Conditions == nil {
+					imCopy.Status.Conditions = make(map[string]map[string]map[string]string)
+				}
+				if imCopy.Status.Conditions[thisNode] == nil {
+					imCopy.Status.Conditions[thisNode] = make(map[string]map[string]string)
+				}
+				for _, ref := range imCopy.Spec.Refs {
+
+					imCopy.Status.Conditions[thisNode][ref.Name] = map[string]string{
+						"offset": "56782302",
+						"total":  "56782302",
+					}
+				}
+			}
+
+			checkAllCompleted := func() bool {
+				for _, node := range imCopy.Spec.Nodes {
+					conditionsNode, ok := imCopy.Status.Conditions[node]
+					if !ok {
+						return false
+					}
+					for _, ref := range imCopy.Spec.Refs {
+						if _, ok := conditionsNode[ref.Name]["offset"]; !ok {
+							return false
+						}
+						if _, ok := conditionsNode[ref.Name]["total"]; !ok {
+							return false
+						}
+						if conditionsNode[ref.Name]["offset"] != conditionsNode[ref.Name]["total"] {
+							return false
+						}
+					}
+				}
+				return true
+			}
+			if checkAllCompleted() {
+				imCopy.Status.State = state
+			}
+
+		}
 
 		err = r.Status().Patch(ctx, imCopy, client.MergeFrom(im))
 		if err != nil {

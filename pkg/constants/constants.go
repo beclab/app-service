@@ -30,15 +30,13 @@ const (
 	ApplicationClusterDep         = "applications.app.bytetrade.io/need_cluster_scoped_app"
 	UserContextAttribute          = "username"
 	KubeSphereClientAttribute     = "ksclient"
+	MarketSource                  = "X-Market-Source"
+	MarketUser                    = "X-Market-User"
 
 	InstanceIDLabel         = "workflows.argoproj.io/controller-instanceid"
 	WorkflowOwnerLabel      = "workflows.app.bytetrade.io/owner"
 	WorkflowNameLabel       = "workflows.app.bytetrade.io/name"
 	WorkflowTitleAnnotation = "workflows.app.bytetrade.io/title"
-
-	KubeSphereNamespace        = "kubesphere-system"
-	KubeSphereConfigName       = "kubesphere-config"
-	KubeSphereConfigMapDataKey = "kubesphere.yaml"
 
 	OwnerNamespacePrefix = "user-space"
 	OwnerNamespaceTempl  = "%s-%s"

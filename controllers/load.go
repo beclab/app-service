@@ -6,6 +6,7 @@ import (
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appstate"
+
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -58,13 +59,13 @@ func LoadStatefulApp(ctx context.Context, appmgr *ApplicationManagerController, 
 	retApp, serr := func() (appstate.StatefulApp, appstate.StateError) {
 		switch am.Status.State {
 		case appv1alpha1.Pending:
-			return appstate.NewPendingApp(ctx, appmgr, &am, time.Hour)
+			return appstate.NewPendingApp(ctx, appmgr, &am, 24*time.Hour)
 		case appv1alpha1.Downloading:
-			return appstate.NewDownloadingApp(appmgr, &am, 2*time.Hour)
+			return appstate.NewDownloadingApp(appmgr, &am, 24*time.Hour)
 		case appv1alpha1.Installing:
 			return appstate.NewInstallingApp(appmgr, &am, 30*time.Minute)
 		case appv1alpha1.Initializing:
-			return appstate.NewInitializingApp(appmgr, &am, 30*time.Minute)
+			return appstate.NewInitializingApp(appmgr, &am, 60*time.Minute)
 		case appv1alpha1.Running:
 			return appstate.NewRunningApp(ctx, appmgr, &am)
 		case appv1alpha1.Stopping:
@@ -72,7 +73,7 @@ func LoadStatefulApp(ctx context.Context, appmgr *ApplicationManagerController, 
 		case appv1alpha1.Upgrading:
 			return appstate.NewUpgradingApp(appmgr, &am, 30*time.Minute)
 		case appv1alpha1.Resuming:
-			return appstate.NewResumingApp(appmgr, &am, 30*time.Minute)
+			return appstate.NewResumingApp(appmgr, &am, 60*time.Minute)
 		case appv1alpha1.PendingCanceling:
 			return appstate.NewPendingCancelingApp(appmgr, &am)
 		case appv1alpha1.DownloadingCanceling:
@@ -96,12 +97,14 @@ func LoadStatefulApp(ctx context.Context, appmgr *ApplicationManagerController, 
 		case appv1alpha1.ResumeFailed:
 			return appstate.NewResumeFailedApp(appmgr, &am)
 
-		case appv1alpha1.DownloadFailed, appv1alpha1.InstallFailed,
+		case appv1alpha1.DownloadFailed,
 			appv1alpha1.PendingCanceled, appv1alpha1.DownloadingCanceled,
 			appv1alpha1.InstallingCanceled, appv1alpha1.InitializingCanceled,
 			appv1alpha1.UpgradingCanceled, appv1alpha1.ResumingCanceled,
 			appv1alpha1.Stopped:
 			return appstate.NewDoNothingApp(appmgr, &am)
+		case appv1alpha1.InstallFailed:
+			return appstate.NewInstallFailedApp(appmgr, &am)
 		case appv1alpha1.PendingCancelFailed:
 			return appstate.NewPendingCancelFailedApp(appmgr, &am)
 		case appv1alpha1.DownloadingCancelFailed:

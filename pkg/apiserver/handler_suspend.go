@@ -53,7 +53,7 @@ func (h *Handler) suspend(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
-	utils.PublishAsync(fmt.Sprintf("os.application.%s", a.Spec.AppOwner), a.Spec.AppName, v1alpha1.Stopping, a.Status)
+	utils.PublishAsync(a.Spec.AppOwner, a.Spec.AppName, string(a.Status.OpType), a.Status.OpID, v1alpha1.Stopping.String(), "", nil)
 
 	resp.WriteEntity(api.InstallationResponse{
 		Response: api.Response{Code: 200},
@@ -95,7 +95,7 @@ func (h *Handler) resume(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
-	utils.PublishAsync(fmt.Sprintf("os.application.%s", a.Spec.AppOwner), a.Spec.AppName, v1alpha1.Resuming, a.Status)
+	utils.PublishAsync(a.Spec.AppOwner, a.Spec.AppName, string(a.Status.OpType), a.Status.OpID, v1alpha1.Resuming.String(), "", nil)
 
 	resp.WriteEntity(api.InstallationResponse{
 		Response: api.Response{Code: 200},

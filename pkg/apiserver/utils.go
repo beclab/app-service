@@ -23,8 +23,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/tapr"
 	"bytetrade.io/web3os/app-service/pkg/upgrade"
 	"bytetrade.io/web3os/app-service/pkg/utils"
-	"bytetrade.io/web3os/app-service/pkg/utils/config"
-	"bytetrade.io/web3os/app-service/pkg/utils/download"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 	"bytetrade.io/web3os/app-service/pkg/workflowinstaller"
 
 	"github.com/emicklei/go-restful/v3"
@@ -412,13 +411,13 @@ func getRequestResources() (map[string]resources, error) {
 	return allocatedResources, nil
 }
 
-func getWorkflowConfigFromRepo(ctx context.Context, owner, app, repoURL, version, token string) (*workflowinstaller.WorkflowConfig, error) {
-	chartPath, err := download.GetIndexAndDownloadChart(ctx, app, repoURL, version, token)
+func getWorkflowConfigFromRepo(ctx context.Context, owner, app, repoURL, version, token, marketSource string) (*workflowinstaller.WorkflowConfig, error) {
+	chartPath, err := apputils.GetIndexAndDownloadChart(ctx, app, repoURL, version, token, owner, marketSource)
 	if err != nil {
 		return nil, err
 	}
 
-	f, err := os.Open(chartPath + "/" + config.AppCfgFileName)
+	f, err := os.Open(chartPath + "/" + apputils.AppCfgFileName)
 	if err != nil {
 		return nil, err
 	}
@@ -445,8 +444,8 @@ func getWorkflowConfigFromRepo(ctx context.Context, owner, app, repoURL, version
 		Cfg:          &cfg}, nil
 }
 
-func getMiddlewareConfigFromRepo(ctx context.Context, owner, app, repoURL, version, token string) (*middlewareinstaller.MiddlewareConfig, error) {
-	chartPath, err := download.GetIndexAndDownloadChart(ctx, app, repoURL, version, token)
+func getMiddlewareConfigFromRepo(ctx context.Context, owner, app, repoURL, version, token, marketSource string) (*middlewareinstaller.MiddlewareConfig, error) {
+	chartPath, err := apputils.GetIndexAndDownloadChart(ctx, app, repoURL, version, token, owner, marketSource)
 	if err != nil {
 		return nil, err
 	}

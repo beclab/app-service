@@ -2,7 +2,6 @@ package appstate
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -70,7 +69,7 @@ func (b *baseStatefulApp) updateStatus(ctx context.Context, am *appsv1.Applicati
 		klog.Errorf("patch appmgr's  %s status failed %v", am.Name, err)
 		return err
 	}
-	utils.PublishAsync(fmt.Sprintf("os.application.%s", am.Spec.AppOwner), am.Spec.AppName, state, am.Status)
+	utils.PublishAsync(b.manager.Spec.AppOwner, b.manager.Spec.AppName, string(b.manager.Status.OpType), b.manager.Status.OpID, state.String(), "", nil)
 
 	return nil
 }
