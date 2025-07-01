@@ -663,16 +663,16 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 	//	return
 	//}
 	genEntranceURL := func(entrances []v1alpha1.Entrance, owner, appName string) ([]v1alpha1.Entrance, error) {
-		zone, err := kubesphere.GetUserZone(req.Request.Context(), h.kubeConfig, owner)
-		if err != nil {
-			return nil, err
-		}
-		appid := apputils.GetAppID(appName)
-		for i := range entrances {
-			if len(entrances) == 1 {
-				entrances[i].URL = fmt.Sprintf("%s.%s", appid, zone)
-			} else {
-				entrances[i].URL = fmt.Sprintf("%s%d.%s", appid, i, zone)
+		zone, _ := kubesphere.GetUserZone(req.Request.Context(), h.kubeConfig, owner)
+
+		if len(zone) > 0 {
+			appid := apputils.GetAppID(appName)
+			for i := range entrances {
+				if len(entrances) == 1 {
+					entrances[i].URL = fmt.Sprintf("%s.%s", appid, zone)
+				} else {
+					entrances[i].URL = fmt.Sprintf("%s%d.%s", appid, i, zone)
+				}
 			}
 		}
 		return entrances, nil
