@@ -102,7 +102,7 @@ func setExposePorts(ctx context.Context, appConfig *appcfg.ApplicationConfig) er
 }
 
 func genPort(protos []string) (int32, error) {
-	exposePort := int32(rand.IntnRange(33333, 36789))
+	exposePort := int32(rand.IntnRange(46800, 50000))
 	for _, proto := range protos {
 		if !utils.IsPortAvailable(proto, int(exposePort)) {
 			return 0, fmt.Errorf("failed to allocate an available port after 5 attempts")
