@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/utils/registry"
 	"context"
 	"encoding/json"
 	"errors"
@@ -34,12 +35,7 @@ import (
 
 var (
 	errNilAdmissionRequest = fmt.Errorf("nil admission request")
-	mirrorsEndpoint        []string
 )
-
-func init() {
-	mirrorsEndpoint = utils.GetMirrorsEndpoint()
-}
 
 const (
 	deployment              = "Deployment"
@@ -506,7 +502,7 @@ func (h *Handler) cronWorkflowMutate(ctx context.Context, req *admissionv1.Admis
 		if err != nil {
 			continue
 		}
-		newImage, _ := utils.ReplacedImageRef(mirrorsEndpoint, ref.String(), false)
+		newImage, _ := utils.ReplacedImageRef(registry.GetMirrors(), ref.String(), false)
 		wf.Spec.WorkflowSpec.Templates[i].Container.Image = newImage
 	}
 	original := req.Object.Raw

@@ -1,6 +1,7 @@
 package images
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/utils/registry"
 	"context"
 	"errors"
 	"fmt"
@@ -9,7 +10,6 @@ import (
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/utils"
-
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/cmd/ctr/commands"
 	"github.com/containerd/containerd/cmd/ctr/commands/content"
@@ -25,13 +25,9 @@ import (
 
 const maxRetries = 6
 
-var sock = "/var/run/containerd/containerd.sock"
-var MirrorsEndpoint []string
-
-func init() {
-	MirrorsEndpoint = utils.GetMirrorsEndpoint()
-	klog.Infof("mirrorsEndPoint: %v", MirrorsEndpoint)
-}
+var (
+	sock = "/var/run/containerd/containerd.sock"
+)
 
 type PullOptions struct {
 	AppName      string
@@ -72,7 +68,8 @@ func (is *imageService) PullImage(ctx context.Context, ref appv1alpha1.Ref, opts
 	}
 	ref.Name = originNamed.String()
 	// replaced image ref
-	replacedRef, plainHTTP := utils.ReplacedImageRef(MirrorsEndpoint, originNamed.String(), false)
+	currentMirrors := registry.GetMirrors()
+	replacedRef, plainHTTP := utils.ReplacedImageRef(currentMirrors, originNamed.String(), false)
 	config := newFetchConfig(plainHTTP)
 
 	ongoing := newJobs(replacedRef, originNamed.String())
