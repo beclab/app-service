@@ -164,7 +164,6 @@ func getAppConfigFromConfigurationFile(app, chart, owner string) (*ApplicationCo
 			GPU:    gpu,
 		},
 		Policies:             polices,
-		AnalyticsEnabled:     cfg.Options.Analytics.Enabled,
 		ResetCookieEnabled:   cfg.Options.ResetCookie.Enabled,
 		Dependencies:         cfg.Options.Dependencies,
 		Conflicts:            cfg.Options.Conflicts,

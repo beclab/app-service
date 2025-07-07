@@ -85,10 +85,6 @@ type Policy struct {
 	Duration     string `yaml:"validDuration" json:"validDuration"`
 }
 
-type Analytics struct {
-	Enabled bool `yaml:"enabled" json:"enabled"`
-}
-
 type Dependency struct {
 	Name    string `yaml:"name" json:"name"`
 	Version string `yaml:"version" json:"version"`
@@ -107,7 +103,6 @@ type Conflict struct {
 type Options struct {
 	MobileSupported      bool                     `yaml:"mobileSupported" json:"mobileSupported"`
 	Policies             []Policy                 `yaml:"policies" json:"policies"`
-	Analytics            Analytics                `yaml:"analytics" json:"analytics"`
 	ResetCookie          ResetCookie              `yaml:"resetCookie" json:"resetCookie"`
 	Dependencies         []Dependency             `yaml:"dependencies" json:"dependencies"`
 	Conflicts            []Conflict               `yaml:"conflicts" json:"conflicts"`
