@@ -214,7 +214,6 @@ func toApplicationConfig(app, chart string, cfg *appcfg.AppConfiguration) (*appc
 		},
 		Policies:             policies,
 		Middleware:           cfg.Middleware,
-		AnalyticsEnabled:     cfg.Options.Analytics.Enabled,
 		ResetCookieEnabled:   cfg.Options.ResetCookie.Enabled,
 		Dependencies:         cfg.Options.Dependencies,
 		Conflicts:            cfg.Options.Conflicts,

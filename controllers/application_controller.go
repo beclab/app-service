@@ -544,12 +544,6 @@ func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, app
 	versions := getAppVersion(deployment)
 	settings["version"] = versions[appName]
 
-	settings["analyticsEnabled"] = "false"
-	analyticsEnabledFromAnnotation, ok := deployment.GetAnnotations()[constants.ApplicationAnalytics]
-	if ok && analyticsEnabledFromAnnotation == "true" {
-		settings["analyticsEnabled"] = "true"
-	}
-
 	settings["clusterScoped"] = "false"
 	settings["requiredGPU"] = deployment.GetAnnotations()[constants.ApplicationRequiredGPU]
 	//clusterScoped, ok := deployment.GetAnnotations()[constants.ApplicationClusterScoped]
@@ -567,10 +561,6 @@ func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, app
 				klog.Errorf("Failed to encode json err=%v", err)
 			} else if len(policyStr) > 0 {
 				settings[applicationSettingsPolicyKey] = policyStr
-			}
-
-			if appCfg.AnalyticsEnabled {
-				settings["analyticsEnabled"] = "true"
 			}
 
 			// set cluster-scoped info to settings

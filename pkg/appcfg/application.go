@@ -68,7 +68,6 @@ type ApplicationConfig struct {
 	Requirement          AppRequirement
 	Policies             []AppPolicy
 	Middleware           *tapr.Middleware
-	AnalyticsEnabled     bool
 	ResetCookieEnabled   bool
 	Dependencies         []Dependency
 	Conflicts            []Conflict
