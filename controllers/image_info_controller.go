@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/utils/registry"
 	"context"
 	"errors"
 	"fmt"
@@ -9,7 +10,6 @@ import (
 	"time"
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
-	"bytetrade.io/web3os/app-service/pkg/images"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 	imagetypes "github.com/containers/image/v5/types"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -274,7 +274,7 @@ func (r *AppImageInfoController) GetImageInfo(ctx context.Context, refs []string
 	imageInfos := make([]appv1alpha1.ImageInfo, 0)
 	for _, originRef := range refs {
 		name, _ := refdocker.ParseDockerRef(originRef)
-		replacedRef, _ := utils.ReplacedImageRef(images.MirrorsEndpoint, name.String(), false)
+		replacedRef, _ := utils.ReplacedImageRef(registry.GetMirrors(), name.String(), false)
 
 		manifest, err := r.GetManifest(ctx, replacedRef)
 		if err != nil {
