@@ -64,7 +64,7 @@ func (p *InstallFailedApp) Exec(ctx context.Context) (StatefulInProgressApp, err
 		if err == nil {
 			e := p.client.Delete(ctx, &ns)
 			if e != nil {
-				klog.Errorf("failed to delete ns %s, err=$v", p.manager.Spec.AppNamespace, e)
+				klog.Errorf("failed to delete ns %s, err=%v", p.manager.Spec.AppNamespace, e)
 				return nil, e
 			}
 		}

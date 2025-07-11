@@ -1,11 +1,13 @@
 package apiserver
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/users"
 	"bytetrade.io/web3os/app-service/pkg/utils/registry"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	iamv1alpha2 "github.com/beclab/api/iam/v1alpha2"
 	"strings"
 
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
@@ -221,7 +223,7 @@ func (h *Handler) gpuLimitInject(req *restful.Request, resp *restful.Response) {
 	}
 	err := resp.WriteAsJson(&admissionResp)
 	if err != nil {
-		klog.Error("Failed to write response[gpu-limit inject] admin review in namespace=%s err=%v", requestForNamespace, err)
+		klog.Errorf("Failed to write response[gpu-limit inject] admin review in namespace=%s err=%v", requestForNamespace, err)
 		return
 	}
 	klog.Infof("Done[gpu-limit inject] with uuid=%s in namespace=%s", proxyUUID, requestForNamespace)
@@ -673,7 +675,7 @@ func (h *Handler) appLabelInject(req *restful.Request, resp *restful.Response) {
 	}
 	err := resp.WriteAsJson(&admissionResp)
 	if err != nil {
-		klog.Error("Failed to write response[app-label inject] admin review in namespace=%s err=%v", requestForNamespace, err)
+		klog.Errorf("Failed to write response[app-label inject] admin review in namespace=%s err=%v", requestForNamespace, err)
 		return
 	}
 	klog.Infof("Done[app-label inject] with uuid=%s in namespace=%s", proxyUUID, requestForNamespace)
@@ -731,7 +733,7 @@ func makePatches(req *admissionv1.AdmissionRequest, appCfg *appcfg.ApplicationCo
 	case "Deployment":
 		var deploy *appsv1.Deployment
 		if err := json.Unmarshal(req.Object.Raw, &deploy); err != nil {
-			klog.Errorf("Error unmarshaling request with UUID %s in namespace %s, %v", req.Namespace, err)
+			klog.Errorf("Error unmarshal request in namespace %s, %v", req.Namespace, err)
 			return []byte{}, err
 		}
 		tpl = &deploy.Spec.Template
@@ -753,7 +755,7 @@ func makePatches(req *admissionv1.AdmissionRequest, appCfg *appcfg.ApplicationCo
 	case "StatefulSet":
 		var sts *appsv1.StatefulSet
 		if err := json.Unmarshal(req.Object.Raw, &sts); err != nil {
-			klog.Errorf("Error unmarshaling request with UUID %s in namespace %s, %v", req.Namespace, err)
+			klog.Errorf("Error unmarshaling request in namespace %s, %v", req.Namespace, err)
 			return []byte{}, err
 		}
 		tpl = &sts.Spec.Template
@@ -774,4 +776,123 @@ func makePatches(req *admissionv1.AdmissionRequest, appCfg *appcfg.ApplicationCo
 		}
 	}
 	return patchBytes, nil
+}
+
+func (h *Handler) userValidate(req *restful.Request, resp *restful.Response) {
+	klog.Infof("Received user validate webhook request: Method=%v, URL=%v", req.Request.Method, req.Request.URL)
+	admissionReqBody, ok := h.sidecarWebhook.GetAdmissionRequestBody(req, resp)
+	if !ok {
+		return
+	}
+	var admissionReq, admissionResp admissionv1.AdmissionReview
+	proxyUUID := uuid.New()
+	if _, _, err := webhook.Deserializer.Decode(admissionReqBody, nil, &admissionReq); err != nil {
+		klog.Errorf("Failed to decode admission request body err=%v", err)
+		admissionResp.Response = h.sidecarWebhook.AdmissionError("", err)
+	} else {
+		admissionResp.Response = h.validateUser(req.Request.Context(), admissionReq.Request, proxyUUID)
+	}
+	admissionResp.TypeMeta = admissionReq.TypeMeta
+	admissionResp.Kind = admissionReq.Kind
+
+	requestForNamespace := "unknown"
+	if admissionReq.Request != nil {
+		requestForNamespace = admissionReq.Request.Namespace
+	}
+	err := resp.WriteAsJson(&admissionResp)
+	if err != nil {
+		klog.Errorf("Failed to write response validate review[user] in namespace=%s err=%v", requestForNamespace, err)
+		return
+	}
+	klog.Infof("Done responding to admission[validate user] request with uuid=%s namespace=%s", proxyUUID, requestForNamespace)
+}
+
+func (h *Handler) validateUser(ctx context.Context, req *admissionv1.AdmissionRequest, proxyUUID uuid.UUID) *admissionv1.AdmissionResponse {
+	if req == nil {
+		klog.Error("Failed to get admission request err=admission request is nil")
+		return h.sidecarWebhook.AdmissionError("", errNilAdmissionRequest)
+	}
+	klog.Infof("Enter validate user logic namespace=%s name=%s, kind=%s", req.Namespace, req.Name, req.Kind.Kind)
+	resp := &admissionv1.AdmissionResponse{
+		Allowed: true,
+		UID:     req.UID,
+	}
+
+	// Decode the User spec from the request.
+	var user iamv1alpha2.User
+	raw := req.Object.Raw
+	err := json.Unmarshal(raw, &user)
+	if err != nil {
+		klog.Errorf("Failed to unmarshal request object raw to user with uuid=%s namespace=%s", proxyUUID, req.Namespace)
+		return h.sidecarWebhook.AdmissionError(req.UID, err)
+	}
+
+	// Check if user already exists
+	existingUsers := &iamv1alpha2.UserList{}
+	err = h.ctrlClient.List(ctx, existingUsers)
+	if err != nil {
+		klog.Errorf("Failed to list existing users: %v", err)
+		return h.sidecarWebhook.AdmissionError(req.UID, err)
+	}
+
+	for _, existingUser := range existingUsers.Items {
+		if existingUser.Name == user.Name {
+			resp.Allowed = false
+			resp.Result = &metav1.Status{
+				Message: fmt.Sprintf("User with name '%s' already exists", user.Name),
+			}
+			return resp
+		}
+	}
+	if v, _ := user.Annotations[users.UserAnnotationIsEphemeral]; v == "false" || v == "" {
+		return resp
+	}
+
+	if len(user.Spec.InitialPassword) < 8 {
+		resp.Allowed = false
+		resp.Result = &metav1.Status{
+			Message: fmt.Sprintf("invalid initial password lenth must greater than 8 char"),
+		}
+		return resp
+	}
+
+	ownerRole := user.Annotations[users.UserAnnotationOwnerRole]
+
+	creator := user.Annotations[users.AnnotationUserCreator]
+	isValidCreator := false
+	for _, existingUser := range existingUsers.Items {
+		if existingUser.Name == creator && ownerRole != "normal" {
+			isValidCreator = true
+		}
+	}
+	if !isValidCreator {
+		resp.Allowed = false
+		resp.Result = &metav1.Status{
+			Message: fmt.Sprintf("invalid creator %s", creator),
+		}
+		return resp
+	}
+
+	if ownerRole != "owner" && ownerRole != "admin" && ownerRole != "normal" {
+		resp.Allowed = false
+		resp.Result = &metav1.Status{
+			Message: fmt.Sprintf("invalid owner role: %s", ownerRole),
+		}
+		return resp
+	}
+	err = users.ValidateResourceLimits(&user)
+	if err != nil {
+		resp.Allowed = false
+		resp.Result = &metav1.Status{
+			Message: fmt.Sprintf("invalid cpu or memory limit: %s", err),
+		}
+		return resp
+	}
+
+	klog.Infof("User validation passed for user=%s with UID=%s", user.Name, user.UID)
+	return resp
+}
+
+func isInPrivateNamespace(namespace string) bool {
+	return strings.HasPrefix(namespace, "user-space-") || strings.HasPrefix(namespace, "user-system-")
 }

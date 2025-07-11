@@ -165,7 +165,7 @@ func suspendOrResumeApp(ctx context.Context, cli client.Client, am *appv1alpha1.
 			}
 			err := cli.Update(ctx, w.(client.Object))
 			if err != nil {
-				klog.Error("Failed to scale workload name=%s err=%v", workloadName, err)
+				klog.Errorf("Failed to scale workload name=%s err=%v", workloadName, err)
 				return err
 			}
 

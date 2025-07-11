@@ -7,19 +7,23 @@ import (
 	"time"
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
-	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/helm"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace/templates"
 	"bytetrade.io/web3os/app-service/pkg/utils"
+	iamv1alpha2 "github.com/beclab/api/iam/v1alpha2"
 
+	"helm.sh/helm/v3/pkg/storage/driver"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -28,23 +32,24 @@ const (
 )
 
 type Deleter struct {
-	clientSet *clientset.ClientSet // k8s session client
-	k8sConfig *rest.Config         // k8s service account config
-	user      string
-	helmCfg   helm.Config
+	client.Client              // k8s session client
+	k8sConfig     *rest.Config // k8s service account config
+	user          string
+	helmCfg       helm.Config
 }
 
-func NewDeleter(client *clientset.ClientSet, config *rest.Config, user string) *Deleter {
+func NewDeleter(client client.Client, config *rest.Config, user string) *Deleter {
 	return &Deleter{
-		clientSet: client,
+		Client:    client,
 		k8sConfig: config,
 		user:      user,
 	}
 }
 
-func (d *Deleter) DeleteUserApps(ctx context.Context) error {
+func (d *Deleter) DeleteUserResource(ctx context.Context) error {
 	err := d.uninstallUserApps(ctx)
 	if err != nil {
+		klog.Infof("failed to uninstall user apps %v", err)
 		return err
 	}
 
@@ -63,55 +68,66 @@ func (d *Deleter) DeleteUserApps(ctx context.Context) error {
 		return err
 	}
 
-	launcherReleaseName := helm.ReleaseName("launcher", d.user)
-
-	err = d.clearLauncher(ctx, launcherReleaseName, userspaceName)
+	err = d.deleteNamespace(ctx)
 	if err != nil {
+		klog.Errorf("failed to delete namespace %v", err)
 		return err
 	}
-
-	userspaceRoleBinding := templates.NewUserspaceRoleBinding(d.user, userspaceName, USER_SPACE_ROLE)
-	return d.deleteNamespace(ctx, userspaceName, userspaceRoleBinding.Name)
+	var globalRBD iamv1alpha2.GlobalRoleBinding
+	err = d.Get(ctx, types.NamespacedName{Name: d.user}, &globalRBD)
+	if err != nil && !apierrors.IsNotFound(err) {
+		klog.Errorf("failed to get globalrolebinding name: %s %v", d.user, err)
+		return err
+	}
+	if err == nil {
+		e := d.Delete(ctx, &globalRBD)
+		if e != nil && !apierrors.IsNotFound(e) {
+			klog.Errorf("failed to delete globalrolebinding name: %s %v", d.user, err)
+			return e
+		}
+	}
+	return nil
 }
 
-func (d *Deleter) deleteNamespace(ctx context.Context, userspace, userspaceRoleBinding string) error {
-	// err := d.clientSet.KubeClient.Kubernetes().
-	// 	CoreV1().Namespaces().Delete(ctx, userspace, metav1.DeleteOptions{})
-	// if err != nil {
-	// 	return err
-	// }
-
-	// err = d.clientSet.KubeClient.Kubernetes().
-	// 	RbacV1().RoleBindings(userspace).Delete(ctx, userspaceRoleBinding, metav1.DeleteOptions{})
-	// if err != nil {
-	// 	return err
-	// }
-
-	usersystem := templates.NewUserSystem(d.user)
-	err := d.clientSet.KubeClient.Kubernetes().
-		CoreV1().Namespaces().Delete(ctx, usersystem.Name, metav1.DeleteOptions{})
-	if err != nil {
+func (d *Deleter) deleteNamespace(ctx context.Context) error {
+	userspaceNs := fmt.Sprintf("user-space-%s", d.user)
+	var ns corev1.Namespace
+	err := d.Client.Get(ctx, types.NamespacedName{Name: userspaceNs}, &ns)
+	if err != nil && !apierrors.IsNotFound(err) {
+		klog.Errorf("failed to get user-space namespace: %s, %v", userspaceNs, err)
 		return err
 	}
+	if err == nil {
+		err = d.Client.Delete(ctx, &ns)
+		if err != nil && !apierrors.IsNotFound(err) {
+			klog.Errorf("failed to delete user-space namespace: %s, %v", userspaceNs, err)
+			return err
+		}
+	}
 
-	usersystemRoleBinding := templates.NewUserspaceRoleBinding(d.user, usersystem.Name, USER_SPACE_ROLE)
-	err = d.clientSet.KubeClient.Kubernetes().
-		RbacV1().RoleBindings(usersystem.Name).Delete(ctx, usersystemRoleBinding.Name, metav1.DeleteOptions{})
-	if err != nil {
+	userSystem := templates.NewUserSystem(d.user)
+
+	err = d.Client.Get(ctx, types.NamespacedName{Name: userSystem.Name}, &ns)
+	if err != nil && !apierrors.IsNotFound(err) {
+		klog.Errorf("failed to get user-system namespace: %s, %v", userSystem.Name, err)
 		return err
 	}
-	return err
+	if err == nil {
+		err = d.Client.Delete(ctx, &ns)
+		if err != nil && !apierrors.IsNotFound(err) {
+			klog.Errorf("failed to delete user-system namespace: %s, %v", userSystem.Name, err)
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (d *Deleter) clearLauncher(ctx context.Context, launchername, userspace string) error {
-	// get pvcs that need clear from bfl sts
-	// cleanPvc, err := d.findPVC(ctx, userspace)
-	// if err != nil {
-	// 	return err
-	// }
 
 	err := helm.UninstallCharts(d.helmCfg.ActionCfg, launchername)
-	if err != nil {
+	if err != nil && !errors.Is(err, driver.ErrReleaseNotFound) {
+		klog.Errorf("failed to uninstall %s", launchername)
 		return err
 	}
 
@@ -119,30 +135,14 @@ func (d *Deleter) clearLauncher(ctx context.Context, launchername, userspace str
 		return err
 	}
 
-	// clear pvc
-	// if cleanPvc != nil {
-	// 	var errs []error
-	// 	errs = append(errs,
-	// 		d.clientSet.KubeClient.Kubernetes().CoreV1().PersistentVolumeClaims(userspace).
-	// 			Delete(ctx, cleanPvc.userspacePvc, metav1.DeleteOptions{}))
-	// 	errs = append(errs,
-	// 		d.clientSet.KubeClient.Kubernetes().CoreV1().PersistentVolumeClaims(userspace).
-	// 			Delete(ctx, cleanPvc.appdataPvc, metav1.DeleteOptions{}))
-	// 	errs = append(errs,
-	// 		d.clientSet.KubeClient.Kubernetes().CoreV1().PersistentVolumeClaims(userspace).
-	// 			Delete(ctx, cleanPvc.dbdataPvc, metav1.DeleteOptions{}))
-
-	// 	if len(errs) > 0 {
-	// 		return utilerrors.NewAggregate(errs)
-	// 	}
-	// }
 	return nil
 }
 
 func (d *Deleter) findPVC(ctx context.Context, userspace string) (
 	res *struct{ userspacePvc, userspacePv, appCachePvc, appCacheHostPath, dbdataPvc, dbdataHostPath string },
 	err error) {
-	sts, err := d.clientSet.KubeClient.Kubernetes().AppsV1().StatefulSets(userspace).Get(ctx, "bfl", metav1.GetOptions{})
+	var sts appsv1.StatefulSet
+	err = d.Get(ctx, types.NamespacedName{Name: "bfl", Namespace: userspace}, &sts)
 	if err != nil {
 		klog.Errorf("Failed to get sts bfl userspace=%s err=%v", userspace, err)
 		return nil, err
@@ -184,13 +184,14 @@ func (d *Deleter) findPVC(ctx context.Context, userspace string) (
 }
 
 func (d *Deleter) uninstallUserApps(ctx context.Context) error {
-	applist, err := d.clientSet.AppClient.AppV1alpha1().Applications().List(ctx, metav1.ListOptions{})
+	var appList appv1alpha1.ApplicationList
+	err := d.List(ctx, &appList)
 	if err != nil {
 		return err
 	}
 
 	// filter by application's owner
-	for _, a := range applist.Items {
+	for _, a := range appList.Items {
 		if a.Spec.Owner == d.user && !d.isSysApps(&a) {
 			actionCfg, _, err := helm.InitConfig(d.k8sConfig, a.Spec.Namespace)
 			if err != nil {
@@ -199,17 +200,27 @@ func (d *Deleter) uninstallUserApps(ctx context.Context) error {
 			}
 
 			err = helm.UninstallCharts(actionCfg, a.Spec.Name)
-			if err != nil {
+			if err != nil && !errors.Is(err, driver.ErrReleaseNotFound) {
 				klog.Errorf("Failed to delete user's application owner=%s, err=%v", a.Spec.Owner, err)
 			}
 			name := fmt.Sprintf("%s-%s-%s", a.Spec.Name, a.Spec.Owner, a.Spec.Name)
-			err = d.clientSet.AppClient.AppV1alpha1().ApplicationManagers().Delete(ctx, name, metav1.DeleteOptions{})
-			if err != nil && !apierrors.IsNotFound(err) {
-				klog.Errorf("Failed to delete user's applicationmanager name=%s owner=%s err=%v", name, a.Spec.Owner, err)
+			var am appv1alpha1.ApplicationManager
+			err = d.Get(ctx, types.NamespacedName{Name: name}, &am)
+
+			if err == nil {
+				err = d.Delete(ctx, &am)
+				if err != nil && !apierrors.IsNotFound(err) {
+					klog.Errorf("Failed to delete user's applicationmanager name=%s owner=%s err=%v", name, a.Spec.Owner, err)
+				}
 			}
-			err = d.clientSet.KubeClient.Kubernetes().CoreV1().Namespaces().Delete(ctx, a.Spec.Namespace, metav1.DeleteOptions{})
-			if err != nil && !apierrors.IsNotFound(err) {
-				klog.Errorf("Failed to delete user's namespace=%s err=%v", a.Spec.Namespace, err)
+
+			var ns corev1.Namespace
+			err = d.Get(ctx, types.NamespacedName{Name: a.Spec.Namespace}, &ns)
+			if err == nil {
+				err = d.Delete(ctx, &ns)
+				if err != nil && !apierrors.IsNotFound(err) {
+					klog.Errorf("Failed to delete user's namespace=%s err=%v", a.Spec.Namespace, err)
+				}
 			}
 		}
 	}
@@ -223,31 +234,40 @@ func (d *Deleter) uninstallSysApps(ctx context.Context) error {
 		return err
 	}
 
-	var errsCount int
+	//var errsCount int
 
 	for _, appname := range sysApps {
 		appReleaseName := helm.ReleaseName(appname, d.user)
 		err = helm.UninstallCharts(d.helmCfg.ActionCfg, appReleaseName)
-		if err != nil {
+		if err != nil && !errors.Is(err, driver.ErrReleaseNotFound) {
 			klog.Errorf("Failed to uninstall chart user=%s appName=%s err=%v", d.user, appname, err)
-			errsCount++
+			return fmt.Errorf("failed to uninstall chart user=%s app=%s err=%w", d.user, appname, err)
 		}
 
 	}
-	appmgrs, err := d.clientSet.AppClient.AppV1alpha1().ApplicationManagers().List(ctx, metav1.ListOptions{})
+	var appmgrs appv1alpha1.ApplicationManagerList
+
+	err = d.List(ctx, &appmgrs)
 	if err != nil {
 		return err
 	}
+
 	for _, am := range appmgrs.Items {
 		if am.Spec.AppOwner == d.user {
-			err = d.clientSet.AppClient.AppV1alpha1().ApplicationManagers().Delete(ctx, am.Name, metav1.DeleteOptions{})
+			var appmgr appv1alpha1.ApplicationManager
+			err = d.Get(ctx, types.NamespacedName{Name: am.Name}, &appmgr)
 			if err != nil && !apierrors.IsNotFound(err) {
-				klog.Errorf("Failed to delete user's sys applicationmanager user=%s err=%v", d.user, err)
+				klog.Errorf("failed to get appmgr %s %v", am.Name, err)
+				return err
+			}
+			if err == nil {
+				e := d.Delete(ctx, &appmgr)
+				if e != nil && !apierrors.IsNotFound(err) {
+					klog.Errorf("Failed to delete user's sys applicationmanager user=%s err=%v", d.user, err)
+					return e
+				}
 			}
 		}
-	}
-	if errsCount == len(sysApps) {
-		return errors.New("uninstall all sys apps error")
 	}
 	return nil
 }
@@ -259,9 +279,10 @@ func (d *Deleter) checkLauncher(ctx context.Context, userspace string, runningOr
 	)
 
 	err := wait.PollImmediate(time.Second, 5*time.Minute, func() (bool, error) {
-		pods, err := d.clientSet.KubeClient.Kubernetes().CoreV1().Pods(userspace).
-			List(ctx, metav1.ListOptions{LabelSelector: "tier=bfl"})
+		var pods corev1.PodList
+		selector, _ := labels.Parse("tier=bfl")
 
+		err := d.List(ctx, &pods, &client.ListOptions{LabelSelector: selector, Namespace: userspace})
 		if err != nil {
 			return true, err
 		}
@@ -276,7 +297,7 @@ func (d *Deleter) checkLauncher(ctx context.Context, userspace string, runningOr
 		}
 
 		if observations >= 2 {
-			if pods != nil && len(pods.Items) > 0 {
+			if len(pods.Items) > 0 {
 				pod := pods.Items[0]
 				// check bfl is running, and return the bfl
 				if pod.Status.Phase == corev1.PodRunning && runningOrExists == checkLauncherRunning {

@@ -1,6 +1,11 @@
 package controllers
 
-const applicationSettingsPolicyKey = "policy"
+const (
+	applicationSettingsPolicyKey = "policy"
+	namespaceFinalizer           = "finalizers.bytetrade.io/namespaces"
+	userFinalizer                = "finalizers.bytetrade.io/users"
+	creator                      = "bytetrade.io/creator"
+)
 
 type applicationSettingsSubPolicy struct {
 	URI      string `json:"uri"`

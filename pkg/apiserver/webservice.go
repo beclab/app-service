@@ -95,29 +95,54 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Returns(http.StatusOK, "Success to get the application in registry", nil))
 
 	// handler_user
-	ws.Route(ws.POST("/users/apps/create/{"+ParamUserName+"}").
-		To(tryAppInstall(handler.userAppsCreate)).
+	ws.Route(ws.POST("/users").
+		To(tryAppInstall(handler.createUser)).
 		Doc("create new user's launcher and apps").
 		Param(ws.PathParameter(ParamAppName, "the name of the user")).
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to create", nil))
 
-	ws.Route(ws.POST("/users/apps/delete/{"+ParamUserName+"}").
-		To(handler.userAppsDelete).
+	ws.Route(ws.DELETE("/users/{"+ParamUserName+"}").
+		To(handler.deleteUser).
 		Doc("delete a user's launcher and apps").
-		Param(ws.PathParameter(ParamAppName, "the name of the user")).
+		Param(ws.PathParameter(ParamUserName, "the name of the user")).
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to delete", nil))
 
-	ws.Route(ws.GET("/users/apps/{"+ParamUserName+"}").
-		To(handler.userAppsStatus).
+	ws.Route(ws.GET("/users/{"+ParamUserName+"}/status").
+		To(handler.userStatus).
 		Doc("get a user's launcher and apps creating or deleting status").
-		Param(ws.PathParameter(ParamAppName, "the name of the user")).
+		Param(ws.PathParameter(ParamUserName, "the name of the user")).
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get", nil))
+
+	ws.Route(ws.GET("/users").
+		To(handler.handleUsers).
+		Doc("get a user's launcher and apps creating or deleting status").
+		Param(ws.PathParameter(ParamUserName, "the name of the user")).
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
+		Returns(http.StatusOK, "Success to get", nil))
+
+	ws.Route(ws.GET("/users/{"+ParamUserName+"}").
+		To(handler.handleUser).
+		Doc("get a user's launcher and apps creating or deleting status").
+		Param(ws.PathParameter(ParamUserName, "the name of the user")).
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
+		Returns(http.StatusOK, "Success to get", nil))
+
+	ws.Route(ws.POST("/users/{user}/limits").
+		To(handler.handleUpdateUserLimits).
+		Doc("update user limits").
+		Param(ws.PathParameter(ParamUserName, "the name of the user")).
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
+		Returns(http.StatusOK, "update success", nil)).
+		Consumes(restful.MIME_JSON)
 
 	ws.Route(ws.GET("/user-info").
 		To(handler.userInfo).
@@ -349,18 +374,12 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Returns(http.StatusOK, "provider registry validated success", nil)).
 		Consumes(restful.MIME_JSON)
 
-	// sys event callback
-	ws.Route(ws.POST("/backup/new").
-		To(handler.backupNew).
-		Doc("Provide system backup phase-new to callback").
+	ws.Route(ws.POST("/user/validate").
+		To(handler.userValidate).
+		Doc("validating webhook for validate user creation").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Returns(http.StatusOK, "Success", nil))
-
-	ws.Route(ws.POST("/backup/finish").
-		To(handler.backupFinish).
-		Doc("Provide system backup phase-success / failed / canceled to callback").
-		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Returns(http.StatusOK, "Success", nil))
+		Returns(http.StatusOK, "user validated success", nil)).
+		Consumes(restful.MIME_JSON)
 
 	ws.Route(ws.POST("/metrics/highload").
 		To(handler.highload).

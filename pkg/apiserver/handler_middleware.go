@@ -149,7 +149,7 @@ func (h *Handler) installMiddleware(req *restful.Request, resp *restful.Response
 		return
 	}
 
-	klog.Info("Start to install middleware name=%v", middlewareConfig.MiddlewareName)
+	klog.Infof("Start to install middleware name=%v", middlewareConfig.MiddlewareName)
 	err = middlewareinstaller.Install(req.Request.Context(), h.kubeConfig, middlewareConfig)
 	if err != nil {
 

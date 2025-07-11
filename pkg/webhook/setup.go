@@ -28,6 +28,8 @@ const (
 	mutatingWebhookRunAsUserName          = "run-as-user.bytetrade.io"
 	mutatingWebhookGpuLimitName           = "gpu-limit-inject-webhook.bytetrade.io"
 	mutatingWebhookAppLabelName           = "app-label-inject-webhook.bytetrade.io"
+	userValidatingWebhookName             = "user-validating-webhook"
+	userValidatingWebhookFullName         = "user-validating-webhook.bytetrade.io"
 	webhookServiceName                    = "app-service"
 	webhookServiceNamespace               = "os-framework"
 	defaultCaPath                         = "/etc/certs/ca.crt"
@@ -387,7 +389,7 @@ func (wh *Webhook) CreateOrUpdateProviderRegistryValidatingWebhook() error {
 			return err
 		}
 	}
-	klog.Info("Finished creating ValidatingWebhookConfiguration name=%s", providerRegistryWebhookName)
+	klog.Infof("Finished creating ValidatingWebhookConfiguration name=%s", providerRegistryWebhookName)
 	return nil
 }
 
@@ -478,7 +480,7 @@ func (wh *Webhook) CreateOrUpdateCronWorkflowMutatingWebhook() error {
 			return err
 		}
 	}
-	klog.Info("Finished creating MutatingWebhookConfiguration name=%s", mwc.Name)
+	klog.Infof("Finished creating MutatingWebhookConfiguration name=%s", mwc.Name)
 	return nil
 }
 
@@ -661,5 +663,86 @@ func (wh *Webhook) CreateOrUpdateAppLabelMutatingWebhook() error {
 		}
 	}
 	klog.Infof("Finished creating MutatingWebhookConfiguration %s", appPodLabelWebhookName)
+	return nil
+}
+
+// CreateOrUpdateUserValidatingWebhook creates or updates user validating webhook.
+func (wh *Webhook) CreateOrUpdateUserValidatingWebhook() error {
+	webhookPath := "/app-service/v1/user/validate"
+	port, err := strconv.Atoi(strings.Split(constants.WebhookServerListenAddress, ":")[1])
+	if err != nil {
+		return err
+	}
+	webhookPort := int32(port)
+	failurePolicy := admissionregv1.Fail
+	matchPolicy := admissionregv1.Exact
+	webhookTimeout := int32(30)
+	vwcLabels := map[string]string{"velero.io/exclude-from-backup": "true"}
+
+	caBundle, err := ioutil.ReadFile(defaultCaPath)
+	if err != nil {
+		return err
+	}
+	vwc := admissionregv1.ValidatingWebhookConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   userValidatingWebhookName,
+			Labels: vwcLabels,
+		},
+		Webhooks: []admissionregv1.ValidatingWebhook{
+			{
+				Name: userValidatingWebhookFullName,
+				ClientConfig: admissionregv1.WebhookClientConfig{
+					CABundle: caBundle,
+					Service: &admissionregv1.ServiceReference{
+						Namespace: webhookServiceNamespace,
+						Name:      webhookServiceName,
+						Path:      &webhookPath,
+						Port:      &webhookPort,
+					},
+				},
+				FailurePolicy: &failurePolicy,
+				MatchPolicy:   &matchPolicy,
+				Rules: []admissionregv1.RuleWithOperations{
+					{
+						Operations: []admissionregv1.OperationType{admissionregv1.Create},
+						Rule: admissionregv1.Rule{
+							APIGroups:   []string{"iam.kubesphere.io"},
+							APIVersions: []string{"v1alpha2"},
+							Resources:   []string{"users"},
+						},
+					},
+				},
+				SideEffects: func() *admissionregv1.SideEffectClass {
+					sideEffect := admissionregv1.SideEffectClassNoneOnDryRun
+					return &sideEffect
+				}(),
+				TimeoutSeconds:          &webhookTimeout,
+				AdmissionReviewVersions: []string{"v1"}}},
+	}
+	if _, err = wh.kubeClient.AdmissionregistrationV1().ValidatingWebhookConfigurations().
+		Create(context.Background(), &vwc, metav1.CreateOptions{}); err != nil {
+		if apierrors.IsAlreadyExists(err) {
+			existing, err := wh.kubeClient.AdmissionregistrationV1().ValidatingWebhookConfigurations().
+				Get(context.Background(), vwc.Name, metav1.GetOptions{})
+			if err != nil {
+				klog.Errorf("Failed to get ValidatingWebhookConfiguration name=%s err=%v", vwc.Name, err)
+				return err
+			}
+			vwc.ObjectMeta = existing.ObjectMeta
+			if _, err := wh.kubeClient.AdmissionregistrationV1().ValidatingWebhookConfigurations().
+				Update(context.Background(), &vwc, metav1.UpdateOptions{}); err != nil {
+				if !apierrors.IsConflict(err) {
+					klog.Errorf("Failed to update ValidatingWebhookConfiguration name=%s err=%v", vwc.Name, err)
+					return err
+				}
+
+			}
+		} else {
+			klog.Errorf("Failed to create ValidatingWebhookConfiguration name=%s err=%v", vwc.Name, err)
+			return err
+		}
+	}
+	klog.Infof("Finished creating ValidatingWebhookConfiguration name=%s", vwc.Name)
+
 	return nil
 }

@@ -85,7 +85,7 @@ func (p *PendingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
 func (p *PendingApp) Cancel(ctx context.Context) error {
 	err := p.updateStatus(context.TODO(), p.manager, appsv1.PendingCanceled, nil, constants.OperationCanceledByUserTpl)
 	if err != nil {
-		klog.Info("Failed to update applicationmanagers status name=%s err=%v", p.manager.Name, err)
+		klog.Infof("Failed to update applicationmanagers status name=%s err=%v", p.manager.Name, err)
 	}
 
 	return err

@@ -43,7 +43,7 @@ func NewDownloadingCancelingApp(c client.Client,
 func (p *DownloadingCancelingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
 	err := p.imageClient.UpdateStatus(ctx, p.manager.Name, appsv1.DownloadingCanceled.String(), appsv1.DownloadingCanceled.String())
 	if err != nil {
-		klog.Errorf("update im name=%s to downloadingCanceled state failed %v", err)
+		klog.Errorf("update im name=%s to downloadingCanceled state failed %v", p.manager.Name, err)
 		return nil, err
 	}
 	if ok := appFactory.cancelOperation(p.manager.Name); !ok {

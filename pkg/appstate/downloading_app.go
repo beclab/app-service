@@ -94,7 +94,7 @@ func (p *DownloadingApp) Cancel(ctx context.Context) error {
 	klog.Infof("call timeout downloadingApp cancel....")
 	err := p.updateStatus(ctx, p.manager, appsv1.DownloadingCanceling, nil, constants.OperationCanceledByTerminusTpl)
 	if err != nil {
-		klog.Errorf("update app manager name=%s to downloadingCanceling state failed %v", err)
+		klog.Errorf("update app manager name=%s to downloadingCanceling state failed %v", p.manager.Name, err)
 		return err
 	}
 	return nil
