@@ -441,7 +441,7 @@ func (h *Handler) installRecommend(req *restful.Request, resp *restful.Response)
 	klog.Infof("Download chart and get workflow config appName=%s repoURL=%s", app, insReq.RepoURL)
 	workflowCfg, err := getWorkflowConfigFromRepo(req.Request.Context(), owner, app, insReq.RepoURL, "", token, marketSource)
 	if err != nil {
-		klog.Error("Failed to get workflow config appName=%s repoURL=%s err=%v", app, insReq.RepoURL, err)
+		klog.Errorf("Failed to get workflow config appName=%s repoURL=%s err=%v", app, insReq.RepoURL, err)
 		api.HandleError(resp, req, err)
 		return
 	}

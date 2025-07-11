@@ -122,7 +122,7 @@ func LoadStatefulApp(ctx context.Context, appmgr *ApplicationManagerController, 
 	}()
 
 	if serr != nil {
-		klog.Info("load stateful app name=%s, state=%s failed err %v", am.Name, am.Status.State, serr)
+		klog.Infof("load stateful app name=%s, state=%s failed err %v", am.Name, am.Status.State, serr)
 		return nil, serr
 	}
 

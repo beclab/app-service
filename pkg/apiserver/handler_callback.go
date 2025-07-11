@@ -5,45 +5,9 @@ import (
 
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/appwatchers"
-	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
-
 	"github.com/emicklei/go-restful/v3"
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
 )
-
-const backupCancelCode = 493
-
-func (h *Handler) backupNew(req *restful.Request, resp *restful.Response) {
-	pendingOrRunningTask, err := apputils.GetPendingOrRunningTask(req.Request.Context())
-	if err != nil {
-		api.HandleError(resp, req, &errors.StatusError{
-			ErrStatus: metav1.Status{Code: backupCancelCode, Message: "can not get pending/running task"},
-		})
-		return
-	}
-	switch {
-	case len(pendingOrRunningTask) > 0,
-		h.userspaceManager.HasRunningTask():
-
-		api.HandleError(resp, req, &errors.StatusError{
-			ErrStatus: metav1.Status{Code: backupCancelCode, Message: "app installer running"},
-		})
-
-		return
-	}
-
-	lockAppInstaller()
-	resp.WriteAsJson(map[string]int{"code": 0})
-}
-
-func (h *Handler) backupFinish(req *restful.Request, resp *restful.Response) {
-	klog.Info("Backup finished callback")
-	unlockAppInstaller()
-
-	resp.WriteAsJson(map[string]int{"code": 0})
-}
 
 var singleTask *sync.Once = &sync.Once{}
 

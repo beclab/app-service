@@ -65,7 +65,7 @@ func Uninstall(ctx context.Context, kubeConfig *rest.Config, workflow *WorkflowC
 
 	err = helmClient.Uninstall(workflow.WorkflowName)
 	if err != nil {
-		klog.Errorf("Failed to uninstall workflow chart name=%s err=%v", workflow, err)
+		klog.Errorf("Failed to uninstall workflow chart name=%s err=%v", workflow.WorkflowName, err)
 		return err
 	}
 

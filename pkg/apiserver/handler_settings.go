@@ -31,7 +31,7 @@ import (
 func (h *Handler) setupApp(req *restful.Request, resp *restful.Response) {
 	app, err := getAppByName(req, resp)
 	if err != nil {
-		klog.Errorf("Failed to get app name=%s err=%v", app, err)
+		klog.Errorf("Failed to get app name=%s err=%v", app.Spec.Name, err)
 		// if error, response in function. Do nothing
 		return
 	}
@@ -80,7 +80,7 @@ func (h *Handler) setupAppEntranceDomain(req *restful.Request, resp *restful.Res
 	app, err := getAppByName(req, resp)
 	if err != nil {
 		api.HandleError(resp, req, err)
-		klog.Errorf("Failed to get app name=%s err=%v", app, err)
+		klog.Errorf("Failed to get app name=%s err=%v", app.Spec.Name, err)
 		// if error, response in function. Do nothing
 		return
 	}
@@ -241,7 +241,7 @@ func (h *Handler) setupAppEntranceDomain(req *restful.Request, resp *restful.Res
 func (h *Handler) getAppEntrances(req *restful.Request, resp *restful.Response) {
 	app, err := getAppByName(req, resp)
 	if err != nil {
-		klog.Errorf("Failed to get app name=%s err=%v", app, err)
+		klog.Errorf("Failed to get app name=%s err=%v", app.Spec.Name, err)
 		// if error, response in function. Do nothing
 		return
 	}
@@ -252,7 +252,7 @@ func (h *Handler) getAppEntrances(req *restful.Request, resp *restful.Response) 
 func (h *Handler) getAppEntrancesSettings(req *restful.Request, resp *restful.Response) {
 	app, err := getAppByName(req, resp)
 	if err != nil {
-		klog.Errorf("Failed to get app name=%s err=%v", app, err)
+		klog.Errorf("Failed to get app name=%s err=%v", app.Spec.Name, err)
 		// if error, response in function. Do nothing
 		return
 	}
@@ -262,7 +262,7 @@ func (h *Handler) getAppEntrancesSettings(req *restful.Request, resp *restful.Re
 func (h *Handler) getAppSettings(req *restful.Request, resp *restful.Response) {
 	app, err := getAppByName(req, resp)
 	if err != nil {
-		klog.Errorf("Failed to get app name=%s err=%v", app, err)
+		klog.Errorf("Failed to get app name=%s err=%v", app.Spec.Name, err)
 		// if error, response in function. Do nothing
 		return
 	}
@@ -284,7 +284,7 @@ func getRepoURL(client *clientset.ClientSet, owner string) (string, error) {
 func (h *Handler) setupAppAuthLevel(req *restful.Request, resp *restful.Response) {
 	app, err := getAppByName(req, resp)
 	if err != nil {
-		klog.Errorf("Failed to get app name=%s err=%v", app, err)
+		klog.Errorf("Failed to get app name=%s err=%v", app.Spec.Name, err)
 		// if error, response in function. Do nothing
 		return
 	}
@@ -355,7 +355,7 @@ func (h *Handler) setupAppAuthLevel(req *restful.Request, resp *restful.Response
 func (h *Handler) setupAppEntrancePolicy(req *restful.Request, resp *restful.Response) {
 	app, err := getAppByName(req, resp)
 	if err != nil {
-		klog.Errorf("Failed to get app name=%s err=%v", app, err)
+		klog.Errorf("Failed to get app name=%s err=%v", app.Spec.Name, err)
 		// if error, response in function. Do nothing
 		return
 	}

@@ -207,7 +207,7 @@ func (r *ApplicationManagerController) updateStatus(ctx context.Context, am *app
 	amCopy.Status.OpGeneration += 1
 	err = r.Status().Patch(ctx, amCopy, client.MergeFrom(am))
 	if err != nil {
-		klog.Errorf("update app manager %s status failed %v", am.Name)
+		klog.Errorf("update app manager %s status failed %v", am.Name, err)
 		return err
 	}
 	return nil

@@ -109,6 +109,10 @@ func (b *handlerBuilder) Build() (*Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	err = wh.CreateOrUpdateUserValidatingWebhook()
+	if err != nil {
+		return nil, err
+	}
 
 	return &Handler{
 		kubeHost:         b.ksHost,

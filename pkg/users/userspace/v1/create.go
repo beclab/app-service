@@ -6,23 +6,25 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"helm.sh/helm/v3/pkg/storage/driver"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 	"math/rand"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
-	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/helm"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
-	"bytetrade.io/web3os/app-service/pkg/users/userspace/templates"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 
 	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -61,10 +63,10 @@ func init() {
 	}
 }
 
-func NewCreator(client *clientset.ClientSet, config *rest.Config, user string) *Creator {
+func NewCreator(client client.Client, config *rest.Config, user string) *Creator {
 	return &Creator{
 		Deleter: Deleter{
-			clientSet: client,
+			Client:    client,
 			k8sConfig: config,
 			user:      user,
 		},
@@ -73,111 +75,123 @@ func NewCreator(client *clientset.ClientSet, config *rest.Config, user string) *
 }
 
 func (c *Creator) CreateUserApps(ctx context.Context) (int32, int32, error) {
-	var clear bool
-	var launcherReleaseName string
-	userspace, userspaceRoleBinding, err := c.createNamespace(ctx)
+	//userspace, userspaceRoleBinding, err := c.createNamespace(ctx)
+	userspaceNs := fmt.Sprintf("user-space-%s", c.user)
+	//err := c.createNamespace(ctx)
+	//if err != nil {
+	//	klog.Errorf("failed to create namespace %s", userspaceNs)
+	//	return 0, 0, err
+	//}
 
-	if err != nil {
-		return 0, 0, err
-	}
-	clear = true
+	//if err != nil {
+	//	return 0, 0, err
+	//}
+	//clear = true
 
-	defer func() {
-		if clear {
-			klog.Infof("Start clear process err=%v", err)
-			if userspace != "" {
-				// clear context should not be canceled
-				clearCtx := context.Background()
-				if launcherReleaseName != "" {
-					klog.Warningf("Clear launcher failed launcherReleaseName=%s", launcherReleaseName)
+	//defer func() {
+	//	if clear {
+	//		klog.Infof("Start clear process err=%v", err)
+	//		if userspace != "" {
+	//			// clear context should not be canceled
+	//			clearCtx := context.Background()
+	//			if launcherReleaseName != "" {
+	//				klog.Warningf("Clear launcher failed launcherReleaseName=%s", launcherReleaseName)
+	//
+	//				err1 := c.clearLauncher(clearCtx, launcherReleaseName, userspace)
+	//				if err1 != nil {
+	//					klog.Warningf("Clear launcher failed err=%v", err1)
+	//				}
+	//			}
+	//
+	//			klog.Warningf("Clear userspace failed userspace=%s", userspace)
+	//
+	//			err1 := c.deleteNamespace(clearCtx, userspace, userspaceRoleBinding)
+	//			if err1 != nil {
+	//				klog.Warningf("Failed to delete namespace err=%v", err1)
+	//			}
+	//		}
+	//	}
+	//
+	//}()
 
-					err1 := c.clearLauncher(clearCtx, launcherReleaseName, userspace)
-					if err1 != nil {
-						klog.Warningf("Clear launcher failed err=%v", err1)
-					}
-				}
-
-				klog.Warningf("Clear userspace failed userspace=%s", userspace)
-
-				err1 := c.deleteNamespace(clearCtx, userspace, userspaceRoleBinding)
-				if err1 != nil {
-					klog.Warningf("Failed to delete namespace err=%v", err1)
-				}
-			}
-		}
-
-	}()
-
-	actionCfg, settings, err := helm.InitConfig(c.k8sConfig, userspace)
+	actionCfg, settings, err := helm.InitConfig(c.k8sConfig, userspaceNs)
 	if err != nil {
 		return 0, 0, err
 	}
 	c.helmCfg.ActionCfg = actionCfg
 	c.helmCfg.Settings = settings
 
-	launcherReleaseName, err = c.installLauncher(ctx, userspace)
+	_, err = c.installLauncher(ctx, userspaceNs)
 	if err != nil {
+		klog.Errorf("failed to install launcher in ns %s, %v", userspaceNs, err)
 		return 0, 0, err
 	}
 
 	var bfl *corev1.Pod
-	if bfl, err = c.checkLauncher(ctx, userspace, checkLauncherRunning); err != nil {
+	if bfl, err = c.checkLauncher(ctx, userspaceNs, checkLauncherRunning); err != nil {
+		klog.Errorf("check launcher failed %v", err)
 		return 0, 0, err
 	}
+	klog.Infof("c.name: %s", c.user)
+	klog.Infof("userspaceNs: %s", userspaceNs)
 
+	klog.Infof("bflname: %s,namespace: %s", bfl.Name, bfl.Namespace)
 	err = c.installSysApps(ctx, bfl)
 	if err != nil {
+		klog.Errorf("failed to install sys apps %v", err)
 		return 0, 0, err
 	}
 
-	desktopPort, wizardPort, err := c.checkDesktopRunning(ctx, userspace)
-	if err == nil {
-		clear = false
-	}
+	desktopPort, wizardPort, err := c.checkDesktopRunning(ctx, userspaceNs)
+
 	return desktopPort, wizardPort, err
 }
 
-func (c *Creator) createNamespace(ctx context.Context) (string, string, error) {
+func (c *Creator) createNamespace(ctx context.Context) error {
 
 	// ns and rolebinding creation moves to bfl
 
 	// create namespace user-space-<user>
-	userspace := templates.NewUserspace(c.user)
-	// role binding
-	userspaceRoleBinding := templates.NewUserspaceRoleBinding(c.user, userspace.Name, USER_SPACE_ROLE)
+	userspaceNs := fmt.Sprintf("user-space-%s", c.user)
+	userSystemNs := fmt.Sprintf("user-system-%s", c.user)
 
-	// create ns user-system
-	usersystem := templates.NewUserSystem(c.user)
-	ns, err := c.clientSet.KubeClient.Kubernetes().
-		CoreV1().Namespaces().
-		Get(ctx, usersystem.Name, metav1.GetOptions{})
-	if err != nil && !apierrors.IsNotFound(err) {
-		return "", "", err
+	// create user-space namespace
+	ns := corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: userspaceNs,
+			// TODO:hys
+			Annotations: map[string]string{
+				"kubesphere.io/creator": "",
+			},
+			Finalizers: []string{
+				"finalizers.kubesphere.io/namespaces",
+			},
+		},
+	}
+	err := c.Create(ctx, &ns)
+	if err != nil && !apierrors.IsAlreadyExists(err) {
+		klog.Errorf("failed to create user-space namespace %v", err)
+		return err
 	}
 
-	if ns == nil || ns.Name == "" {
-		ns, err = c.clientSet.KubeClient.Kubernetes().
-			CoreV1().Namespaces().
-			Create(ctx, (*corev1.Namespace)(usersystem), metav1.CreateOptions{})
-
-		if err != nil {
-			return "", "", err
-		}
+	// create user-system namespace
+	userSystemNamespace := corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: userSystemNs,
+			Annotations: map[string]string{
+				"kubesphere.io/creator": "",
+			},
+			Finalizers: []string{
+				"finalizers.kubesphere.io/namespaces",
+			},
+		},
 	}
-
-	usersystemRoleBinding := templates.NewUserspaceRoleBinding(c.user, usersystem.Name, USER_SPACE_ROLE)
-
-	_, err = c.clientSet.KubeClient.Kubernetes().
-		RbacV1().RoleBindings(ns.Name).Create(ctx, (*rbacv1.RoleBinding)(usersystemRoleBinding), metav1.CreateOptions{})
-
-	if err != nil {
-		c.clientSet.KubeClient.Kubernetes().
-			CoreV1().Namespaces().Delete(ctx, usersystem.Name, metav1.DeleteOptions{})
-
-		return "", "", err
+	err = c.Create(ctx, &userSystemNamespace)
+	if err != nil && !apierrors.IsAlreadyExists(err) {
+		klog.Errorf("failed to create user-system namespace %v", err)
+		return err
 	}
-
-	return userspace.Name, userspaceRoleBinding.Name, nil
+	return nil
 }
 
 func (c *Creator) installSysApps(ctx context.Context, bflPod *corev1.Pod) error {
@@ -212,8 +226,10 @@ func (c *Creator) installSysApps(ctx context.Context, bflPod *corev1.Pod) error 
 		return err
 	}
 
-	pv, err := c.clientSet.KubeClient.Kubernetes().CoreV1().PersistentVolumes().Get(ctx, pvcData.userspacePv, metav1.GetOptions{})
+	var pv corev1.PersistentVolume
+	err = c.Get(ctx, types.NamespacedName{Name: pvcData.userspacePv}, &pv)
 	if err != nil {
+		klog.Errorf("failed to get pv %v", err)
 		return err
 	}
 
@@ -251,7 +267,9 @@ func (c *Creator) installSysApps(ctx context.Context, bflPod *corev1.Pod) error 
 	vals["os"] = osVals
 
 	var arch string
-	nodes, err := c.clientSet.KubeClient.Kubernetes().CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	var nodes corev1.NodeList
+
+	err = c.List(ctx, &nodes)
 	if err != nil {
 		return err
 	}
@@ -275,7 +293,7 @@ func (c *Creator) installSysApps(ctx context.Context, bflPod *corev1.Pod) error 
 		"redis_password": string(redisSecret.Data["auth"]),
 	}
 
-	gpuType, err := utils.FindGpuTypeFromNodes(nodes)
+	gpuType, err := utils.FindGpuTypeFromNodes(&nodes)
 	if err != nil {
 		return err
 	}
@@ -299,7 +317,8 @@ func (c *Creator) installSysApps(ctx context.Context, bflPod *corev1.Pod) error 
 		name := helm.ReleaseName(appname, c.user)
 		err = helm.InstallCharts(ctx, c.helmCfg.ActionCfg, c.helmCfg.Settings,
 			name, constants.UserChartsPath+"/apps/"+appname, "", bflPod.Namespace, vals)
-		if err != nil {
+		if err != nil && !errors.Is(err, driver.ErrReleaseExists) {
+			klog.Errorf("failed to install sys app:%s, %v", name, err)
 			return err
 		}
 	}
@@ -323,6 +342,7 @@ func (c *Creator) installLauncher(ctx context.Context, userspace string) (string
 	name := helm.ReleaseName("launcher", c.user)
 	err := helm.InstallCharts(ctx, c.helmCfg.ActionCfg, c.helmCfg.Settings, name, constants.UserChartsPath+"/launcher", "", userspace, vals)
 	if err != nil {
+		klog.Errorf("failed to install launcher %v", err)
 		return "", err
 	}
 
@@ -330,10 +350,12 @@ func (c *Creator) installLauncher(ctx context.Context, userspace string) (string
 }
 
 func (c *Creator) findBflAPIPort(ctx context.Context, namespace string) (int32, error) {
-	bflSvc, err := c.clientSet.KubeClient.Kubernetes().CoreV1().Services(namespace).Get(ctx, "bfl", metav1.GetOptions{})
+	var bflSvc corev1.Service
+	err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: "bfl"}, &bflSvc)
 	if err != nil {
 		return 0, err
 	}
+
 	var port int32 = 0
 	for _, p := range bflSvc.Spec.Ports {
 		if p.Name == "api" {
@@ -377,8 +399,10 @@ func (c *Creator) checkDesktopRunning(ctx context.Context, userspace string) (in
 	for {
 		select {
 		case <-ticker.C:
-			pods, err := c.clientSet.KubeClient.Kubernetes().CoreV1().Pods(userspace).
-				List(ctx, metav1.ListOptions{LabelSelector: "app=wizard"})
+			var pods corev1.PodList
+			selector, _ := labels.Parse("app=wizard")
+			err := c.List(ctx, &pods, &client.ListOptions{LabelSelector: selector})
+
 			if err != nil {
 				return 0, 0, err
 			}
@@ -396,16 +420,9 @@ func (c *Creator) checkDesktopRunning(ctx context.Context, userspace string) (in
 				// 	return 0, 0, err
 				// }
 
-				// find wizard port
-				var wizardPort int32
-				wizard, err := c.clientSet.KubeClient.Kubernetes().CoreV1().Services(userspace).Get(ctx, "swagger-ui", metav1.GetOptions{})
-				if err != nil {
-					klog.Errorf("Failed to get wizard port err=%v", err)
-				} else {
-					wizardPort = wizard.Spec.Ports[0].NodePort
-				}
+				//wizardPort := wizard.Spec.Ports[0].NodePort
 
-				return 0, wizardPort, nil
+				return 0, 0, nil
 			}
 		case <-timeout.C:
 			return 0, 0, fmt.Errorf("user's wizard checking timeout error. [%s]", userspace)

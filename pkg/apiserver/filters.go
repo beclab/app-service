@@ -101,6 +101,7 @@ func (h *Handler) authenticate(req *restful.Request, resp *restful.Response, cha
 		"/app-service/v1/all/apps",
 		"/app-service/v1/apps/oamvalues",
 		"/app-service/v1/users/admin/username",
+		"/app-service/v1/user/validate",
 	}
 
 	needAuth := true

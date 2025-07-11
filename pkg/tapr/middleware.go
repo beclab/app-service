@@ -223,7 +223,7 @@ func process(kubeConfig *rest.Config, appName, appNamespace, namespace, username
 	}
 	_, err = CreateOrUpdateMiddlewareRequest(kubeConfig, namespace, request)
 	if err != nil {
-		klog.Info("Failed to create or update middleware request middlewareType=%s err=%v", middleware, err)
+		klog.Errorf("Failed to create or update middleware request middlewareType=%s err=%v", middleware, err)
 		return err
 	}
 	return nil

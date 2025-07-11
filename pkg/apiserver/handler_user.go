@@ -1,87 +1,34 @@
 package apiserver
 
 import (
-	"errors"
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
 
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
-	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/prometheus"
-	"bytetrade.io/web3os/app-service/pkg/users/userspace/v1"
+	"bytetrade.io/web3os/app-service/pkg/upgrade"
+	"bytetrade.io/web3os/app-service/pkg/users"
+	"strings"
 
+	iamv1alpha2 "github.com/beclab/api/iam/v1alpha2"
 	"github.com/emicklei/go-restful/v3"
+	"github.com/pkg/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/klog/v2"
+	"k8s.io/utils/pointer"
 )
 
-func (h *Handler) userAppsCreate(req *restful.Request, resp *restful.Response) {
-	client := req.Attribute(constants.KubeSphereClientAttribute).(*clientset.ClientSet) // session client
-	userName := req.PathParameter(ParamUserName)
-
-	_, err := h.userspaceManager.CreateUserApps(client, h.kubeConfig, userName)
-	if err != nil {
-		api.HandleError(resp, req, err)
-		return
-	}
-
-	resp.WriteEntity(api.UserAppsResponse{
-		Response: api.Response{Code: 200},
-		Data: api.UserAppsStatusRespData{
-			User:   userName,
-			Status: userspace.UserCreating,
-		},
-	})
-}
-
-func (h *Handler) userAppsDelete(req *restful.Request, resp *restful.Response) {
-	client := req.Attribute(constants.KubeSphereClientAttribute).(*clientset.ClientSet) // session client
-	userName := req.PathParameter(ParamUserName)
-
-	_, err := h.userspaceManager.DeleteUserApps(client, h.kubeConfig, userName)
-	if err != nil {
-		api.HandleError(resp, req, err)
-		return
-	}
-
-	resp.WriteEntity(api.UserAppsResponse{
-		Response: api.Response{Code: 200},
-		Data: api.UserAppsStatusRespData{
-			User:   userName,
-			Status: userspace.UserDeleting,
-		},
-	})
-}
-
-func (h *Handler) userAppsStatus(req *restful.Request, resp *restful.Response) {
-	userName := req.PathParameter(ParamUserName)
-
-	res := h.userspaceManager.TaskStatus(userName)
-
-	if res == nil {
-		api.HandleNotFound(resp, req, errors.New("user's task not found"))
-		return
-	}
-
-	response := api.UserAppsResponse{
-		Response: api.Response{Code: 200},
-		Data: api.UserAppsStatusRespData{
-			User:   userName,
-			Status: res.Status,
-		},
-	}
-
-	if res.Error != nil {
-		response.Data.Status = userspace.UserFailed
-		response.Data.Error = res.Error.Error()
-	} else if res.Status == userspace.UserCreated {
-		ports := res.Values.([]int32)
-		response.Data.Ports.Desktop = ports[0]
-		response.Data.Ports.Wizard = ports[1]
-	}
-
-	resp.WriteEntity(response)
-}
+const userAnnotationLimitsCpuKey = "bytetrade.io/user-cpu-limit"
+const userAnnotationLimitsMemoryKey = "bytetrade.io/user-memory-limit"
 
 func (h *Handler) userResourceStatus(req *restful.Request, resp *restful.Response) {
 	username := req.PathParameter(ParamUserName)
@@ -128,4 +75,438 @@ func (h *Handler) userInfo(req *restful.Request, resp *restful.Response) {
 	}
 
 	resp.WriteAsJson(userInfo)
+}
+
+type UserCreateRequest struct {
+	Name        string `json:"name"`
+	OwnerRole   string `json:"owner_role"`
+	DisplayName string `json:"display_name"`
+	Email       string `json:"email"`
+	Password    string `json:"password"`
+	Description string `json:"description"`
+	MemoryLimit string `json:"memory_limit"`
+	CpuLimit    string `json:"cpu_limit"`
+}
+
+type UserCreateOption struct {
+	UserCreateRequest
+	TerminusName string
+}
+
+func (h *Handler) createUser(req *restful.Request, resp *restful.Response) {
+	owner := req.Attribute(constants.UserContextAttribute).(string)
+
+	var userReq UserCreateRequest
+	err := req.ReadEntity(&userReq)
+	if err != nil {
+		api.HandleBadRequest(resp, req, errors.Errorf("user create: %v", err))
+		return
+	}
+
+	klog.Infof("userReq: %#v", userReq)
+
+	//// Basic field validation
+	if userReq.Name == "" || userReq.Password == "" {
+		api.HandleBadRequest(resp, req, errors.New("user create: no username or password provided"))
+		return
+	}
+
+	if userReq.MemoryLimit == "" {
+		api.HandleBadRequest(resp, req, errors.New("user create: memory_limit cannot be empty"))
+		return
+	}
+
+	if userReq.CpuLimit == "" {
+		api.HandleBadRequest(resp, req, errors.New("user create: cpu_limit cannot be empty"))
+		return
+	}
+
+	if userReq.OwnerRole == "" || (userReq.OwnerRole != "owner" && userReq.OwnerRole != "admin" && userReq.OwnerRole != "normal") {
+		api.HandleBadRequest(resp, req, errors.New("user create: invalid owner_role"))
+		return
+	}
+
+	username := strings.ToLower(userReq.Name)
+	// get terminusName
+	var olaresName users.OlaresName
+	if strings.Contains(username, "@") {
+		olaresName = users.OlaresName(username)
+		username = strings.Split(username, "@")[0]
+	} else {
+		olares, err := upgrade.GetTerminusVersion(req.Request.Context(), h.ctrlClient)
+		if err != nil {
+			api.HandleError(resp, req, err)
+			return
+		}
+		domainName := olares.Spec.Settings["domainName"]
+		if domainName == "" {
+			api.HandleError(resp, req, errors.New("empty domainName"))
+			return
+		}
+		olaresName = users.NewOlaresName(username, domainName)
+	}
+
+	user := iamv1alpha2.User{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: iamv1alpha2.SchemeGroupVersion.String(),
+			Kind:       iamv1alpha2.ResourceKindUser,
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: userReq.Name,
+			Annotations: map[string]string{
+				"iam.kubesphere.io/uninitialized":   "true",
+				users.AnnotationUserCreator:         owner,
+				users.UserAnnotationUninitialized:   "true",
+				users.UserAnnotationOwnerRole:       userReq.OwnerRole,
+				users.UserAnnotationIsEphemeral:     "true", // add is-ephemeral flag, 'true' it means need temporary domain
+				users.UserAnnotationTerminusNameKey: string(olaresName),
+				users.UserLauncherAuthPolicy:        "two_factor",
+				users.UserLauncherAccessLevel:       "1",
+				users.UserAnnotationLimitsMemoryKey: userReq.MemoryLimit,
+				users.UserAnnotationLimitsCpuKey:    userReq.CpuLimit,
+				"iam.kubesphere.io/sync-to-lldap":   "true",
+				"iam.kubesphere.io/synced-to-lldap": "false",
+			},
+		},
+		Spec: iamv1alpha2.UserSpec{
+			DisplayName:     userReq.DisplayName,
+			Email:           string(olaresName),
+			InitialPassword: userReq.Password,
+			Description:     userReq.Description,
+		},
+	}
+	err = h.ctrlClient.Create(req.Request.Context(), &user)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+
+	resp.WriteAsJson(map[string]interface{}{
+		"name": userReq.Name,
+	})
+	return
+}
+
+func (h *Handler) deleteUser(req *restful.Request, resp *restful.Response) {
+	username := req.PathParameter("user")
+	if username == "" {
+		api.HandleBadRequest(resp, req, errors.New("user delete: no username provided"))
+		return
+	}
+
+	var user iamv1alpha2.User
+	err := h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: username}, &user)
+	if err != nil && !apierrors.IsNotFound(err) {
+		api.HandleError(resp, req, err)
+		return
+	}
+	if err != nil {
+		api.HandleBadRequest(resp, req, fmt.Errorf("user %s not found", username))
+		return
+	}
+
+	if user.Status.State == "Creating" {
+		api.HandleBadRequest(resp, req, fmt.Errorf("user %s is under creating", username))
+		return
+	}
+	err = h.ctrlClient.Delete(req.Request.Context(), &user)
+	if err != nil && !apierrors.IsNotFound(err) {
+		api.HandleError(resp, req, err)
+		return
+	}
+	resp.WriteAsJson(map[string]interface{}{
+		"name": username,
+	})
+	return
+}
+
+func (h *Handler) userStatus(req *restful.Request, resp *restful.Response) {
+	username := req.PathParameter("user")
+	if username == "" {
+		api.HandleBadRequest(resp, req, errors.New("user delete: no username provided"))
+		return
+	}
+
+	var user iamv1alpha2.User
+	err := h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: username}, &user)
+	if err != nil && !apierrors.IsNotFound(err) {
+		api.HandleError(resp, req, err)
+		return
+	}
+	if err != nil {
+		resp.WriteAsJson(map[string]interface{}{
+			"name":    username,
+			"status":  "Deleted",
+			"message": fmt.Sprintf("user %s not exists", username),
+		})
+		return
+	}
+
+	isEphemeral, zone, err := h.getUserDomainType(&user)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	var address string
+	if isEphemeral {
+		address = fmt.Sprintf("wizard-%s.%s", username, zone)
+	}
+
+	resp.WriteAsJson(map[string]interface{}{
+		"name":   username,
+		"status": user.Status.State,
+		"address": map[string]string{
+			"wizard": address,
+		},
+		"message": user.Status.Reason,
+	})
+	return
+}
+
+func (h *Handler) getUserDomainType(user *iamv1alpha2.User) (bool, string, error) {
+	zone := user.Annotations["bytetrade.io/zone"]
+	if zone != "" {
+		return false, zone, nil
+	}
+	creator := user.Annotations["bytetrade.io/creator"]
+	if creator != "" {
+		var creatorUser iamv1alpha2.User
+		err := h.ctrlClient.Get(context.TODO(), types.NamespacedName{Name: creator}, &creatorUser)
+		if err != nil {
+			return false, "", err
+		}
+		if v := creatorUser.Annotations["bytetrade.io/zone"]; v != "" {
+			return true, v, nil
+		}
+	}
+	return false, "", nil
+}
+
+type UserResourceLimit struct {
+	MemoryLimit string `json:"memory_limit"`
+	CpuLimit    string `json:"cpu_limit"`
+}
+
+func (h *Handler) handleUpdateUserLimits(req *restful.Request, resp *restful.Response) {
+	var userResourceLimits UserResourceLimit
+	if err := req.ReadEntity(&userResourceLimits); err != nil {
+		api.HandleBadRequest(resp, req, errors.Errorf("update user's resource limit: %v", err))
+		return
+	}
+
+	memory, err := resource.ParseQuantity(userResourceLimits.MemoryLimit)
+	if err != nil {
+		api.HandleBadRequest(resp, req, errors.New("user create: invalid format of memory limit"))
+		return
+	}
+
+	cpu, err := resource.ParseQuantity(userResourceLimits.CpuLimit)
+	if err != nil {
+		api.HandleBadRequest(resp, req, errors.New("user create: invalid format of cpu limit"))
+		return
+	}
+
+	defaultMemoryLimit, _ := resource.ParseQuantity(os.Getenv("USER_DEFAULT_MEMORY_LIMIT"))
+	defaultCpuLimit, _ := resource.ParseQuantity(os.Getenv("USER_DEFAULT_CPU_LIMIT"))
+
+	if defaultMemoryLimit.CmpInt64(int64(memory.AsApproximateFloat64())) > 0 {
+		api.HandleBadRequest(resp, req, errors.Errorf("user create: memory limit can not less than %s",
+			defaultMemoryLimit.String()))
+		return
+	}
+
+	if defaultCpuLimit.CmpInt64(int64(cpu.AsApproximateFloat64())) > 0 {
+		api.HandleBadRequest(resp, req, errors.Errorf("user create: cpu limit can not less than %s core",
+			defaultCpuLimit.String()))
+		return
+	}
+
+	username := req.PathParameter("user")
+	var user iamv1alpha2.User
+	err = h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: username}, &user)
+	if err != nil {
+		api.HandleError(resp, req, errors.Errorf("get user err: %v", err))
+		return
+	}
+
+	user.Annotations[userAnnotationLimitsMemoryKey] = userResourceLimits.MemoryLimit
+	user.Annotations[userAnnotationLimitsCpuKey] = userResourceLimits.CpuLimit
+	err = h.ctrlClient.Update(req.Request.Context(), &user)
+	if err != nil {
+		api.HandleError(resp, req, errors.Errorf("update user err: %v", err))
+		return
+	}
+	resp.WriteAsJson(nil)
+}
+
+func (h *Handler) handleUsers(req *restful.Request, resp *restful.Response) {
+	var userList iamv1alpha2.UserList
+	err := h.ctrlClient.List(req.Request.Context(), &userList)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	userInfo := make([]UserInfo, 0)
+	for _, user := range userList.Items {
+		var roles []string
+		roles = []string{user.Annotations[users.UserAnnotationOwnerRole]}
+		u := UserInfo{
+			UID:               string(user.UID),
+			Name:              user.Name,
+			DisplayName:       user.Spec.DisplayName,
+			Description:       user.Spec.Description,
+			Email:             user.Spec.Email,
+			State:             string(user.Status.State),
+			CreationTimestamp: user.CreationTimestamp.Unix(),
+			Roles:             roles,
+			Avatar:            "",
+		}
+
+		if terminusName, ok := user.Annotations[users.UserAnnotationTerminusNameKey]; ok {
+			u.TerminusName = terminusName
+		}
+
+		if avatar, ok := user.Annotations[users.UserAvatar]; ok {
+			u.Avatar = avatar
+		}
+
+		if memoryLimit, ok := user.Annotations[users.UserAnnotationLimitsMemoryKey]; ok {
+			u.MemoryLimit = memoryLimit
+		}
+		if cpuLimit, ok := user.Annotations[users.UserAnnotationLimitsCpuKey]; ok {
+			u.CpuLimit = cpuLimit
+		}
+
+		if user.Status.LastLoginTime != nil {
+			u.LastLoginTime = pointer.Int64(user.Status.LastLoginTime.Unix())
+		}
+
+		if s, err := getEnableHTTPSTaskState(&user); err != nil {
+			klog.Errorf("user '%s' get https task state err: %v", user.Name, err)
+		} else {
+			if s.State == 4 {
+				u.WizardComplete = true
+			}
+		}
+		userInfo = append(userInfo, u)
+	}
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	resp.WriteAsJson(NewListResult(userInfo))
+}
+
+func (h *Handler) handleUser(req *restful.Request, resp *restful.Response) {
+	username := req.PathParameter(ParamUserName)
+
+	var user iamv1alpha2.User
+	err := h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: username}, &user)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			api.HandleNotFound(resp, req, fmt.Errorf("user %s not found", username))
+		}
+		api.HandleError(resp, req, err)
+
+		return
+	}
+	roles := []string{user.Annotations[users.UserAnnotationOwnerRole]}
+
+	u := UserInfo{
+		UID:               string(user.UID),
+		Name:              user.Name,
+		DisplayName:       user.Spec.DisplayName,
+		Description:       user.Spec.Description,
+		Email:             user.Spec.Email,
+		State:             string(user.Status.State),
+		CreationTimestamp: user.CreationTimestamp.Unix(),
+	}
+
+	if terminusName, ok := user.Annotations[users.UserAnnotationTerminusNameKey]; ok {
+		u.TerminusName = terminusName
+	}
+
+	if avatar, ok := user.Annotations[users.UserAvatar]; ok {
+		u.Avatar = avatar
+	}
+
+	if memoryLimit, ok := user.Annotations[users.UserAnnotationLimitsMemoryKey]; ok {
+		u.MemoryLimit = memoryLimit
+	}
+	if cpuLimit, ok := user.Annotations[users.UserAnnotationLimitsCpuKey]; ok {
+		u.CpuLimit = cpuLimit
+	}
+
+	if user.Status.LastLoginTime != nil {
+		u.LastLoginTime = pointer.Int64(user.Status.LastLoginTime.Unix())
+	}
+	u.Roles = roles
+
+	if s, err := getEnableHTTPSTaskState(&user); err != nil {
+		klog.Errorf("user '%s' get https task state err: %v", user.Name, err)
+	} else {
+		if s.State == 4 {
+			u.WizardComplete = true
+		}
+	}
+
+	resp.WriteAsJson(u)
+}
+
+func getEnableHTTPSTaskState(user *iamv1alpha2.User) (*TaskResult, error) {
+	var t TaskResult
+
+	if v := user.Annotations[users.EnableSSLTaskResultAnnotationKey]; v != "" {
+		err := json.Unmarshal([]byte(v), &t)
+		if err != nil {
+			return nil, err
+		}
+		return &t, nil
+	}
+
+	return nil, errors.New("not started")
+}
+
+type TaskResult struct {
+	State int    `json:"state"`
+	Err   string `json:"err"`
+}
+
+func (h *Handler) getRolesByUserName(ctx context.Context, name string) ([]string, error) {
+	var globalRoleBindingList iamv1alpha2.GlobalRoleBindingList
+	err := h.ctrlClient.List(ctx, &globalRoleBindingList)
+	if err != nil {
+		return nil, err
+	}
+
+	var roles = sets.NewString()
+
+	for _, binding := range globalRoleBindingList.Items {
+		for _, subject := range binding.Subjects {
+			if subject.Name == name {
+				roles.Insert(binding.RoleRef.Name)
+			}
+		}
+	}
+	return roles.List(), nil
+}
+
+type UserInfo struct {
+	UID               string `json:"uid"`
+	Name              string `json:"name"`
+	DisplayName       string `json:"display_name"`
+	Description       string `json:"description"`
+	Email             string `json:"email"`
+	State             string `json:"state"`
+	LastLoginTime     *int64 `json:"last_login_time"`
+	CreationTimestamp int64  `json:"creation_timestamp"`
+	Avatar            string `json:"avatar"`
+
+	TerminusName   string `json:"terminusName"`
+	WizardComplete bool   `json:"wizard_complete"`
+
+	Roles []string `json:"roles"`
+
+	MemoryLimit string `json:"memory_limit"`
+	CpuLimit    string `json:"cpu_limit"`
 }

@@ -358,15 +358,6 @@ func getValue(m *kubesphere.Metric) float64 {
 	}
 	return m.MetricData.MetricValues[0].Sample[1]
 }
-func isInPrivateNamespace(namespace string) bool {
-	privateNamespaces := []string{"os-framework", "os-network", "os-platform", "user-space-", "user-system-"}
-	for _, ns := range privateNamespaces {
-		if strings.HasPrefix(namespace, ns) {
-			return true
-		}
-	}
-	return false
-}
 
 type resources struct {
 	cpu    usage
@@ -540,4 +531,19 @@ func FormatDependencyError(deps []appcfg.Dependency) error {
 	}
 
 	return fmt.Errorf(errMsg.String())
+}
+
+type ListResult struct {
+	Items  []any `json:"items"`
+	Totals int   `json:"totals"`
+}
+
+func NewListResult[T any](items []T) ListResult {
+	vs := make([]any, 0)
+	if len(items) > 0 {
+		for _, item := range items {
+			vs = append(vs, item)
+		}
+	}
+	return ListResult{Items: vs, Totals: len(items)}
 }

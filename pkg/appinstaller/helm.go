@@ -513,7 +513,7 @@ func (h *HelmOps) registerAppPerm(perm []appcfg.SysDataPermission) (*appcfg.Regi
 		return nil, err
 	}
 
-	klog.Info("Sending app register request with body=%s url=%s", utils.PrettyJSON(string(body)), url)
+	klog.Infof("Sending app register request with body=%s url=%s", utils.PrettyJSON(string(body)), url)
 
 	resp, err := client.SetTimeout(2*time.Second).R().
 		SetHeader(restful.HEADER_ContentType, restful.MIME_JSON).
@@ -535,7 +535,7 @@ func (h *HelmOps) registerAppPerm(perm []appcfg.SysDataPermission) (*appcfg.Regi
 	var regResp appcfg.RegisterResp
 	err = json.Unmarshal(resp.Body(), &regResp)
 	if err != nil {
-		klog.Error("Failed to unmarshal response body=%s err=%v", string(resp.Body()), err)
+		klog.Errorf("Failed to unmarshal response body=%s err=%v", string(resp.Body()), err)
 		return nil, err
 	}
 
@@ -718,7 +718,7 @@ func (h *HelmOps) Uninstall() error {
 					}
 				}
 			} else {
-				klog.Error("Failed to get nodes err=%v", e)
+				klog.Errorf("Failed to get nodes err=%v", e)
 			}
 		}
 	}

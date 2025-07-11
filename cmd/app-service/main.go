@@ -1,27 +1,31 @@
 package main
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
 	"bytetrade.io/web3os/app-service/pkg/images"
+	"k8s.io/client-go/dynamic"
+
+	//"bytetrade.io/web3os/app-service/pkg/images"
 	"context"
 	"flag"
 	"fmt"
+	iamv1alpha2 "github.com/beclab/api/iam/v1alpha2"
 	"os"
 	"os/signal"
 	"syscall"
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
-	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
+	//"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
 
 	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/controllers"
 	"bytetrade.io/web3os/app-service/pkg/apiserver"
-
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/client-go/dynamic"
+	//"k8s.io/client-go/dynamic"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/rest"
@@ -40,6 +44,8 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(appv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(sysv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(iamv1alpha2.AddToScheme(scheme))
+
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -144,6 +150,21 @@ func main() {
 		Client: mgr.GetClient(),
 	}).SetUpWithManager(mgr); err != nil {
 		setupLog.Error(err, "Unable to create controller", "controller", "tailScaleACLA manager")
+		os.Exit(1)
+	}
+
+	if err = (&controllers.UserController{
+		Client:     mgr.GetClient(),
+		KubeConfig: config,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Unable to create controller", "controller", "User")
+		os.Exit(1)
+	}
+
+	if err = (&controllers.NamespaceReconciler{
+		Client: mgr.GetClient(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Unable to create controller", "controller", "namespace")
 		os.Exit(1)
 	}
 

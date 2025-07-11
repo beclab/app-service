@@ -219,9 +219,6 @@ func (h *Handler) listBackend(req *restful.Request, resp *restful.Response) {
 
 	for _, a := range allApps {
 		if a.Spec.Owner == owner {
-			if !stateSet.Has(a.Status.State) {
-				continue
-			}
 			if len(isSysApp) > 0 && isSysApp == "true" && strconv.FormatBool(a.Spec.IsSysApp) != isSysApp {
 				continue
 			}

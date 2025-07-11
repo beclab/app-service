@@ -224,7 +224,7 @@ func (wh *Webhook) MustInject(ctx context.Context, pod *corev1.Pod, namespace st
 	// get appLabel from namespace
 	_, err := wh.kubeClient.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
 	if err != nil {
-		klog.Error("Failed to get namespace=%s err=%v", namespace, err)
+		klog.Errorf("Failed to get namespace=%s err=%v", namespace, err)
 		return false, false, false, perms, err
 	}
 
