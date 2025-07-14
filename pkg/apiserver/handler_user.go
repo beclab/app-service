@@ -182,7 +182,10 @@ func (h *Handler) createUser(req *restful.Request, resp *restful.Response) {
 	}
 
 	resp.WriteAsJson(map[string]interface{}{
-		"name": userReq.Name,
+		"code": 200,
+		"data": map[string]string{
+			"name": userReq.Name,
+		},
 	})
 	return
 }
@@ -215,7 +218,10 @@ func (h *Handler) deleteUser(req *restful.Request, resp *restful.Response) {
 		return
 	}
 	resp.WriteAsJson(map[string]interface{}{
-		"name": username,
+		"code": 200,
+		"data": map[string]string{
+			"name": username,
+		},
 	})
 	return
 }
@@ -235,8 +241,11 @@ func (h *Handler) userStatus(req *restful.Request, resp *restful.Response) {
 	}
 	if err != nil {
 		resp.WriteAsJson(map[string]interface{}{
-			"name":    username,
-			"status":  "Deleted",
+			"code": 200,
+			"data": map[string]interface{}{
+				"name":   username,
+				"status": "Deleted",
+			},
 			"message": fmt.Sprintf("user %s not exists", username),
 		})
 		return
@@ -253,10 +262,13 @@ func (h *Handler) userStatus(req *restful.Request, resp *restful.Response) {
 	}
 
 	resp.WriteAsJson(map[string]interface{}{
-		"name":   username,
-		"status": user.Status.State,
-		"address": map[string]string{
-			"wizard": address,
+		"code": 200,
+		"data": map[string]interface{}{
+			"name":   username,
+			"status": user.Status.State,
+			"address": map[string]string{
+				"wizard": address,
+			},
 		},
 		"message": user.Status.Reason,
 	})
@@ -336,7 +348,10 @@ func (h *Handler) handleUpdateUserLimits(req *restful.Request, resp *restful.Res
 		api.HandleError(resp, req, errors.Errorf("update user err: %v", err))
 		return
 	}
-	resp.WriteAsJson(nil)
+	resp.WriteAsJson(map[string]interface{}{
+		"code": 200,
+	})
+
 }
 
 func (h *Handler) handleUsers(req *restful.Request, resp *restful.Response) {
@@ -450,7 +465,11 @@ func (h *Handler) handleUser(req *restful.Request, resp *restful.Response) {
 		}
 	}
 
-	resp.WriteAsJson(u)
+	resp.WriteAsJson(map[string]interface{}{
+		"code": 200,
+		"data": u,
+	})
+
 }
 
 func getEnableHTTPSTaskState(user *iamv1alpha2.User) (*TaskResult, error) {

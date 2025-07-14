@@ -1,8 +1,6 @@
 package apiserver
 
 import (
-	"bytetrade.io/web3os/app-service/pkg/users"
-	"bytetrade.io/web3os/app-service/pkg/utils/registry"
 	"context"
 	"encoding/json"
 	"errors"
@@ -18,6 +16,8 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 	"bytetrade.io/web3os/app-service/pkg/webhook"
+	"bytetrade.io/web3os/app-service/pkg/users"
+	"bytetrade.io/web3os/app-service/pkg/utils/registry"
 
 	wfv1alpha1 "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
 	"github.com/containerd/containerd/reference/docker"
@@ -861,7 +861,9 @@ func (h *Handler) validateUser(ctx context.Context, req *admissionv1.AdmissionRe
 	creator := user.Annotations[users.AnnotationUserCreator]
 	isValidCreator := false
 	for _, existingUser := range existingUsers.Items {
-		if existingUser.Name == creator && ownerRole != "normal" {
+		//existingUserRole := existingUser.Annotations[users.UserAnnotationOwnerRole]
+
+		if existingUser.Name == creator {
 			isValidCreator = true
 		}
 	}
@@ -896,3 +898,9 @@ func (h *Handler) validateUser(ctx context.Context, req *admissionv1.AdmissionRe
 func isInPrivateNamespace(namespace string) bool {
 	return strings.HasPrefix(namespace, "user-space-") || strings.HasPrefix(namespace, "user-system-")
 }
+
+//func checkCreatorRole(creatorRole string, ownerRole string) bool {
+//	m := map[string]string {
+//		"owner"
+//	}
+//}
