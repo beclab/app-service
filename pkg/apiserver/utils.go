@@ -534,7 +534,8 @@ func FormatDependencyError(deps []appcfg.Dependency) error {
 }
 
 type ListResult struct {
-	Items  []any `json:"items"`
+	Code   int   `json:"code"`
+	Data   []any `json:"data"`
 	Totals int   `json:"totals"`
 }
 
@@ -545,5 +546,5 @@ func NewListResult[T any](items []T) ListResult {
 			vs = append(vs, item)
 		}
 	}
-	return ListResult{Items: vs, Totals: len(items)}
+	return ListResult{Code: 200, Data: vs, Totals: len(items)}
 }
