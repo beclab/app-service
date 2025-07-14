@@ -300,7 +300,8 @@ func (c *Creator) installSysApps(ctx context.Context, bflPod *corev1.Pod) error 
 	vals["gpu"] = gpuType
 
 	vals["terminusGlobalEnvs"] = map[string]interface{}{
-		"COREDNS_SVC": os.Getenv("COREDNS_SVC"),
+		"COREDNS_SVC":                os.Getenv("COREDNS_SVC"),
+		"TAILSCALE_CONTROLPLANE_URL": os.Getenv("TAILSCALE_CONTROLPLANE_URL"),
 	}
 	userIndex, userSubnet, err := c.getUserSubnet(ctx)
 	if err != nil {
