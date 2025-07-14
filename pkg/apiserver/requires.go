@@ -19,7 +19,7 @@ func requireAdmin(h *Handler, next func(req *restful.Request, resp *restful.Resp
 			return
 		}
 
-		if role != "platform-admin" {
+		if role != "owner" && role != "admin" {
 			responseError(resp, errors.New("only admin user can upgrade system"))
 			return
 		}

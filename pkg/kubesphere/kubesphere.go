@@ -176,7 +176,8 @@ func GetAdminUsername(ctx context.Context, kubeConfig *rest.Config) (string, err
 			continue
 		}
 		annotations := u.GetAnnotations()
-		if annotations["bytetrade.io/owner-role"] == "platform-admin" {
+		role := annotations["bytetrade.io/owner-role"]
+		if role == "owner" || role == "admin" {
 			admin = u.GetName()
 			break
 		}
