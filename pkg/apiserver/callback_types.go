@@ -1,12 +1,8 @@
 package apiserver
 
 import (
-	"bytetrade.io/web3os/app-service/pkg/constants"
-	"bytetrade.io/web3os/app-service/pkg/kubesphere"
-	"errors"
-	ctrl "sigs.k8s.io/controller-runtime"
-
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
+	"errors"
 
 	"github.com/emicklei/go-restful/v3"
 	"go.uber.org/atomic"
@@ -26,19 +22,6 @@ func tryAppInstall(next func(req *restful.Request, resp *restful.Response)) func
 			next(req, resp)
 		} else {
 			api.HandleForbidden(resp, req, errors.New("system is busy"))
-		}
-	}
-}
-
-func validateOpRole(next func(req *restful.Request, resp *restful.Response)) func(req *restful.Request, resp *restful.Response) {
-	return func(req *restful.Request, resp *restful.Response) {
-		user := req.Attribute(constants.UserContextAttribute)
-		kubeConfig, _ := ctrl.GetConfig()
-		role, _ := kubesphere.GetUserRole(req.Request.Context(), kubeConfig, user.(string))
-		if role == "platform-admin" {
-			next(req, resp)
-		} else {
-			api.HandleForbidden(resp, req, errors.New("you don't have permission to do this operate"))
 		}
 	}
 }

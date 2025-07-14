@@ -57,7 +57,7 @@ func (h *Handler) installMiddleware(req *restful.Request, resp *restful.Response
 		api.HandleError(resp, req, err)
 		return
 	}
-	if role != "platform-admin" {
+	if role != "owner" && role != "admin" {
 		api.HandleBadRequest(resp, req, errors.New("only admin user can install this middleware"))
 		return
 	}

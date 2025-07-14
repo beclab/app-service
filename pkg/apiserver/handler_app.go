@@ -752,9 +752,6 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 
 	// filter by application's owner
 	for _, a := range allApps {
-		//if role != "platform-admin" && a.Spec.Owner != owner {
-		//	continue
-		//}
 		if len(isSysApp) > 0 && strconv.FormatBool(a.Spec.IsSysApp) != isSysApp {
 			continue
 		}

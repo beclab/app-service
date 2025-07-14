@@ -106,13 +106,13 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
-	if role != "platform-admin" && appConfig.OnlyAdmin {
+	if role != "owner" && role != "admin" && appConfig.OnlyAdmin {
 		api.HandleBadRequest(resp, req, errors.New("only admin user can install this app"))
 		return
 	}
 
 	if appConfig.AppScope.ClusterScoped {
-		if role != "platform-admin" {
+		if role != "owner" && role != "admin" {
 			api.HandleBadRequest(resp, req, errors.New("only admin user can create cluster level app"))
 			return
 		}
