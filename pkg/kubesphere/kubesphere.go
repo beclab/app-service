@@ -189,3 +189,49 @@ func GetAdminUsername(ctx context.Context, kubeConfig *rest.Config) (string, err
 func GetUserIndexByName(ctx context.Context, kubeConfig *rest.Config, name string) (string, error) {
 	return GetUserAnnotation(ctx, kubeConfig, name, userIndex)
 }
+
+// GetAdminUserList returns admin list, an error if there is any.
+func GetAdminUserList(ctx context.Context, kubeConfig *rest.Config) ([]string, error) {
+	adminUserList := make([]string, 0)
+
+	gvr := schema.GroupVersionResource{
+		Group:    "iam.kubesphere.io",
+		Version:  "v1alpha2",
+		Resource: "users",
+	}
+	client, err := dynamic.NewForConfig(kubeConfig)
+	if err != nil {
+		return adminUserList, err
+	}
+	data, err := client.Resource(gvr).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		klog.Errorf("Failed to get user list err=%v", err)
+		return adminUserList, err
+	}
+
+	for _, u := range data.Items {
+		if u.Object == nil {
+			continue
+		}
+		annotations := u.GetAnnotations()
+		role := annotations["bytetrade.io/owner-role"]
+		if role == "owner" || role == "admin" {
+			adminUserList = append(adminUserList, u.GetName())
+		}
+	}
+
+	return adminUserList, nil
+}
+
+func IsAdmin(ctx context.Context, kubeConfig *rest.Config, owner string) (bool, error) {
+	adminList, err := GetAdminUserList(ctx, kubeConfig)
+	if err != nil {
+		return false, err
+	}
+	for _, user := range adminList {
+		if user == owner {
+		}
+		return true, nil
+	}
+	return false, nil
+}

@@ -60,8 +60,14 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
+	isAdmin, err := kubesphere.IsAdmin(req.Request.Context(), h.kubeConfig, owner)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+
 	appConfig, _, err := apputils.GetAppConfig(req.Request.Context(), app, owner,
-		insReq.CfgURL, insReq.RepoURL, "", token, admin, marketSource)
+		insReq.CfgURL, insReq.RepoURL, "", token, admin, marketSource, isAdmin)
 	if err != nil {
 		klog.Errorf("Failed to get appconfig err=%v", err)
 		api.HandleBadRequest(resp, req, err)

@@ -265,15 +265,15 @@ func GetRefFromResourceList(chartPath string, values map[string]interface{}) (re
 	return filteredRefs, nil
 }
 
-func RenderManifest(filepath, owner, admin string) (string, error) {
+func RenderManifest(filepath, owner, admin string, isAdmin bool) (string, error) {
 	templateData, err := os.ReadFile(filepath)
 	if err != nil {
 		return "", err
 	}
-	return RenderManifestFromContent(templateData, owner, admin)
+	return RenderManifestFromContent(templateData, owner, admin, isAdmin)
 }
 
-func RenderManifestFromContent(content []byte, owner, admin string) (string, error) {
+func RenderManifestFromContent(content []byte, owner, admin string, isAdmin bool) (string, error) {
 	c := &chart.Chart{
 		Metadata: &chart.Metadata{
 			Name:    "chart",
@@ -286,11 +286,16 @@ func RenderManifestFromContent(content []byte, owner, admin string) (string, err
 			},
 		},
 	}
+	//admin := owner
+	//if isAdmin {
+	//
+	//}
 	values := map[string]interface{}{
 		"admin": admin,
 		"bfl": map[string]string{
 			"username": owner,
 		},
+		"isAdmin": isAdmin,
 	}
 
 	valuesToRender, err := chartutil.ToRenderValues(c, values, chartutil.ReleaseOptions{}, nil)

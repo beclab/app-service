@@ -134,6 +134,11 @@ type AdminUsernameRespData struct {
 	Username string `json:"username"`
 }
 
+type AdminListResponse struct {
+	Response
+	Data []string `json:"data"`
+}
+
 // ResponseWithMsg represents  a response with an additional message.
 type ResponseWithMsg struct {
 	Response
