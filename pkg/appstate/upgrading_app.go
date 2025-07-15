@@ -139,8 +139,13 @@ func (p *UpgradingApp) exec(ctx context.Context) error {
 		klog.Errorf("get admin username failed %v", err)
 		return err
 	}
+	isAdmin, err := kubesphere.IsAdmin(ctx, kubeConfig, p.manager.Spec.AppOwner)
+	if err != nil {
+		klog.Errorf("failed check is admin user %v", err)
+		return err
+	}
 	if !userspace.IsSysApp(p.manager.Spec.AppName) {
-		appConfig, chartPath, err = config.GetAppConfig(ctx, p.manager.Spec.AppName, p.manager.Spec.AppOwner, cfgURL, repoURL, version, token, admin, marketSource)
+		appConfig, chartPath, err = config.GetAppConfig(ctx, p.manager.Spec.AppName, p.manager.Spec.AppOwner, cfgURL, repoURL, version, token, admin, marketSource, isAdmin)
 		if err != nil {
 			klog.Errorf("get app config failed %v", err)
 			return err

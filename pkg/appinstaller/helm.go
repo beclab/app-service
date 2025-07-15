@@ -483,6 +483,12 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 	}
 	values["admin"] = admin
 
+	isAdmin, err := kubesphere.IsAdmin(context.TODO(), h.kubeConfig, h.app.OwnerName)
+	if err != nil {
+		return values, err
+	}
+	values["isAdmin"] = isAdmin
+
 	rootPath := userspacev1.DefaultRootPath
 	if os.Getenv(userspacev1.OlaresRootPath) != "" {
 		rootPath = os.Getenv(userspacev1.OlaresRootPath)

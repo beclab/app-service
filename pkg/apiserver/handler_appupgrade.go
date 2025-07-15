@@ -84,8 +84,13 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
+	isAdmin, err := kubesphere.IsAdmin(req.Request.Context(), h.kubeConfig, owner)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
 
-	appConfig, _, err := config.GetAppConfig(req.Request.Context(), app, owner, request.CfgURL, request.RepoURL, request.Version, token, admin, marketSource)
+	appConfig, _, err := config.GetAppConfig(req.Request.Context(), app, owner, request.CfgURL, request.RepoURL, request.Version, token, admin, marketSource, isAdmin)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return

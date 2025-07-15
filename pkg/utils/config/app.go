@@ -26,7 +26,7 @@ const (
 )
 
 // GetAppConfig get app installation configuration from app store
-func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, token, admin, marketSource string) (*appcfg.ApplicationConfig, string, error) {
+func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, token, admin, marketSource string, isAdmin bool) (*appcfg.ApplicationConfig, string, error) {
 	if repoURL == "" {
 		return nil, "", fmt.Errorf("url info is empty, cfg [%s], repo [%s]", cfgURL, repoURL)
 	}
@@ -43,7 +43,7 @@ func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, tok
 			return nil, "", err
 		}
 	} else {
-		appcfg, chartPath, err = getAppConfigFromRepo(ctx, app, repoURL, version, token, owner, admin, marketSource)
+		appcfg, chartPath, err = getAppConfigFromRepo(ctx, app, repoURL, version, token, owner, admin, marketSource, isAdmin)
 		if err != nil {
 			return nil, chartPath, err
 		}
@@ -63,8 +63,8 @@ func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, tok
 	return appcfg, chartPath, nil
 }
 
-func getAppConfigFromConfigurationFile(app, chart, owner, admin string) (*appcfg.ApplicationConfig, string, error) {
-	data, err := utils.RenderManifest(filepath.Join(chart, AppCfgFileName), owner, admin)
+func getAppConfigFromConfigurationFile(app, chart, owner, admin string, isAdmin bool) (*appcfg.ApplicationConfig, string, error) {
+	data, err := utils.RenderManifest(filepath.Join(chart, AppCfgFileName), owner, admin, isAdmin)
 	if err != nil {
 		return nil, chart, err
 	}
@@ -96,12 +96,12 @@ func getAppConfigFromURL(ctx context.Context, app, url string) (*appcfg.Applicat
 	return toApplicationConfig(app, app, &cfg)
 }
 
-func getAppConfigFromRepo(ctx context.Context, app, repoURL, version, token, owner, admin, marketSource string) (*appcfg.ApplicationConfig, string, error) {
+func getAppConfigFromRepo(ctx context.Context, app, repoURL, version, token, owner, admin, marketSource string, isAdmin bool) (*appcfg.ApplicationConfig, string, error) {
 	chartPath, err := apputils.GetIndexAndDownloadChart(ctx, app, repoURL, version, token, owner, marketSource)
 	if err != nil {
 		return nil, chartPath, err
 	}
-	return getAppConfigFromConfigurationFile(app, chartPath, owner, admin)
+	return getAppConfigFromConfigurationFile(app, chartPath, owner, admin, isAdmin)
 }
 
 func toApplicationConfig(app, chart string, cfg *appcfg.AppConfiguration) (*appcfg.ApplicationConfig, string, error) {

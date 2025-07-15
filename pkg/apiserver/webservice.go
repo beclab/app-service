@@ -732,6 +732,13 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get admin username", nil))
 
+	ws.Route(ws.GET("/users/admins").
+		To(handler.adminUserList).
+		Doc("return admin list").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
+		Returns(http.StatusOK, "Success to get admin username", nil))
+
 	c.Add(ws)
 
 	return nil

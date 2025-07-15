@@ -63,7 +63,11 @@ func getAppConfigFromConfigurationFile(app, chart, owner string) (*ApplicationCo
 	if err != nil {
 		return nil, err
 	}
-	data, err := utils.RenderManifest(filepath.Join(chart, "OlaresManifest.yaml"), owner, admin)
+	isAdmin, err := kubesphere.IsAdmin(context.TODO(), config, owner)
+	if err != nil {
+		return nil, err
+	}
+	data, err := utils.RenderManifest(filepath.Join(chart, "OlaresManifest.yaml"), owner, admin, isAdmin)
 	if err != nil {
 		return nil, err
 	}

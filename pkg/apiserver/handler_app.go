@@ -826,7 +826,8 @@ func (h *Handler) renderManifest(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
-	renderedYAML, err := utils.RenderManifestFromContent([]byte(request.Content), owner, admin)
+	isAdmin, err := kubesphere.IsAdmin(req.Request.Context(), h.kubeConfig, owner)
+	renderedYAML, err := utils.RenderManifestFromContent([]byte(request.Content), owner, admin, isAdmin)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -855,6 +856,24 @@ func (h *Handler) adminUsername(req *restful.Request, resp *restful.Response) {
 	})
 }
 
+func (h *Handler) adminUserList(req *restful.Request, resp *restful.Response) {
+	config, err := ctrl.GetConfig()
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+
+	adminList, err := kubesphere.GetAdminUserList(req.Request.Context(), config)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	resp.WriteEntity(api.AdminListResponse{
+		Response: api.Response{Code: 200},
+		Data:     adminList,
+	})
+}
+
 func (h *Handler) oamValues(req *restful.Request, resp *restful.Response) {
 	//app := req.PathParameter(ParamAppName)
 	//owner := req.Attribute(constants.UserContextAttribute).(string)
@@ -867,29 +886,21 @@ func (h *Handler) oamValues(req *restful.Request, resp *restful.Response) {
 	//	return
 	//}
 
-	admin, err := kubesphere.GetAdminUsername(req.Request.Context(), h.kubeConfig)
-	if err != nil {
-		api.HandleError(resp, req, err)
-		return
-	}
-
-	//_, _, err = apputils.GetAppConfig(req.Request.Context(), app, owner,
-	//	insReq.CfgURL, insReq.RepoURL, "", token, admin)
+	//admin, err := kubesphere.GetAdminUsername(req.Request.Context(), h.kubeConfig)
 	//if err != nil {
-	//	klog.Errorf("Failed to get appconfig err=%v", err)
-	//	api.HandleBadRequest(resp, req, err)
+	//	api.HandleError(resp, req, err)
 	//	return
 	//}
 
 	values := map[string]interface{}{
-		"admin": admin,
+		"admin": "admin",
 		"bfl": map[string]string{
-			"username": admin,
+			"username": "admin",
 		},
 	}
 
 	var nodes corev1.NodeList
-	err = h.ctrlClient.List(req.Request.Context(), &nodes, &client.ListOptions{})
+	err := h.ctrlClient.List(req.Request.Context(), &nodes, &client.ListOptions{})
 	if err != nil {
 		klog.Errorf("list node failed %v", err)
 		api.HandleError(resp, req, err)
