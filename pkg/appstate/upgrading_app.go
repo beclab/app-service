@@ -164,7 +164,7 @@ func (p *UpgradingApp) exec(ctx context.Context) error {
 			RepoURL:    repoURL,
 		}
 	}
-	ops, err := appinstaller.NewHelmOpsWithVersion(ctx, kubeConfig, appConfig, token, appinstaller.Opt{Source: p.manager.Spec.Source}, "v1")
+	ops, err := appinstaller.NewHelmOps(ctx, kubeConfig, appConfig, token, appinstaller.Opt{Source: p.manager.Spec.Source})
 	if err != nil {
 		klog.Errorf("make helmop failed %v", err)
 		return err
