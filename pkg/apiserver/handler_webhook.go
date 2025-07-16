@@ -710,7 +710,7 @@ func (h *Handler) appLabelMutate(ctx context.Context, req *admissionv1.Admission
 	}
 
 	appName := appCfg.AppName
-	if len(appName) == 0 || appName != object.Name {
+	if len(appName) == 0 {
 		return resp
 	}
 
