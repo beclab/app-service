@@ -87,6 +87,9 @@ func (r *ApplicationManagerController) ReconcileAll() {
 	}
 
 	for _, appmgr := range appManagerList.Items {
+		if appmgr.Spec.Type != appv1alpha1.App {
+			continue
+		}
 		_, err := r.Reconcile(ctx, ctrl.Request{
 			NamespacedName: types.NamespacedName{
 				Name: appmgr.Name,
@@ -150,6 +153,9 @@ func (r *ApplicationManagerController) Reconcile(ctx context.Context, req ctrl.R
 
 func (r *ApplicationManagerController) preEnqueueCheckForCreate(obj client.Object) bool {
 	am, _ := obj.(*appv1alpha1.ApplicationManager)
+	if am.Spec.Type != appv1alpha1.App {
+		return false
+	}
 	return am.Status.State != ""
 }
 
