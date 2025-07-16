@@ -16,7 +16,9 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Install install a workflow with helm client.
+const instanceID = "knowledge-shared"
+
+// Install a workflow with helm client.
 func Install(ctx context.Context, kubeConfig *rest.Config, workflow *WorkflowConfig) error {
 	helmClient, err := v1.NewHelmClient(ctx, kubeConfig, workflow.Namespace)
 	if err != nil {
@@ -41,9 +43,7 @@ func Install(ctx context.Context, kubeConfig *rest.Config, workflow *WorkflowCon
 		klog.Errorf("Failed to install workflow chart name=%s err=%v", workflow.WorkflowName, err)
 		return err
 	}
-	klog.Infof("install workflow old instanceID: %s", "user-space-"+workflow.OwnerName)
-	//instanceID := "user-space-" + workflow.OwnerName
-	instanceID := "os-framework"
+	klog.Infof("install workflow old instanceID: %s", instanceID)
 
 	return argo.UpdateWorkflowInNamespace(ctx, kubeConfig, workflow.WorkflowName,
 		workflow.Namespace, instanceID, workflow.OwnerName, workflow.Cfg.Metadata.Title, workflow.Cfg.Options.SyncProvider)
@@ -97,9 +97,7 @@ func Upgrade(ctx context.Context, kubeConfig *rest.Config, workflow *WorkflowCon
 		return err
 	}
 
-	//instanceID := "user-space-" + workflow.OwnerName
-	klog.Infof("install workflow old instanceID: %s", "user-space-"+workflow.OwnerName)
-	instanceID := "os-framework"
+	klog.Infof("install workflow old instanceID: %s", instanceID)
 	return argo.UpdateWorkflowInNamespace(ctx, kubeConfig, workflow.WorkflowName,
 		workflow.Namespace, instanceID, workflow.OwnerName, workflow.Cfg.Metadata.Title, workflow.Cfg.Options.SyncProvider)
 }
