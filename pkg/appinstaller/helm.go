@@ -50,7 +50,12 @@ import (
 
 var (
 	systemServerHost = ""
-	middlewareTypes  = []string{tapr.TypePostgreSQL.String(), tapr.TypeMongoDB.String(), tapr.TypeRedis.String(), tapr.TypeNats.String()}
+	middlewareTypes  = []string{
+		tapr.TypePostgreSQL.String(),
+		tapr.TypeMongoDB.String(),
+		tapr.TypeRedis.String(),
+		tapr.TypeNats.String(),
+	}
 )
 
 func init() {
@@ -104,71 +109,6 @@ func (h *HelmOps) install(values map[string]interface{}) error {
 		return helm.InstallCharts(h.ctx, h.actionConfig, h.settings, h.app.AppName, h.app.ChartsName, h.app.RepoURL, h.app.Namespace, values)
 	}
 	return err
-}
-
-// Install makes install operation for an application.
-func (h *HelmOps) Install_deprecated() error {
-	values, err := h.setValues()
-	if err != nil {
-		return err
-	}
-	namespace := fmt.Sprintf("%s-%s", "user-system", h.app.OwnerName)
-	if err := tapr.Apply(h.app.Middleware, h.kubeConfig, h.app.AppName, h.app.Namespace,
-		namespace, h.token, h.app.ChartsName, h.app.OwnerName, values); err != nil {
-		klog.Errorf("Failed to apply middleware err=%v", err)
-		return err
-	}
-	err = h.install(values)
-	if err != nil && !errors.Is(err, driver.ErrReleaseExists) {
-		klog.Errorf("Failed to install chart err=%v", err)
-		return err
-	}
-	err = h.addApplicationLabelsToDeployment()
-	if err != nil {
-		h.Uninstall()
-		return err
-	}
-
-	isDepClusterScopedApp := false
-	client, err := versioned.NewForConfig(h.kubeConfig)
-	if err != nil {
-		return err
-	}
-	apps, err := client.AppV1alpha1().Applications().List(h.ctx, metav1.ListOptions{})
-	if err != nil {
-		return err
-	}
-
-	for _, dep := range h.app.Dependencies {
-		if dep.Type == constants.DependencyTypeSystem {
-			continue
-		}
-		for _, app := range apps.Items {
-			if app.Spec.Name == dep.Name && app.Spec.Settings["clusterScoped"] == "true" {
-				isDepClusterScopedApp = true
-				break
-			}
-		}
-
-	}
-	if isDepClusterScopedApp {
-		err = h.addLabelToNamespaceForDependClusterApp()
-		if err != nil {
-			h.Uninstall()
-			return err
-		}
-	}
-	ok, err := h.waitForLaunch()
-
-	if !ok {
-		// install operation has been canceled, so to uninstall it.
-		h.Uninstall()
-		//return context.Canceled
-		return err
-	}
-	klog.Infof("app: %s launched success", h.app.AppName)
-
-	return nil
 }
 
 // NewHelmOps constructs a new helmOps.
@@ -1304,10 +1244,6 @@ func (h *HelmOps) Install() error {
 		h.Uninstall()
 		return err
 	}
-	return nil
-}
-
-func (h *HelmOps) isPending() error {
 	return nil
 }
 
