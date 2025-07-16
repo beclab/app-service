@@ -90,7 +90,7 @@ func (p *InstallingCancelingApp) handleInstallCancel(ctx context.Context) error 
 		return err
 	}
 
-	ops, err := appinstaller.NewHelmOps(ctx, kubeConfig, appCfg, token, appinstaller.Opt{})
+	ops, err := appinstaller.NewHelmOpsWithVersion(ctx, kubeConfig, appCfg, token, appinstaller.Opt{}, "v1")
 	if err != nil {
 		klog.Errorf("make helm ops failed %v", err)
 		return err

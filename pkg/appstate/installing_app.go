@@ -65,7 +65,7 @@ func (p *InstallingApp) Exec(ctx context.Context) (StatefulInProgressApp, error)
 
 	opCtx, cancel := context.WithCancel(context.Background())
 
-	ops, err := appinstaller.NewHelmOps(opCtx, kubeConfig, appCfg, token, appinstaller.Opt{Source: p.manager.Spec.Source})
+	ops, err := appinstaller.NewHelmOpsWithVersion(opCtx, kubeConfig, appCfg, token, appinstaller.Opt{Source: p.manager.Spec.Source}, "v1")
 	if err != nil {
 		klog.Errorf("make helm ops failed %v", err)
 		cancel()
