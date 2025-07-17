@@ -175,6 +175,9 @@ func (h *Handler) createUser(req *restful.Request, resp *restful.Response) {
 			Description:     userReq.Description,
 		},
 	}
+	if userReq.OwnerRole == "owner" || userReq.OwnerRole == "admin" {
+		user.Spec.Groups = append(user.Spec.Groups, "lldap_admin")
+	}
 	err = h.ctrlClient.Create(req.Request.Context(), &user)
 	if err != nil {
 		api.HandleError(resp, req, err)
