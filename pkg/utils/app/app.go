@@ -601,8 +601,8 @@ func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, tok
 	return appcfg, chartPath, nil
 }
 
-func GetApiVersionFromAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version string) (appcfg.APIVersion, error) {
-	cfg, _, err := GetAppConfig(ctx, app, owner, cfgURL, repoURL, version, "", "", "", false)
+func GetApiVersionFromAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, marketSource string) (appcfg.APIVersion, error) {
+	cfg, _, err := GetAppConfig(ctx, app, owner, cfgURL, repoURL, "", "", "", marketSource, false)
 	if err != nil {
 		return "", fmt.Errorf("failed to get app config: %w", err)
 	}
