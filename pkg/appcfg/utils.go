@@ -179,5 +179,6 @@ func getAppConfigFromConfigurationFile(app, chart, owner string) (*ApplicationCo
 		ApiTimeout:           cfg.Options.ApiTimeout,
 		AllowedOutboundPorts: cfg.Options.AllowedOutboundPorts,
 		RequiredGPU:          cfg.Spec.RequiredGPU,
+		Internal:             cfg.Spec.RunAsInternal,
 	}, nil
 }

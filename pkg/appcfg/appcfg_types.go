@@ -21,6 +21,7 @@ type AppMetaData struct {
 
 type AppConfiguration struct {
 	ConfigVersion string                 `yaml:"olaresManifest.version" json:"olaresManifest.version"`
+	APIVersion    string                 `yaml:"apiVersion" json:"apiVersion"`
 	Metadata      AppMetaData            `yaml:"metadata" json:"metadata"`
 	Entrances     []v1alpha1.Entrance    `yaml:"entrances" json:"entrances"`
 	Ports         []v1alpha1.ServicePort `yaml:"ports" json:"ports"`
@@ -47,6 +48,8 @@ type AppSpec struct {
 	RequiredGPU        string        `yaml:"requiredGpu" json:"requiredGpu"`
 	RequiredCPU        string        `yaml:"requiredCpu" json:"requiredCpu"`
 	RunAsUser          bool          `yaml:"runAsUser" json:"runAsUser"`
+	RunAsInternal      bool          `yaml:"runAsInternal" json:"runAsInternal"`
+	SubCharts          []Chart       `yaml:"subCharts" json:"subCharts"`
 }
 
 type SupportClient struct {
@@ -122,6 +125,7 @@ type ResetCookie struct {
 type AppScope struct {
 	ClusterScoped bool     `yaml:"clusterScoped" json:"clusterScoped"`
 	AppRef        []string `yaml:"appRef" json:"appRef"`
+	SystemService bool     `yaml:"systemService" json:"systemService"`
 }
 
 type WsConfig struct {
@@ -139,4 +143,9 @@ type OIDC struct {
 	Enabled      bool   `yaml:"enabled" json:"enabled"`
 	RedirectUri  string `yaml:"redirectUri" json:"redirectUri"`
 	EntranceName string `yaml:"entranceName" json:"entranceName"`
+}
+
+type Chart struct {
+	Name   string `yaml:"name" json:"name"`
+	Shared bool   `yaml:"shared" json:"shared"`
 }

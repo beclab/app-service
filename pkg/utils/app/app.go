@@ -601,7 +601,21 @@ func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, tok
 	return appcfg, chartPath, nil
 }
 
-func getAppConfigFromURL(ctx context.Context, app, url string) (*appcfg.ApplicationConfig, string, error) {
+func GetApiVersionFromAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, marketSource string) (appcfg.APIVersion, error) {
+	cfg, _, err := GetAppConfig(ctx, app, owner, cfgURL, repoURL, "", "", "", marketSource, false)
+	if err != nil {
+		return "", fmt.Errorf("failed to get app config: %w", err)
+	}
+
+	// default version is v1
+	if cfg.APIVersion == "" {
+		return appcfg.V1, nil
+	}
+
+	return cfg.APIVersion, nil
+}
+
+func getAppConfigFromURL(_ context.Context, app, url string) (*appcfg.ApplicationConfig, string, error) {
 	client := resty.New().SetTimeout(2 * time.Second)
 	resp, err := client.R().Get(url)
 	if err != nil {
@@ -717,8 +731,13 @@ func toApplicationConfig(app, chart string, cfg *appcfg.AppConfiguration) (*appc
 		appid = utils.Md5String(app)[:8]
 	}
 
+	if appcfg.APIVersion(cfg.APIVersion) == appcfg.V2 {
+		// V2: additional validation for app config
+	}
+
 	return &appcfg.ApplicationConfig{
 		AppID:          appid,
+		APIVersion:     appcfg.APIVersion(cfg.APIVersion),
 		CfgFileVersion: cfg.ConfigVersion,
 		AppName:        app,
 		Title:          cfg.Metadata.Title,
@@ -752,6 +771,8 @@ func toApplicationConfig(app, chart string, cfg *appcfg.AppConfiguration) (*appc
 		RunAsUser:            cfg.Spec.RunAsUser,
 		AllowedOutboundPorts: cfg.Options.AllowedOutboundPorts,
 		RequiredGPU:          cfg.Spec.RequiredGPU,
+		Internal:             cfg.Spec.RunAsInternal,
+		SubCharts:            cfg.Spec.SubCharts,
 	}, chart, nil
 }
 
