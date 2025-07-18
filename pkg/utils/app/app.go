@@ -601,7 +601,21 @@ func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, tok
 	return appcfg, chartPath, nil
 }
 
-func getAppConfigFromURL(ctx context.Context, app, url string) (*appcfg.ApplicationConfig, string, error) {
+func GetApiVersionFromAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version string) (appcfg.APIVersion, error) {
+	cfg, _, err := GetAppConfig(ctx, app, owner, cfgURL, repoURL, version, "", "", "", false)
+	if err != nil {
+		return "", fmt.Errorf("failed to get app config: %w", err)
+	}
+
+	// default version is v1
+	if cfg.APIVersion == "" {
+		return appcfg.V1, nil
+	}
+
+	return cfg.APIVersion, nil
+}
+
+func getAppConfigFromURL(_ context.Context, app, url string) (*appcfg.ApplicationConfig, string, error) {
 	client := resty.New().SetTimeout(2 * time.Second)
 	resp, err := client.R().Get(url)
 	if err != nil {
@@ -719,6 +733,7 @@ func toApplicationConfig(app, chart string, cfg *appcfg.AppConfiguration) (*appc
 
 	return &appcfg.ApplicationConfig{
 		AppID:          appid,
+		APIVersion:     appcfg.APIVersion(cfg.APIVersion),
 		CfgFileVersion: cfg.ConfigVersion,
 		AppName:        app,
 		Title:          cfg.Metadata.Title,

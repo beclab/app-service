@@ -6,9 +6,11 @@ import (
 	"strings"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/security"
 	"bytetrade.io/web3os/app-service/pkg/utils"
+	"bytetrade.io/web3os/app-service/pkg/wrapper"
 
 	"github.com/go-logr/logr"
 	"github.com/thoas/go-funk"
@@ -206,7 +208,7 @@ func (r *SecurityReconciler) reconcileNamespaceLabels(ctx context.Context, ns *c
 			updated = true
 		}
 	} else {
-		owner, err := r.findOwnerOfNamespace(ctx, ns)
+		owner, internal, system, err := r.findOwnerOfNamespace(ctx, ns)
 		if err != nil {
 			return err
 		}
@@ -218,6 +220,12 @@ func (r *SecurityReconciler) reconcileNamespaceLabels(ctx context.Context, ns *c
 
 			if label, ok := ns.Labels[security.NamespaceOwnerLabel]; !ok || label != owner {
 				ns.Labels[security.NamespaceOwnerLabel] = owner
+				switch {
+				case system:
+					ns.Labels[security.NamespaceTypeLabel] = security.System
+				case internal:
+					ns.Labels[security.NamespaceTypeLabel] = security.Internal
+				}
 				updated = true
 			}
 		} else {
@@ -354,16 +362,10 @@ func (r *SecurityReconciler) reconcileNetworkPolicy(ctx context.Context, ns *cor
 				np.Spec.Ingress[0].From[0].NamespaceSelector.MatchLabels[security.NamespaceOwnerLabel] = owner
 
 				// get app name from np namespace
-				appName := getAppNameFromNPName(np.Namespace, owner)
-
-				if len(appName) > 0 {
-					appName = fmt.Sprintf("%s-%s", np.Namespace, appName)
-					key := types.NamespacedName{Name: appName}
-					var depApp v1alpha1.Application
-					err := r.Get(context.Background(), key, &depApp)
-					if err != nil {
-						logger.Info("Get app info ", "name", appName, "err", err)
-					}
+				depApp, err := r.getAppInNs(np.Namespace, owner)
+				if err != nil {
+					logger.Error(err, "get app info ", "name", np.Namespace, "err", err)
+				} else {
 					//
 					if appRefs, ok := depApp.Spec.Settings["clusterAppRef"]; ok {
 
@@ -448,8 +450,44 @@ func (r *SecurityReconciler) reconcileNetworkPolicy(ctx context.Context, ns *cor
 	return nil
 }
 
-func (r *SecurityReconciler) findOwnerOfNamespace(ctx context.Context, ns *corev1.Namespace) (string, error) {
+func (r *SecurityReconciler) findOwnerOfNamespace(ctx context.Context, ns *corev1.Namespace) (owner string, internal, system bool, err error) {
 	var deployemnts appsv1.DeploymentList
+
+	appIsInternal := func(labels map[string]string, owner string) (internal, system bool, err error) {
+		appName, ok := labels[constants.ApplicationNameLabel]
+		if ok && appName != "" {
+			app, err := r.getAppInNs(ns.Name, owner)
+			if err != nil {
+				r.Logger.Error(err, "Failed to get app in namespace", "namespace", ns.Name, "owner", owner)
+				return false, false, err
+			}
+
+			if app != nil {
+				wrapper := wrapper.ApplicationHelper{
+					Application: app,
+					Client:      r.Client,
+				}
+				mgr, err := wrapper.GetApplicationManger(ctx)
+				if err != nil {
+					r.Logger.Error(err, "Failed to get application manager for app", "app", appName)
+					return false, false, err
+				}
+
+				if mgr != nil {
+					var cfg appcfg.ApplicationConfig
+					err = mgr.GetAppConfig(&cfg)
+					if err != nil {
+						r.Logger.Error(err, "Failed to get app config for app", "app", appName)
+						return false, false, err
+					}
+
+					return cfg.Internal, cfg.AppScope.ClusterScoped && cfg.AppScope.SystemService, nil
+				}
+			}
+		}
+
+		return false, false, nil
+	}
 
 	// get deployments installed by app installer
 	if err := r.List(ctx, &deployemnts, client.InNamespace(ns.Name)); err == nil {
@@ -460,7 +498,11 @@ func (r *SecurityReconciler) findOwnerOfNamespace(ctx context.Context, ns *corev
 
 			owner, ok := d.GetLabels()[constants.ApplicationOwnerLabel]
 			if ok && owner != "" {
-				return owner, nil
+				runAsInternal, system, err := appIsInternal(d.GetLabels(), owner)
+				if err != nil {
+					return "", false, false, err
+				}
+				return owner, runAsInternal, system, nil
 			}
 		} // end loop deployment.Items
 	}
@@ -475,7 +517,11 @@ func (r *SecurityReconciler) findOwnerOfNamespace(ctx context.Context, ns *corev
 
 			owner, ok := d.GetLabels()[constants.ApplicationOwnerLabel]
 			if ok && owner != "" {
-				return owner, nil
+				runAsInternal, system, err := appIsInternal(d.GetLabels(), owner)
+				if err != nil {
+					return "", false, false, err
+				}
+				return owner, runAsInternal, system, nil
 			}
 		} // end loop sts.Items
 	}
@@ -495,12 +541,16 @@ func (r *SecurityReconciler) findOwnerOfNamespace(ctx context.Context, ns *corev
 
 			owner, ok := w.GetLabels()[constants.WorkflowOwnerLabel]
 			if ok && owner != "" {
-				return owner, nil
+				runAsInternal, system, err := appIsInternal(w.GetLabels(), owner)
+				if err != nil {
+					return "", false, false, err
+				}
+				return owner, runAsInternal, system, nil
 			}
 		}
 	}
 
-	return "", nil
+	return "", false, false, nil
 }
 
 func (r *SecurityReconciler) namespaceMustAdd(networkPolicy *netv1.NetworkPolicy, ns *corev1.Namespace) bool {
@@ -541,6 +591,25 @@ func (r *SecurityReconciler) namespacesShouldAllowNodeTunnel(ctx context.Context
 	}
 
 	return reqs, nil
+}
+
+func (r *SecurityReconciler) getAppInNs(ns, owner string) (*v1alpha1.Application, error) {
+	appName := getAppNameFromNPName(ns, owner)
+
+	if len(appName) > 0 {
+		appName = fmt.Sprintf("%s-%s", ns, appName)
+		key := types.NamespacedName{Name: appName}
+		var depApp v1alpha1.Application
+		err := r.Get(context.Background(), key, &depApp)
+		if err != nil {
+			r.Logger.Info("Get app info ", "name", appName, "err", err)
+			return nil, err
+		}
+
+		return &depApp, nil
+	}
+
+	return nil, nil
 }
 
 func isNodeChanged(obj ...metav1.Object) bool {

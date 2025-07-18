@@ -49,8 +49,16 @@ const (
 	UserDataRW UserDataPermission = "userdata-perm"
 )
 
+type APIVersion string
+
+const (
+	V1 APIVersion = "v1"
+	V2 APIVersion = "v2"
+)
+
 type ApplicationConfig struct {
 	AppID                string
+	APIVersion           APIVersion
 	CfgFileVersion       string
 	Namespace            string
 	ChartsName           string
@@ -81,4 +89,7 @@ type ApplicationConfig struct {
 	RunAsUser            bool
 	AllowedOutboundPorts []int
 	RequiredGPU          string
+	Release              []string
+	ClusterRelease       []string
+	Internal             bool
 }

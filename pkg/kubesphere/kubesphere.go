@@ -3,6 +3,7 @@ package kubesphere
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	v1alpha1client "bytetrade.io/web3os/app-service/pkg/client/clientset/v1alpha1"
 
@@ -228,10 +229,5 @@ func IsAdmin(ctx context.Context, kubeConfig *rest.Config, owner string) (bool, 
 	if err != nil {
 		return false, err
 	}
-	for _, user := range adminList {
-		if user == owner {
-		}
-		return true, nil
-	}
-	return false, nil
+	return slices.Contains(adminList, owner), nil
 }

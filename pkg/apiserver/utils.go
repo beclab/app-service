@@ -76,11 +76,13 @@ func CheckDependencies(ctx context.Context, deps []appcfg.Dependency, ctrlClient
 	unSatisfiedDeps := make([]appcfg.Dependency, 0)
 	client, err := utils.GetClient()
 	if err != nil {
+		klog.Errorf("Failed to get client err=%v", err)
 		return unSatisfiedDeps, err
 	}
 
 	applist, err := client.AppV1alpha1().Applications().List(ctx, metav1.ListOptions{})
 	if err != nil {
+		klog.Errorf("Failed to list application err=%v", err)
 		return unSatisfiedDeps, err
 	}
 	appToVersion := make(map[string]string)
@@ -99,13 +101,14 @@ func CheckDependencies(ctx context.Context, deps []appcfg.Dependency, ctrlClient
 		if dep.Type == constants.DependencyTypeSystem {
 			terminus, err := upgrade.GetTerminusVersion(ctx, ctrlClient)
 			if err != nil {
+				klog.Errorf("Failed to get olares version err=%v", err)
 				return unSatisfiedDeps, err
 			}
 
 			if !utils.MatchVersion(terminus.Spec.Version, dep.Version) {
 				unSatisfiedDeps = append(unSatisfiedDeps, dep)
 				if !checkAll {
-					return unSatisfiedDeps, fmt.Errorf("terminus version %s not match dependency %s", terminus.Spec.Version, dep.Version)
+					return unSatisfiedDeps, fmt.Errorf("olares version %s not match dependency %s", terminus.Spec.Version, dep.Version)
 				}
 			}
 		}
