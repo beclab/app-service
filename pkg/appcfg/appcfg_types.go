@@ -49,6 +49,7 @@ type AppSpec struct {
 	RequiredCPU        string        `yaml:"requiredCpu" json:"requiredCpu"`
 	RunAsUser          bool          `yaml:"runAsUser" json:"runAsUser"`
 	RunAsInternal      bool          `yaml:"runAsInternal" json:"runAsInternal"`
+	SubCharts          []Chart       `yaml:"subCharts" json:"subCharts"`
 }
 
 type SupportClient struct {
@@ -124,7 +125,6 @@ type ResetCookie struct {
 type AppScope struct {
 	ClusterScoped bool     `yaml:"clusterScoped" json:"clusterScoped"`
 	AppRef        []string `yaml:"appRef" json:"appRef"`
-	ClusterChart  []string `yaml:"clusterChart" json:"clusterChart"`
 	SystemService bool     `yaml:"systemService" json:"systemService"`
 }
 
@@ -143,4 +143,9 @@ type OIDC struct {
 	Enabled      bool   `yaml:"enabled" json:"enabled"`
 	RedirectUri  string `yaml:"redirectUri" json:"redirectUri"`
 	EntranceName string `yaml:"entranceName" json:"entranceName"`
+}
+
+type Chart struct {
+	Name   string `yaml:"name" json:"name"`
+	Shared bool   `yaml:"shared" json:"shared"`
 }

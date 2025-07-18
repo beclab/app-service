@@ -453,6 +453,19 @@ func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opI
 
 func (h *installHandlerHelperV2) _validateClusterScope(isAdmin bool, installedApps []*v1alpha1.Application) (err error) {
 	klog.Info("validate cluster scope for install handler v2")
+
+	// check if subcharts has a client chart
+	for _, subChart := range h.appConfig.SubCharts {
+		if !subChart.Shared {
+			if subChart.Name != h.app {
+				err := fmt.Errorf("non-shared subchart must has the same name with the app, subchart name is %s but the main app is %s", subChart.Name, h.app)
+				klog.Error(err)
+				api.HandleBadRequest(h.resp, h.req, err)
+				return err
+			}
+		}
+	}
+
 	// in V2, we do not check cluster scope here, the cluster scope app
 	// will be checked if the cluster part is installed by another user in the installing phase
 

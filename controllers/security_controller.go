@@ -481,7 +481,21 @@ func (r *SecurityReconciler) findOwnerOfNamespace(ctx context.Context, ns *corev
 						return false, false, err
 					}
 
-					return cfg.Internal, cfg.AppScope.ClusterScoped && cfg.AppScope.SystemService, nil
+					system = cfg.AppScope.ClusterScoped && cfg.AppScope.SystemService
+					if system && cfg.APIVersion == appcfg.V2 {
+						// V2: if the namespace is not cluster scoped, it cannot be considered as system app
+						for _, chart := range cfg.SubCharts {
+							if !chart.Shared {
+								chartNs := fmt.Sprintf("%s-%s", chart.Name, owner)
+								if chartNs != ns.Name {
+									system = false
+								}
+								break
+							}
+						}
+					}
+
+					return cfg.Internal, system, nil
 				}
 			}
 		}

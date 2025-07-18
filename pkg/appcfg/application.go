@@ -92,4 +92,5 @@ type ApplicationConfig struct {
 	Release              []string
 	ClusterRelease       []string
 	Internal             bool
+	SubCharts            []Chart
 }
