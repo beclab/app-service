@@ -20,6 +20,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 )
 
@@ -128,6 +129,141 @@ func (h *Handler) cleanRecommendEntryData(name, owner string) error {
 	return nil
 }
 
+func (h *Handler) installRecommend(req *restful.Request, resp *restful.Response) {
+	insReq := &api.InstallRequest{}
+	err := req.ReadEntity(insReq)
+	if err != nil {
+		api.HandleBadRequest(resp, req, err)
+		return
+	}
+
+	app := req.PathParameter(ParamWorkflowName)
+	token := req.HeaderParameter(constants.AuthorizationTokenKey)
+	owner := req.Attribute(constants.UserContextAttribute).(string)
+	marketSource := req.HeaderParameter(constants.MarketSource)
+
+	klog.Infof("Download chart and get workflow config appName=%s repoURL=%s", app, insReq.RepoURL)
+	workflowCfg, err := getWorkflowConfigFromRepo(req.Request.Context(), owner, app, insReq.RepoURL, "", token, marketSource)
+	if err != nil {
+		klog.Errorf("Failed to get workflow config appName=%s repoURL=%s err=%v", app, insReq.RepoURL, err)
+		api.HandleError(resp, req, err)
+		return
+	}
+
+	satisfied, err := CheckMiddlewareRequirement(req.Request.Context(), h.kubeConfig, workflowCfg.Cfg.Middleware)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	if !satisfied {
+		resp.WriteHeaderAndEntity(http.StatusBadRequest, api.RequirementResp{
+			Response: api.Response{Code: 400},
+			Resource: "middleware",
+			Message:  "middleware requirement can not be satisfied",
+		})
+		return
+	}
+
+	go h.notifyKnowledgeInstall(workflowCfg.Cfg.Metadata.Title, app, owner)
+
+	client, _ := utils.GetClient()
+
+	var a *v1alpha1.ApplicationManager
+	//appNamespace, _ := utils.AppNamespace(app, owner, workflowCfg.Namespace)
+	name, _ := apputils.FmtAppMgrName(app, owner, workflowCfg.Namespace)
+	recommendMgr := &v1alpha1.ApplicationManager{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: fmt.Sprintf("%s-%s", workflowCfg.Namespace, app),
+		},
+		Spec: v1alpha1.ApplicationManagerSpec{
+			AppName:      app,
+			AppNamespace: workflowCfg.Namespace,
+			AppOwner:     owner,
+			Source:       insReq.Source.String(),
+			Type:         v1alpha1.Recommend,
+		},
+	}
+	a, err = client.AppV1alpha1().ApplicationManagers().Get(req.Request.Context(), name, metav1.GetOptions{})
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			api.HandleError(resp, req, err)
+			return
+		}
+		a, err = client.AppV1alpha1().ApplicationManagers().Create(req.Request.Context(), recommendMgr, metav1.CreateOptions{})
+		if err != nil {
+			api.HandleError(resp, req, err)
+			return
+		}
+	} else {
+		patchData := map[string]interface{}{
+			"spec": map[string]interface{}{
+				"source": insReq.Source.String(),
+			},
+		}
+		patchByte, err := json.Marshal(patchData)
+		if err != nil {
+			api.HandleError(resp, req, err)
+			return
+		}
+		_, err = client.AppV1alpha1().ApplicationManagers().Patch(req.Request.Context(),
+			a.Name, types.MergePatchType, patchByte, metav1.PatchOptions{})
+		if err != nil {
+			api.HandleError(resp, req, err)
+			return
+		}
+	}
+	now := metav1.Now()
+	recommendStatus := v1alpha1.ApplicationManagerStatus{
+		OpType:  v1alpha1.InstallOp,
+		State:   v1alpha1.Installing,
+		Message: "installing recommend",
+		Payload: map[string]string{
+			"version": workflowCfg.Cfg.Metadata.Version,
+		},
+		StatusTime: &now,
+		UpdateTime: &now,
+	}
+	a, err = apputils.UpdateAppMgrStatus(a.Name, recommendStatus)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+
+	opRecord := v1alpha1.OpRecord{
+		OpType:    v1alpha1.InstallOp,
+		Version:   workflowCfg.Cfg.Metadata.Version,
+		Source:    a.Spec.Source,
+		Status:    v1alpha1.Running,
+		StateTime: &now,
+	}
+
+	klog.Info("Start to install workflow, ", workflowCfg)
+	err = workflowinstaller.Install(req.Request.Context(), h.kubeConfig, workflowCfg)
+	if err != nil {
+		opRecord.Status = v1alpha1.Failed
+		opRecord.Message = fmt.Sprintf(constants.OperationFailedTpl, a.Status.OpType, err.Error())
+		e := apputils.UpdateStatus(a, opRecord.Status, &opRecord, opRecord.Message)
+		if e != nil {
+			klog.Errorf("Failed to update applicationmanager status name=%s err=%v", a.Name, e)
+		}
+		api.HandleError(resp, req, err)
+		return
+	}
+
+	now = metav1.Now()
+	opRecord.Message = fmt.Sprintf(constants.InstallOperationCompletedTpl, a.Spec.Type.String(), a.Spec.AppName)
+	err = apputils.UpdateStatus(a, v1alpha1.Running, &opRecord, opRecord.Message)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+
+	resp.WriteEntity(api.InstallationResponse{
+		Response: api.Response{Code: 200},
+		Data:     api.InstallationResponseData{UID: app},
+	})
+}
+
 func (h *Handler) uninstallRecommend(req *restful.Request, resp *restful.Response) {
 	app := req.PathParameter(ParamWorkflowName)
 	owner := req.Attribute(constants.UserContextAttribute).(string)
@@ -200,6 +336,9 @@ func (h *Handler) uninstallRecommend(req *restful.Request, resp *restful.Respons
 	}
 	go func() {
 		timer := time.NewTicker(2 * time.Second)
+		timeout := time.NewTimer(30 * time.Minute)
+		defer timer.Stop()
+		defer timeout.Stop()
 		for {
 			select {
 			case <-timer.C:
@@ -225,6 +364,9 @@ func (h *Handler) uninstallRecommend(req *restful.Request, resp *restful.Respons
 					}
 
 				}
+			case <-timeout.C:
+				klog.Errorf("Timeout to delete namespace=%s, please check it manually", namespace)
+				return
 			}
 		}
 	}()
