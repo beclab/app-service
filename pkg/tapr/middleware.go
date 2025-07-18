@@ -75,7 +75,7 @@ type Resp struct {
 
 // Apply middlewarerequest, get response and set values.
 func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespace,
-	namespace, token, chartPath, ownerName string, vals map[string]interface{}) error {
+	namespace, token, ownerName string, vals map[string]interface{}) error {
 	if middleware == nil {
 		return nil
 	}

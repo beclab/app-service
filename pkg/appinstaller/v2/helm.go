@@ -9,9 +9,9 @@ import (
 	"k8s.io/klog/v2"
 )
 
-var _ v1.HelmOpsInterface = &HelmOps{}
+var _ v1.HelmOpsInterface = &HelmOpsV2{}
 
-type HelmOps struct {
+type HelmOpsV2 struct {
 	*v1.HelmOps
 }
 
@@ -22,7 +22,12 @@ func NewHelmOps(ctx context.Context, kubeConfig *rest.Config, app *appcfg.Applic
 		return nil, err
 	}
 
-	return &HelmOps{
+	return &HelmOpsV2{
 		HelmOps: v1Ops.(*v1.HelmOps),
 	}, nil
+}
+
+func (h *HelmOpsV2) Install() error {
+
+	return nil
 }
