@@ -90,10 +90,10 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	// (V2)TODO: get current user role and check if the app is installed by admin
 	var helper helperIntf
 	switch apiVersion {
 	case appcfg.V1:
+		klog.Info("Using install handler helper for V1")
 		h := &installHandlerHelper{
 			h:      h,
 			req:    req,
@@ -109,6 +109,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 
 		helper = h
 	case appcfg.V2:
+		klog.Info("Using install handler helper for V2")
 		h := &installHandlerHelperV2{
 			installHandlerHelper: installHandlerHelper{
 				h:      h,
@@ -136,6 +137,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
+	// V2: get current user role and check if the app is installed by admin
 	appInstalled, installedApps, err := helper.getInstalledApps()
 	if err != nil {
 		klog.Errorf("Failed to get installed app err=%v", err)
@@ -451,8 +453,8 @@ func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opI
 
 func (h *installHandlerHelperV2) _validateClusterScope(isAdmin bool, installedApps []*v1alpha1.Application) (err error) {
 	klog.Info("validate cluster scope for install handler v2")
-	// in V2, we do not check cluster scope here, because the cluster scope app is installed by admin,
-	// will be checked if the cluster part is installed by another user
+	// in V2, we do not check cluster scope here, the cluster scope app
+	// will be checked if the cluster part is installed by another user in the installing phase
 
 	return nil
 }

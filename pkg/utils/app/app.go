@@ -767,6 +767,7 @@ func toApplicationConfig(app, chart string, cfg *appcfg.AppConfiguration) (*appc
 		RunAsUser:            cfg.Spec.RunAsUser,
 		AllowedOutboundPorts: cfg.Options.AllowedOutboundPorts,
 		RequiredGPU:          cfg.Spec.RequiredGPU,
+		Internal:             cfg.Spec.RunAsInternal,
 	}, chart, nil
 }
 
