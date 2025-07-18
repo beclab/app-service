@@ -1048,7 +1048,7 @@ func (h *HelmOps) isStartUp() (bool, error) {
 		creationTime := pod.GetCreationTimestamp()
 		pendingDuration := time.Since(creationTime.Time)
 
-		if pod.Status.Phase == corev1.PodPending && pendingDuration > time.Minute*2 {
+		if pod.Status.Phase == corev1.PodPending && pendingDuration > time.Minute*10 {
 			return false, errcode.ErrPodPending
 		}
 		totalContainers := len(pod.Spec.Containers)
