@@ -76,7 +76,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 	}
 
 	apiVersion, err := apputils.GetApiVersionFromAppConfig(req.Request.Context(), app, owner,
-		insReq.CfgURL, insReq.RepoURL, "")
+		insReq.CfgURL, insReq.RepoURL, marketSource)
 	if err != nil {
 		klog.Errorf("Failed to get api version err=%v", err)
 		api.HandleBadRequest(resp, req, err)
@@ -301,7 +301,7 @@ func (h *installHandlerHelper) getInstalledApps() (installed bool, app []*v1alph
 	}
 
 	for _, a := range apps.Items {
-		if a.Spec.Name == h.appConfig.AppName {
+		if a.Spec.Name == h.app {
 			installed = true
 			app = append(app, &a)
 		}
