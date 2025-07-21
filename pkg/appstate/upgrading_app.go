@@ -1,6 +1,7 @@
 package appstate
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"context"
 	"fmt"
 	"time"
@@ -15,8 +16,6 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
-	"bytetrade.io/web3os/app-service/pkg/utils/config"
-
 	"github.com/pkg/errors"
 	"helm.sh/helm/v3/pkg/action"
 	"k8s.io/klog/v2"
@@ -73,7 +72,7 @@ func (p *UpgradingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) 
 				if err != nil {
 					p.finally = func() {
 						klog.Info("upgrade app failed, update app status to upgradeFailed, ", p.manager.Name)
-						opRecord := makeRecord(p.manager, appsv1.UpgradeFailed, fmt.Sprintf(constants.OperationFailedTpl, p.manager.Status.OpType, err.Error()))
+						opRecord := makeRecord(p.manager, appsv1.UpgradeFailed, fmt.Sprintf(constants.OperationFailedTpl, p.manager.Spec.OpType, err.Error()))
 
 						updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.UpgradeFailed, opRecord, err.Error())
 						if updateErr != nil {
@@ -127,12 +126,11 @@ func (p *UpgradingApp) exec(ctx context.Context) error {
 		return err
 	}
 
-	payload := p.manager.Status.Payload
-	version = payload["version"]
-	cfgURL := payload["cfgURL"]
-	repoURL := payload["repoURL"]
-	token := payload["token"]
-	marketSource := payload["marketSource"]
+	annotations := p.manager.Annotations
+	version = annotations[api.AppVersionKey]
+	repoURL := annotations[api.AppRepoURLKey]
+	token := annotations[api.AppTokenKey]
+	marketSource := annotations[api.AppMarketSourceKey]
 	var chartPath string
 	admin, err := kubesphere.GetAdminUsername(ctx, kubeConfig)
 	if err != nil {
@@ -145,13 +143,29 @@ func (p *UpgradingApp) exec(ctx context.Context) error {
 		return err
 	}
 	if !userspace.IsSysApp(p.manager.Spec.AppName) {
-		appConfig, chartPath, err = config.GetAppConfig(ctx, p.manager.Spec.AppName, p.manager.Spec.AppOwner, cfgURL, repoURL, version, token, admin, marketSource, isAdmin)
+		appConfig, chartPath, err = apputils.GetAppConfig(ctx, &apputils.ConfigOptions{
+			App:          p.manager.Spec.AppName,
+			Owner:        p.manager.Spec.AppOwner,
+			RepoURL:      repoURL,
+			Version:      version,
+			Token:        token,
+			Admin:        admin,
+			MarketSource: marketSource,
+			IsAdmin:      isAdmin,
+		})
 		if err != nil {
 			klog.Errorf("get app config failed %v", err)
 			return err
 		}
 	} else {
-		chartPath, err = apputils.GetIndexAndDownloadChart(ctx, p.manager.Spec.AppName, repoURL, version, token, p.manager.Spec.AppOwner, marketSource)
+		chartPath, err = apputils.GetIndexAndDownloadChart(ctx, &apputils.ConfigOptions{
+			App:          p.manager.Spec.AppName,
+			RepoURL:      repoURL,
+			Version:      version,
+			Token:        token,
+			Owner:        p.manager.Spec.AppOwner,
+			MarketSource: marketSource,
+		})
 		if err != nil {
 			klog.Errorf("download chart failed %v", err)
 			return err

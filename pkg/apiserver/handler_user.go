@@ -32,7 +32,7 @@ const userAnnotationLimitsMemoryKey = "bytetrade.io/user-memory-limit"
 
 func (h *Handler) userResourceStatus(req *restful.Request, resp *restful.Response) {
 	username := req.PathParameter(ParamUserName)
-	metrics, err := prometheus.GetCurUserResource(req.Request.Context(), h.kubeConfig, username)
+	metrics, err := prometheus.GetCurUserResource(req.Request.Context(), username)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -42,7 +42,7 @@ func (h *Handler) userResourceStatus(req *restful.Request, resp *restful.Respons
 
 func (h *Handler) curUserResource(req *restful.Request, resp *restful.Response) {
 	username := req.Attribute(constants.UserContextAttribute).(string)
-	metrics, err := prometheus.GetCurUserResource(req.Request.Context(), h.kubeConfig, username)
+	metrics, err := prometheus.GetCurUserResource(req.Request.Context(), username)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return

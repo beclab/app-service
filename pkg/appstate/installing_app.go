@@ -1,6 +1,7 @@
 package appstate
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -44,8 +45,7 @@ func NewInstallingApp(c client.Client,
 
 func (p *InstallingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
 	var err error
-	payload := p.manager.Status.Payload
-	token := payload["token"]
+	token := p.manager.Annotations[api.AppTokenKey]
 	var appCfg *appcfg.ApplicationConfig
 	err = json.Unmarshal([]byte(p.manager.Spec.Config), &appCfg)
 	if err != nil {
@@ -103,7 +103,7 @@ func (p *InstallingApp) Exec(ctx context.Context) (StatefulInProgressApp, error)
 
 					p.finally = func() {
 						klog.Errorf("app %s install failed, update app state to installFailed", p.manager.Spec.AppName)
-						opRecord := makeRecord(p.manager, appsv1.InstallFailed, fmt.Sprintf(constants.OperationFailedTpl, p.manager.Status.OpType, err.Error()))
+						opRecord := makeRecord(p.manager, appsv1.InstallFailed, fmt.Sprintf(constants.OperationFailedTpl, p.manager.Spec.OpType, err.Error()))
 						updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.InstallFailed, opRecord, err.Error())
 						if updateErr != nil {
 							klog.Errorf("update status failed %v", updateErr)

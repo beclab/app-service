@@ -3,6 +3,8 @@ package apiserver
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"time"
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
@@ -90,7 +92,16 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	appConfig, _, err := config.GetAppConfig(req.Request.Context(), app, owner, request.CfgURL, request.RepoURL, request.Version, token, admin, marketSource, isAdmin)
+	appConfig, _, err := apputils.GetAppConfig(req.Request.Context(), &apputils.ConfigOptions{
+		App:          app,
+		Owner:        owner,
+		RepoURL:      request.RepoURL,
+		Version:      request.Version,
+		Token:        token,
+		Admin:        admin,
+		MarketSource: marketSource,
+		IsAdmin:      isAdmin,
+	})
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -120,25 +131,21 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 	}
 	appCopy := a.DeepCopy()
 	appCopy.Spec.Config = string(config)
+	appCopy.Spec.OpType = appv1alpha1.UpgradeOp
 
 	err = h.ctrlClient.Patch(req.Request.Context(), appCopy, client.MergeFrom(&a))
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
+	opID := strconv.FormatInt(time.Now().Unix(), 10)
+
 	now := metav1.Now()
 	status := appv1alpha1.ApplicationManagerStatus{
-		OpType:  appv1alpha1.UpgradeOp,
-		OpID:    a.ResourceVersion,
-		State:   appv1alpha1.Upgrading,
-		Message: "waiting for upgrade",
-		Payload: map[string]string{
-			"cfgURL":       request.CfgURL,
-			"repoURL":      request.RepoURL,
-			"version":      request.Version,
-			"token":        token,
-			"marketSource": marketSource,
-		},
+		OpType:     appv1alpha1.UpgradeOp,
+		OpID:       opID,
+		State:      appv1alpha1.Upgrading,
+		Message:    "waiting for upgrade",
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
@@ -148,10 +155,10 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
-	utils.PublishAsync(am.Spec.AppOwner, am.Spec.AppName, string(am.Status.OpType), am.Status.OpID, appv1alpha1.Upgrading.String(), "", nil)
+	utils.PublishAsync(am.Spec.AppOwner, am.Spec.AppName, string(am.Spec.OpType), opID, appv1alpha1.Upgrading.String(), "", nil)
 
 	resp.WriteEntity(api.InstallationResponse{
 		Response: api.Response{Code: 200},
-		Data:     api.InstallationResponseData{UID: app, OpID: status.OpID},
+		Data:     api.InstallationResponseData{UID: app, OpID: opID},
 	})
 }

@@ -191,7 +191,7 @@ func (h *Handler) setupAppEntranceDomain(req *restful.Request, resp *restful.Res
 			api.HandleError(resp, req, err)
 			return
 		}
-		zone, err := kubesphere.GetUserZone(req.Request.Context(), h.kubeConfig, owner)
+		zone, err := kubesphere.GetUserZone(req.Request.Context(), owner)
 		if err != nil {
 			api.HandleError(resp, req, err)
 			return

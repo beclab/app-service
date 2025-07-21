@@ -4,12 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/netip"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -18,7 +16,6 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
-	"bytetrade.io/web3os/app-service/pkg/middlewareinstaller"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 	"bytetrade.io/web3os/app-service/pkg/utils/files"
@@ -54,7 +51,6 @@ var protectedNamespace = []string{
 	"kube-system",
 	"kubekey-system",
 	"kubesphere-controls-system",
-	"kubesphere-monitoring-federated",
 	"kubesphere-monitoring-system",
 	"kubesphere-system",
 	"user-space-",
@@ -71,7 +67,6 @@ var forbidNamespace = []string{
 	"kube-system",
 	"kubekey-system",
 	"kubesphere-controls-system",
-	"kubesphere-monitoring-federated",
 	"kubesphere-monitoring-system",
 	"kubesphere-system",
 }
@@ -180,7 +175,7 @@ func UpdateAppMgrStatus(name string, status v1alpha1.ApplicationManagerStatus) (
 
 		appMgrCopy.Status = status
 
-		appMgr, err = client.AppV1alpha1().ApplicationManagers().UpdateStatus(context.TODO(), appMgrCopy, metav1.UpdateOptions{})
+		appMgr, err = client.AppV1alpha1().ApplicationManagers().Update(context.TODO(), appMgrCopy, metav1.UpdateOptions{})
 		return err
 	})
 
@@ -231,7 +226,6 @@ func CreateSysAppMgr(app, owner string) error {
 
 	appMgrCopy := a.DeepCopy()
 	status := v1alpha1.ApplicationManagerStatus{
-		OpType:       v1alpha1.InstallOp,
 		State:        v1alpha1.Running,
 		OpGeneration: int64(0),
 		Message:      "sys app install completed",
@@ -336,7 +330,7 @@ func UpdateStatus(appMgr *v1alpha1.ApplicationManager, state v1alpha1.Applicatio
 		}
 		//klog.Infof("utils: UpdateStatus: %v", appMgrCopy.Status.Conditions)
 
-		_, err = client.AppV1alpha1().ApplicationManagers().UpdateStatus(context.TODO(), appMgrCopy, metav1.UpdateOptions{})
+		_, err = client.AppV1alpha1().ApplicationManagers().Update(context.TODO(), appMgrCopy, metav1.UpdateOptions{})
 		if err != nil {
 			return err
 		}
@@ -563,10 +557,24 @@ func GetFirstSubDir(fullPath, basePath string) string {
 	return parts[0]
 }
 
+type ConfigOptions struct {
+	App          string
+	RepoURL      string
+	Owner        string
+	Version      string
+	Token        string
+	Admin        string
+	MarketSource string
+	IsAdmin      bool
+}
+
 // GetAppConfig get app installation configuration from app store
-func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, token, admin, marketSource string, isAdmin bool) (*appcfg.ApplicationConfig, string, error) {
-	if repoURL == "" {
-		return nil, "", fmt.Errorf("url info is empty, cfg [%s], repo [%s]", cfgURL, repoURL)
+func GetAppConfig(ctx context.Context, options *ConfigOptions) (*appcfg.ApplicationConfig, string, error) {
+	if options == nil {
+		return nil, "", fmt.Errorf("options parameter is nil")
+	}
+	if options.RepoURL == "" {
+		return nil, "", fmt.Errorf("url info is empty, repo [%s]", options.RepoURL)
 	}
 
 	var (
@@ -575,29 +583,22 @@ func GetAppConfig(ctx context.Context, app, owner, cfgURL, repoURL, version, tok
 		err       error
 	)
 
-	if cfgURL != "" {
-		appcfg, chartPath, err = getAppConfigFromURL(ctx, app, cfgURL)
-		if err != nil {
-			return nil, "", err
-		}
-	} else {
-		appcfg, chartPath, err = getAppConfigFromRepo(ctx, app, repoURL, version, token, owner, admin, marketSource, isAdmin)
-		if err != nil {
-			return nil, chartPath, err
-		}
+	appcfg, chartPath, err = getAppConfigFromRepo(ctx, options)
+	if err != nil {
+		return nil, chartPath, err
 	}
 
 	// set appcfg.Namespace to specified namespace by OlaresManifests.Spec
 	var namespace string
 	if appcfg.Namespace != "" {
-		namespace, _ = utils.AppNamespace(app, owner, appcfg.Namespace)
+		namespace, _ = utils.AppNamespace(options.App, options.Owner, appcfg.Namespace)
 	} else {
-		namespace = fmt.Sprintf("%s-%s", app, owner)
+		namespace = fmt.Sprintf("%s-%s", options.App, options.Owner)
 	}
 
 	appcfg.Namespace = namespace
-	appcfg.OwnerName = owner
-	appcfg.RepoURL = repoURL
+	appcfg.OwnerName = options.Owner
+	appcfg.RepoURL = options.RepoURL
 	return appcfg, chartPath, nil
 }
 
@@ -620,12 +621,12 @@ func getAppConfigFromURL(ctx context.Context, app, url string) (*appcfg.Applicat
 	return toApplicationConfig(app, app, &cfg)
 }
 
-func getAppConfigFromRepo(ctx context.Context, app, repoURL, version, token, owner, admin, marketSource string, isAdmin bool) (*appcfg.ApplicationConfig, string, error) {
-	chartPath, err := GetIndexAndDownloadChart(ctx, app, repoURL, version, token, owner, marketSource)
+func getAppConfigFromRepo(ctx context.Context, options *ConfigOptions) (*appcfg.ApplicationConfig, string, error) {
+	chartPath, err := GetIndexAndDownloadChart(ctx, options)
 	if err != nil {
 		return nil, chartPath, err
 	}
-	return getAppConfigFromConfigurationFile(app, chartPath, owner, admin, isAdmin)
+	return getAppConfigFromConfigurationFile(options.App, chartPath, options.Owner, options.Admin, options.IsAdmin)
 }
 
 func toApplicationConfig(app, chart string, cfg *appcfg.AppConfiguration) (*appcfg.ApplicationConfig, string, error) {
@@ -781,21 +782,21 @@ func checkVersionFormat(constraint string) error {
 }
 
 // GetIndexAndDownloadChart download a chart and returns download chart path.
-func GetIndexAndDownloadChart(ctx context.Context, app, repoURL, version, token, owner, marketSource string) (string, error) {
+func GetIndexAndDownloadChart(ctx context.Context, options *ConfigOptions) (string, error) {
 	terminusNonce, err := utils.GenTerminusNonce()
 	if err != nil {
 		return "", err
 	}
 	client := resty.New().SetTimeout(10*time.Second).
-		SetHeader(constants.AuthorizationTokenKey, token).
+		SetHeader(constants.AuthorizationTokenKey, options.Token).
 		SetHeader("Terminus-Nonce", terminusNonce).
-		SetHeader(constants.MarketUser, owner).
-		SetHeader(constants.MarketSource, marketSource)
-	indexFileURL := repoURL
-	if repoURL[len(repoURL)-1] != '/' {
+		SetHeader(constants.MarketUser, options.Owner).
+		SetHeader(constants.MarketSource, options.MarketSource)
+	indexFileURL := options.RepoURL
+	if options.RepoURL[len(options.RepoURL)-1] != '/' {
 		indexFileURL += "/"
 	}
-	klog.Infof("GetIndexAndDownloadChart: user: %v, source: %v", owner, marketSource)
+	klog.Infof("GetIndexAndDownloadChart: user: %v, source: %v", options.Owner, options.MarketSource)
 
 	indexFileURL += "index.yaml"
 	resp, err := client.R().Get(indexFileURL)
@@ -813,16 +814,16 @@ func GetIndexAndDownloadChart(ctx context.Context, app, repoURL, version, token,
 		return "", err
 	}
 
-	klog.Infof("Success to find app chart from index app=%s version=%s", app, version)
+	klog.Infof("Success to find app chart from index app=%s version=%s", options.App, options.Version)
 	// get specified version chart, if version is empty return the chart with the latest stable version
-	chartVersion, err := index.Get(app, version)
+	chartVersion, err := index.Get(options.App, options.Version)
 
 	if err != nil {
 		klog.Errorf("Failed to get chart version err=%v", err)
-		return "", fmt.Errorf("app [%s-%s] not found in repo", app, version)
+		return "", fmt.Errorf("app [%s-%s] not found in repo", options.App, options.Version)
 	}
 
-	chartURL, err := repo.ResolveReferenceURL(repoURL, chartVersion.URLs[0])
+	chartURL, err := repo.ResolveReferenceURL(options.RepoURL, chartVersion.URLs[0])
 	if err != nil {
 		return "", err
 	}
@@ -833,13 +834,13 @@ func GetIndexAndDownloadChart(ctx context.Context, app, repoURL, version, token,
 	}
 
 	// assume the chart path is app name
-	chartPath := appcfg.ChartsPath + "/" + app
+	chartPath := appcfg.ChartsPath + "/" + options.App
 	if files.IsExist(chartPath) {
 		if err := files.RemoveAll(chartPath); err != nil {
 			return "", err
 		}
 	}
-	_, err = downloadAndUnpack(ctx, url, token, terminusNonce, owner, marketSource)
+	_, err = downloadAndUnpack(ctx, url, options.Token, terminusNonce, options.Owner, options.MarketSource)
 	if err != nil {
 		return "", err
 	}
@@ -905,41 +906,6 @@ func loadIndex(data []byte) (*repo.IndexFile, error) {
 	return i, nil
 }
 
-func GetMiddlewareConfigFromRepo(ctx context.Context, owner, app, repoURL, version, token, marketSource string) (*middlewareinstaller.MiddlewareConfig, error) {
-	chartPath, err := GetIndexAndDownloadChart(ctx, app, repoURL, version, token, owner, marketSource)
-	if err != nil {
-		return nil, err
-	}
-
-	f, err := os.Open(chartPath + "/OlaresManifest.yaml")
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	data, err := io.ReadAll(f)
-	if err != nil {
-		return nil, err
-	}
-
-	var cfg appcfg.AppConfiguration
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, err
-	}
-
-	namespace, _ := utils.AppNamespace(app, owner, cfg.Spec.Namespace)
-
-	return &middlewareinstaller.MiddlewareConfig{
-		MiddlewareName: app,
-		Title:          cfg.Metadata.Title,
-		Version:        cfg.Metadata.Version,
-		ChartsName:     chartPath,
-		RepoURL:        repoURL,
-		Namespace:      namespace,
-		OwnerName:      owner,
-		Cfg:            nil}, nil
-}
-
 func UpdateAppMgrState(ctx context.Context, name string, state v1alpha1.ApplicationManagerState) error {
 	client, err := utils.GetClient()
 	if err != nil {
@@ -957,7 +923,7 @@ func UpdateAppMgrState(ctx context.Context, name string, state v1alpha1.Applicat
 		amCopy.Status.UpdateTime = &now
 		amCopy.Status.StatusTime = &now
 		amCopy.Status.OpGeneration += 1
-		_, err = client.AppV1alpha1().ApplicationManagers().UpdateStatus(ctx, amCopy, metav1.UpdateOptions{})
+		_, err = client.AppV1alpha1().ApplicationManagers().Update(ctx, amCopy, metav1.UpdateOptions{})
 		return err
 	})
 	return err

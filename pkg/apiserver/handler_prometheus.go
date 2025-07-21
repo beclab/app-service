@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 	"time"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
@@ -29,7 +30,7 @@ func (h *Handler) userMetrics(req *restful.Request, resp *restful.Response) {
 
 func (h *Handler) clusterResource(req *restful.Request, resp *restful.Response) {
 	token := req.HeaderParameter(constants.AuthorizationTokenKey)
-	metrics, supportArch, err := GetClusterResource(h.kubeConfig, token)
+	metrics, supportArch, err := apputils.GetClusterResource(token)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return

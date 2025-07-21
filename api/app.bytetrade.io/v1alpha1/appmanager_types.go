@@ -7,7 +7,6 @@ import (
 //+genclient
 //+genclient:nonNamespaced
 //+kubebuilder:object:root=true
-//+kubebuilder:subresource:status
 //+kubebuilder:resource:scope=Cluster, shortName={appmgr}, categories={all}
 //+kubebuilder:printcolumn:JSONPath=.spec.appName, name=application name, type=string
 //+kubebuilder:printcolumn:JSONPath=.spec.appNamespace, name=namespace, type=string
@@ -30,15 +29,15 @@ type ApplicationManagerStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	OpType       OpType                  `json:"opType"`
-	OpGeneration int64                   `json:"opGeneration"`
+	OpGeneration int64                   `json:"opGeneration,omitempty"`
 	OpID         string                  `json:"opId,omitempty"`
 	State        ApplicationManagerState `json:"state,omitempty"`
 	OpRecords    []OpRecord              `json:"opRecords,omitempty"`
 	Message      string                  `json:"message,omitempty"`
 	Payload      map[string]string       `json:"payload,omitempty"`
 	Progress     string                  `json:"progress,omitempty"`
-	UpdateTime   *metav1.Time            `json:"updateTime"`
-	StatusTime   *metav1.Time            `json:"statusTime"`
+	UpdateTime   *metav1.Time            `json:"updateTime,omitempty"`
+	StatusTime   *metav1.Time            `json:"statusTime,omitempty"`
 	Completed    bool                    `json:"completed,omitempty"`
 	OpTime       *metav1.Time            `json:"opTime,omitempty"`
 	LastState    ApplicationManagerState `json:"lastState,omitempty"`
@@ -52,6 +51,7 @@ type ApplicationManagerSpec struct {
 	Config       string `json:"config,omitempty"`
 	Source       string `json:"source"`
 	Type         Type   `json:"type"`
+	OpType       OpType `json:"opType"`
 }
 
 // OpRecord contains details of an operation.

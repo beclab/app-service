@@ -88,7 +88,7 @@ func (p *resumingInProgressApp) Exec(ctx context.Context) (StatefulInProgressApp
 func (p *resumingInProgressApp) WaitAsync(ctx context.Context) {
 	appFactory.waitForPolling(ctx, p, func(err error) {
 		if err != nil {
-			opRecord := makeRecord(p.manager, appsv1.ResumeFailed, fmt.Sprintf(constants.OperationFailedTpl, p.manager.Status.OpType, err.Error()))
+			opRecord := makeRecord(p.manager, appsv1.ResumeFailed, fmt.Sprintf(constants.OperationFailedTpl, p.manager.Spec.OpType, err.Error()))
 			updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.ResumeFailed, opRecord, err.Error())
 			if updateErr != nil {
 				klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.ResumeFailed.String(), updateErr)

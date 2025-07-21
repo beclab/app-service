@@ -1,6 +1,7 @@
 package appstate
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"context"
 	"fmt"
 
@@ -236,10 +237,10 @@ func makeRecord(am *appv1alpha1.ApplicationManager, status appv1alpha1.Applicati
 	}
 	now := metav1.Now()
 	return &appv1alpha1.OpRecord{
-		OpType:    am.Status.OpType,
+		OpType:    am.Spec.OpType,
 		OpID:      am.Status.OpID,
 		Source:    am.Spec.Source,
-		Version:   am.Status.Payload["version"],
+		Version:   am.Annotations[api.AppVersionKey],
 		Message:   message,
 		Status:    status,
 		StateTime: &now,

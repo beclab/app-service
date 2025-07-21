@@ -187,12 +187,12 @@ func (imc *ImageManagerClient) updateProgress(ctx context.Context, am *appv1alph
 		return errors.New("no need to update progress")
 	}
 	cur.Status.Progress = strconv.FormatFloat(progress, 'f', 2, 64)
-	err = imc.Status().Patch(ctx, &cur, client.MergeFrom(appMgrCopy))
+	err = imc.Patch(ctx, &cur, client.MergeFrom(appMgrCopy))
 	if err != nil {
 		klog.Infof("Failed to patch applicationmanagers name=%v, err=%v", am.Name, err)
 		return err
 	}
-	utils.PublishAsync(am.Spec.AppOwner, am.Spec.AppName, string(am.Status.OpType), am.Status.OpID, appv1alpha1.Downloading.String(), cur.Status.Progress, nil)
+	utils.PublishAsync(am.Spec.AppOwner, am.Spec.AppName, string(am.Spec.OpType), am.Status.OpID, appv1alpha1.Downloading.String(), cur.Status.Progress, nil)
 
 	klog.Infof("app %s download progress.... %v", am.Spec.AppName, cur.Status.Progress)
 	if cur.Status.Progress == "100.00" {

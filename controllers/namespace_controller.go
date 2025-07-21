@@ -35,7 +35,7 @@ const (
 	controllerNamespaceName = "namespace-controller"
 )
 
-// Reconciler reconciles a Namespace object
+// NamespaceReconciler reconciles a Namespace object
 type NamespaceReconciler struct {
 	client.Client
 }
@@ -46,7 +46,7 @@ func (r *NamespaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
-		Named(controllerName).
+		Named(controllerNamespaceName).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 1,
 		}).

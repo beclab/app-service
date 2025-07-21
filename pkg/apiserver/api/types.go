@@ -1,5 +1,13 @@
 package api
 
+const (
+	AppTokenKey         = "bytetrade.io/token"
+	AppRepoURLKey       = "bytetrade.io/repo-url"
+	AppVersionKey       = "bytetrade.io/chart-version"
+	AppMarketSourceKey  = "bytetrade.io/market-source"
+	AppInstallSourceKey = "bytetrade.io/install-source"
+)
+
 // Response represents the code for response.
 type Response struct {
 	Code int32 `json:"code"`

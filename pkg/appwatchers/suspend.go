@@ -17,7 +17,6 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/klog/v2"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -210,16 +209,13 @@ func getUserTopLoadApps(ctx context.Context, applications map[string]*v1alpha1.A
 		Level:    prometheus.LevelUser,
 		UserName: user,
 	}
-	kubeConfig, err := ctrl.GetConfig()
-	if err != nil {
-		return nil, err
-	}
-	userCpuLimitStr, err := kubesphere.GetUserCPULimit(ctx, kubeConfig, user)
+
+	userCpuLimitStr, err := kubesphere.GetUserCPULimit(ctx, user)
 	if err != nil {
 		return nil, err
 	}
 	cpuLimit, _ := resource.ParseQuantity(userCpuLimitStr)
-	userMemoryLimitStr, err := kubesphere.GetUserMemoryLimit(ctx, kubeConfig, user)
+	userMemoryLimitStr, err := kubesphere.GetUserMemoryLimit(ctx, user)
 	if err != nil {
 		return nil, err
 	}

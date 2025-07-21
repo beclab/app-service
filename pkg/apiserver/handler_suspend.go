@@ -3,6 +3,9 @@ package apiserver
 import (
 	"errors"
 	"fmt"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"strconv"
+	"time"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
@@ -13,7 +16,6 @@ import (
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
 	"github.com/emicklei/go-restful/v3"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -39,25 +41,39 @@ func (h *Handler) suspend(req *restful.Request, resp *restful.Response) {
 		api.HandleBadRequest(resp, req, fmt.Errorf("%s operation is not allowed for %s state", v1alpha1.StopOp, am.Status.State))
 		return
 	}
-
-	now := metav1.Now()
-	status := v1alpha1.ApplicationManagerStatus{
-		OpType:     v1alpha1.StopOp,
-		OpID:       am.ResourceVersion,
-		State:      v1alpha1.Stopping,
-		StatusTime: &now,
-		UpdateTime: &now,
-	}
-	a, err := apputils.UpdateAppMgrStatus(name, status)
+	am.Spec.OpType = v1alpha1.StopOp
+	err = h.ctrlClient.Update(req.Request.Context(), &am)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
-	utils.PublishAsync(a.Spec.AppOwner, a.Spec.AppName, string(a.Status.OpType), a.Status.OpID, v1alpha1.Stopping.String(), "", nil)
+
+	opID := strconv.FormatInt(time.Now().Unix(), 10)
+	//am.Annotations[api.AppOpIDKey] = am.ResourceVersion
+	//err = h.ctrlClient.Update(req.Request.Context(), &am)
+	//if err != nil {
+	//	api.HandleError(resp, req, err)
+	//	return
+	//}
+
+	now := metav1.Now()
+	status := v1alpha1.ApplicationManagerStatus{
+		OpType:     v1alpha1.StopOp,
+		OpID:       opID,
+		State:      v1alpha1.Stopping,
+		StatusTime: &now,
+		UpdateTime: &now,
+	}
+	_, err = apputils.UpdateAppMgrStatus(name, status)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	utils.PublishAsync(am.Spec.AppOwner, am.Spec.AppName, string(am.Spec.OpType), opID, v1alpha1.Stopping.String(), "", nil)
 
 	resp.WriteEntity(api.InstallationResponse{
 		Response: api.Response{Code: 200},
-		Data:     api.InstallationResponseData{UID: app, OpID: status.OpID},
+		Data:     api.InstallationResponseData{UID: app, OpID: opID},
 	})
 }
 
@@ -77,28 +93,36 @@ func (h *Handler) resume(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
-	if !appstate.IsOperationAllowed(am.Status.State, v1alpha1.UpgradeOp) {
+	if !appstate.IsOperationAllowed(am.Status.State, v1alpha1.ResumeOp) {
 		api.HandleBadRequest(resp, req, fmt.Errorf("%s operation is not allowed for %s state", v1alpha1.UpgradeOp, am.Status.State))
 		return
 	}
-
-	now := metav1.Now()
-	status := v1alpha1.ApplicationManagerStatus{
-		OpType:     v1alpha1.ResumeOp,
-		OpID:       am.ResourceVersion,
-		State:      v1alpha1.Resuming,
-		StatusTime: &now,
-		UpdateTime: &now,
-	}
-	a, err := apputils.UpdateAppMgrStatus(name, status)
+	am.Spec.OpType = v1alpha1.ResumeOp
+	err = h.ctrlClient.Update(req.Request.Context(), &am)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
-	utils.PublishAsync(a.Spec.AppOwner, a.Spec.AppName, string(a.Status.OpType), a.Status.OpID, v1alpha1.Resuming.String(), "", nil)
+	opID := strconv.FormatInt(time.Now().Unix(), 10)
+	//am.Annotations[api.AppOpIDKey] = opID
+
+	now := metav1.Now()
+	status := v1alpha1.ApplicationManagerStatus{
+		OpType:     v1alpha1.ResumeOp,
+		OpID:       opID,
+		State:      v1alpha1.Resuming,
+		StatusTime: &now,
+		UpdateTime: &now,
+	}
+	_, err = apputils.UpdateAppMgrStatus(name, status)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	utils.PublishAsync(am.Spec.AppOwner, am.Spec.AppName, string(am.Spec.OpType), opID, v1alpha1.Resuming.String(), "", nil)
 
 	resp.WriteEntity(api.InstallationResponse{
 		Response: api.Response{Code: 200},
-		Data:     api.InstallationResponseData{UID: app, OpID: status.OpID},
+		Data:     api.InstallationResponseData{UID: app, OpID: opID},
 	})
 }

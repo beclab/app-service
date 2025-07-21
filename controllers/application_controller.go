@@ -593,7 +593,7 @@ func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, app
 					}
 					settings["oidc.client.secret"] = encryptSecret
 
-					zone, err := kubesphere.GetUserZone(ctx, r.Kubeconfig, owner)
+					zone, err := kubesphere.GetUserZone(ctx, owner)
 					if err != nil {
 						klog.Error("get user zone error, ", err)
 					} else {

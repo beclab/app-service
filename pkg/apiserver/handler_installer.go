@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
@@ -50,10 +51,11 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		api.HandleBadRequest(resp, req, err)
 		return
 	}
-	if insReq.Source != api.Market && insReq.Source != api.Custom && insReq.Source != api.DevBox {
-		api.HandleBadRequest(resp, req, fmt.Errorf("unsupported chart source: %s", insReq.Source))
+	if err = apputils.CheckChartSource(insReq.Source); err != nil {
+		api.HandleBadRequest(resp, req, err)
 		return
 	}
+
 	admin, err := kubesphere.GetAdminUsername(req.Request.Context(), h.kubeConfig)
 	if err != nil {
 		api.HandleError(resp, req, err)
@@ -66,27 +68,31 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	appConfig, _, err := apputils.GetAppConfig(req.Request.Context(), app, owner,
-		insReq.CfgURL, insReq.RepoURL, "", token, admin, marketSource, isAdmin)
+	appConfig, _, err := apputils.GetAppConfig(req.Request.Context(), &apputils.ConfigOptions{
+		App:          app,
+		Owner:        owner,
+		RepoURL:      insReq.RepoURL,
+		Version:      "",
+		Token:        token,
+		Admin:        admin,
+		MarketSource: marketSource,
+		IsAdmin:      isAdmin,
+	})
 	if err != nil {
 		klog.Errorf("Failed to get appconfig err=%v", err)
 		api.HandleBadRequest(resp, req, err)
 		return
 	}
-	unSatisfiedDeps, _ := CheckDependencies(req.Request.Context(), appConfig.Dependencies, h.ctrlClient, owner, true)
-	if len(unSatisfiedDeps) > 0 {
-		api.HandleBadRequest(resp, req, FormatDependencyError(unSatisfiedDeps))
-		return
-	}
 
-	installedConflictApp, err := CheckConflicts(req.Request.Context(), appConfig.Conflicts, owner)
+	err = apputils.CheckDependencies2(req.Request.Context(), h.ctrlClient, appConfig.Dependencies, owner, true)
 	if err != nil {
 		api.HandleBadRequest(resp, req, err)
 		return
 	}
 
-	if len(installedConflictApp) > 0 {
-		api.HandleBadRequest(resp, req, fmt.Errorf("this app conflict with those installed app: %v", installedConflictApp))
+	err = apputils.CheckConflicts(req.Request.Context(), appConfig.Conflicts, owner)
+	if err != nil {
+		api.HandleBadRequest(resp, req, err)
 		return
 	}
 
@@ -96,45 +102,27 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	if !utils.MatchVersion(appConfig.CfgFileVersion, config.MinCfgFileVersion) {
-		api.HandleBadRequest(resp, req, fmt.Errorf("olaresManifest.version must %s", config.MinCfgFileVersion))
+	err = apputils.CheckCfgFileVersion(appConfig.CfgFileVersion, config.MinCfgFileVersion)
+	if err != nil {
+		api.HandleBadRequest(resp, req, err)
 		return
 	}
 
-	if apputils.IsForbidNamespace(appConfig.Namespace) {
+	err = apputils.CheckNamespace(appConfig.Namespace)
+	if err != nil {
 		api.HandleBadRequest(resp, req, fmt.Errorf("unsupported namespace: %s", appConfig.Namespace))
 		return
 	}
 
 	client, _ := utils.GetClient()
-	role, err := kubesphere.GetUserRole(req.Request.Context(), h.kubeConfig, owner)
+
+	err = apputils.CheckUserRole(appConfig, owner)
 	if err != nil {
-		api.HandleError(resp, req, err)
-		return
-	}
-	if role != "owner" && role != "admin" && appConfig.OnlyAdmin {
-		api.HandleBadRequest(resp, req, errors.New("only admin user can install this app"))
+		api.HandleBadRequest(resp, req, err)
 		return
 	}
 
-	if appConfig.AppScope.ClusterScoped {
-		if role != "owner" && role != "admin" {
-			api.HandleBadRequest(resp, req, errors.New("only admin user can create cluster level app"))
-			return
-		}
-		apps, err := client.AppV1alpha1().Applications().List(req.Request.Context(), metav1.ListOptions{})
-		if err != nil {
-			api.HandleError(resp, req, err)
-			return
-		}
-		for _, a := range apps.Items {
-			if a.Spec.Name == appConfig.AppName && a.Spec.Settings["clusterScoped"] == "true" {
-				api.HandleBadRequest(resp, req, errors.New("only one cluster scoped app can install in on cluster"))
-				return
-			}
-		}
-	}
-	resourceType, err := CheckAppRequirement(h.kubeConfig, token, appConfig)
+	resourceType, err := apputils.CheckAppRequirement(token, appConfig)
 	if err != nil {
 		klog.Errorf("Failed to check app requirement err=%v", err)
 		resp.WriteHeaderAndEntity(http.StatusBadRequest, api.RequirementResp{
@@ -145,7 +133,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	resourceType, err = CheckUserResRequirement(req.Request.Context(), h.kubeConfig, appConfig, owner)
+	resourceType, err = apputils.CheckUserResRequirement(req.Request.Context(), appConfig, owner)
 	if err != nil {
 		resp.WriteHeaderAndEntity(http.StatusBadRequest, api.RequirementResp{
 			Response: api.Response{Code: 400},
@@ -155,7 +143,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	satisfied, err := CheckMiddlewareRequirement(req.Request.Context(), h.kubeConfig, appConfig.Middleware)
+	satisfied, err := apputils.CheckMiddlewareRequirement(req.Request.Context(), h.kubeConfig, appConfig.Middleware)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -180,6 +168,13 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 	appMgr := &v1alpha1.ApplicationManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
+			Annotations: map[string]string{
+				api.AppTokenKey:         token,
+				api.AppRepoURLKey:       insReq.RepoURL,
+				api.AppVersionKey:       appConfig.Version,
+				api.AppMarketSourceKey:  marketSource,
+				api.AppInstallSourceKey: "app-service",
+			},
 		},
 		Spec: v1alpha1.ApplicationManagerSpec{
 			AppName:      app,
@@ -188,6 +183,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 			Config:       string(config),
 			Source:       insReq.Source.String(),
 			Type:         v1alpha1.App,
+			OpType:       v1alpha1.InstallOp,
 		},
 	}
 	a, err = client.AppV1alpha1().ApplicationManagers().Get(req.Request.Context(), name, metav1.GetOptions{})
@@ -205,6 +201,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		// update Spec.Config
 		patchData := map[string]interface{}{
 			"spec": map[string]interface{}{
+				"opType": v1alpha1.InstallOp,
 				"config": string(config),
 				"source": insReq.Source.String(),
 			},
@@ -224,20 +221,30 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 			return
 		}
 	}
+	//a, err = client.AppV1alpha1().ApplicationManagers().Get(req.Request.Context(), a.Name, metav1.GetOptions{})
+	opID := strconv.FormatInt(time.Now().Unix(), 10)
+	//a.Annotations[api.AppRepoURLKey] = insReq.RepoURL
+	//a.Annotations[api.AppMarketSourceKey] = marketSource
+	//
+	//_, err = client.AppV1alpha1().ApplicationManagers().Update(req.Request.Context(), a, metav1.UpdateOptions{})
+	//if err != nil {
+	//	api.HandleError(resp, req, err)
+	//	return
+	//}
 
 	now := metav1.Now()
 	status := v1alpha1.ApplicationManagerStatus{
 		OpType:  v1alpha1.InstallOp,
+		OpID:    opID,
 		State:   v1alpha1.Pending,
-		OpID:    a.ResourceVersion,
 		Message: "waiting for install",
-		Payload: map[string]string{
-			"token":        token,
-			"cfgURL":       insReq.CfgURL,
-			"repoURL":      insReq.RepoURL,
-			"version":      appConfig.Version,
-			"marketSource": marketSource,
-		},
+		//Payload: map[string]string{
+		//	"token":        token,
+		//	"cfgURL":       insReq.CfgURL,
+		//	"repoURL":      insReq.RepoURL,
+		//	"version":      appConfig.Version,
+		//	"marketSource": marketSource,
+		//},
 		Progress:   "0.00",
 		StatusTime: &now,
 		UpdateTime: &now,
@@ -250,11 +257,11 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	utils.PublishAsync(a.Spec.AppOwner, a.Spec.AppName, string(a.Status.OpType), a.Status.OpID, v1alpha1.Pending.String(), "", nil)
+	utils.PublishAsync(a.Spec.AppOwner, a.Spec.AppName, string(a.Spec.OpType), opID, v1alpha1.Pending.String(), "", nil)
 
 	resp.WriteEntity(api.InstallationResponse{
 		Response: api.Response{Code: 200},
-		Data:     api.InstallationResponseData{UID: app, OpID: status.OpID},
+		Data:     api.InstallationResponseData{UID: app, OpID: opID},
 	})
 }
 
@@ -280,44 +287,43 @@ func (h *Handler) uninstall(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	//var application v1alpha1.Application
-	//err = h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: name}, &application)
-	//if err != nil {
-	//	api.HandleError(resp, req, err)
-	//	return
-	//}
-	//if application.Spec.IsSysApp {
-	//	api.HandleBadRequest(resp, req, errors.New("can not uninstall sys app"))
-	//	return
-	//}
 	if !appstate.IsOperationAllowed(am.Status.State, v1alpha1.UninstallOp) {
 		api.HandleBadRequest(resp, req, fmt.Errorf("%s operation is not allowed for %s state", v1alpha1.UninstallOp, am.Status.State))
 		return
 	}
+	am.Spec.OpType = v1alpha1.UninstallOp
+	am.Annotations[api.AppTokenKey] = token
+	//am.Annotations[api.AppOpIDKey] = am.ResourceVersion
+	err = h.ctrlClient.Update(req.Request.Context(), &am)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
 
+	opID := strconv.FormatInt(time.Now().Unix(), 10)
 	now := metav1.Now()
 	status := v1alpha1.ApplicationManagerStatus{
 		OpType: v1alpha1.UninstallOp,
 		State:  v1alpha1.Uninstalling,
-		OpID:   am.ResourceVersion,
-		Payload: map[string]string{
-			"token": token,
-		},
+		OpID:   opID,
+		//Payload: map[string]string{
+		//	"token": token,
+		//},
 		Progress:   "0.00",
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
 
-	a, err := apputils.UpdateAppMgrStatus(name, status)
+	_, err = apputils.UpdateAppMgrStatus(name, status)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
-	utils.PublishAsync(a.Spec.AppOwner, a.Spec.AppName, string(a.Status.OpType), a.Status.OpID, v1alpha1.Uninstalling.String(), "", nil)
+	utils.PublishAsync(am.Spec.AppOwner, am.Spec.AppName, string(am.Spec.OpType), opID, v1alpha1.Uninstalling.String(), "", nil)
 
 	resp.WriteEntity(api.InstallationResponse{
 		Response: api.Response{Code: 200},
-		Data:     api.InstallationResponseData{UID: app, OpID: status.OpID},
+		Data:     api.InstallationResponseData{UID: app, OpID: opID},
 	})
 }
 
@@ -358,11 +364,21 @@ func (h *Handler) cancel(req *restful.Request, resp *restful.Response) {
 	case v1alpha1.Upgrading:
 		cancelState = v1alpha1.UpgradingCanceling
 	}
+	//opID := am.ResourceVersion
+	opID := strconv.FormatInt(time.Now().Unix(), 10)
+	//time.Now().Unix()
+	//am.Annotations[api.AppOpIDKey] = opID
+	am.Spec.OpType = v1alpha1.CancelOp
+	err = h.ctrlClient.Update(req.Request.Context(), &am)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
 
 	now := metav1.Now()
 	status := v1alpha1.ApplicationManagerStatus{
 		OpType:     v1alpha1.CancelOp,
-		OpID:       am.ResourceVersion,
+		OpID:       opID,
 		LastState:  am.Status.LastState,
 		State:      cancelState,
 		Progress:   "0.00",
@@ -374,16 +390,16 @@ func (h *Handler) cancel(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
-	a, err := apputils.UpdateAppMgrStatus(name, status)
+	_, err = apputils.UpdateAppMgrStatus(name, status)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
-	utils.PublishAsync(a.Spec.AppOwner, a.Spec.AppName, string(a.Status.OpType), a.Status.OpID, cancelState.String(), "", nil)
+	utils.PublishAsync(am.Spec.AppOwner, am.Spec.AppName, string(am.Spec.OpType), opID, cancelState.String(), "", nil)
 
 	resp.WriteAsJson(api.InstallationResponse{
 		Response: api.Response{Code: 200},
-		Data:     api.InstallationResponseData{UID: app, OpID: status.OpID},
+		Data:     api.InstallationResponseData{UID: app, OpID: opID},
 	})
 }
 
@@ -414,7 +430,7 @@ func (h *Handler) checkDependencies(req *restful.Request, resp *restful.Response
 		api.HandleError(resp, req, err)
 		return
 	}
-	unSatisfiedDeps, _ := CheckDependencies(req.Request.Context(), depReq.Data, h.ctrlClient, owner.(string), true)
+	unSatisfiedDeps, _ := apputils.CheckDependencies(req.Request.Context(), h.ctrlClient, depReq.Data, owner.(string), true)
 	klog.Infof("Check application dependencies unSatisfiedDeps=%v", unSatisfiedDeps)
 
 	data := make([]api.DependenciesRespData, 0)
@@ -445,14 +461,21 @@ func (h *Handler) installRecommend(req *restful.Request, resp *restful.Response)
 	marketSource := req.HeaderParameter(constants.MarketSource)
 
 	klog.Infof("Download chart and get workflow config appName=%s repoURL=%s", app, insReq.RepoURL)
-	workflowCfg, err := getWorkflowConfigFromRepo(req.Request.Context(), owner, app, insReq.RepoURL, "", token, marketSource)
+	workflowCfg, err := getWorkflowConfigFromRepo(req.Request.Context(), &apputils.ConfigOptions{
+		App:          app,
+		Owner:        owner,
+		RepoURL:      insReq.RepoURL,
+		Version:      "",
+		Token:        token,
+		MarketSource: marketSource,
+	})
 	if err != nil {
 		klog.Errorf("Failed to get workflow config appName=%s repoURL=%s err=%v", app, insReq.RepoURL, err)
 		api.HandleError(resp, req, err)
 		return
 	}
 
-	satisfied, err := CheckMiddlewareRequirement(req.Request.Context(), h.kubeConfig, workflowCfg.Cfg.Middleware)
+	satisfied, err := apputils.CheckMiddlewareRequirement(req.Request.Context(), h.kubeConfig, workflowCfg.Cfg.Middleware)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -516,7 +539,6 @@ func (h *Handler) installRecommend(req *restful.Request, resp *restful.Response)
 	}
 	now := metav1.Now()
 	recommendStatus := v1alpha1.ApplicationManagerStatus{
-		OpType:  v1alpha1.InstallOp,
 		State:   v1alpha1.Installing,
 		Message: "installing recommend",
 		Payload: map[string]string{
@@ -543,7 +565,7 @@ func (h *Handler) installRecommend(req *restful.Request, resp *restful.Response)
 	err = workflowinstaller.Install(req.Request.Context(), h.kubeConfig, workflowCfg)
 	if err != nil {
 		opRecord.Status = v1alpha1.Failed
-		opRecord.Message = fmt.Sprintf(constants.OperationFailedTpl, a.Status.OpType, err.Error())
+		opRecord.Message = fmt.Sprintf(constants.OperationFailedTpl, a.Spec.OpType, err.Error())
 		e := apputils.UpdateStatus(a, opRecord.Status, &opRecord, opRecord.Message)
 		if e != nil {
 			klog.Errorf("Failed to update applicationmanager status name=%s err=%v", a.Name, e)
@@ -742,7 +764,6 @@ func (h *Handler) uninstallRecommend(req *restful.Request, resp *restful.Respons
 	now := metav1.Now()
 	var recommendMgr *v1alpha1.ApplicationManager
 	recommendStatus := v1alpha1.ApplicationManagerStatus{
-		OpType:     v1alpha1.UninstallOp,
 		State:      v1alpha1.Uninstalling,
 		Message:    "try to uninstall a recommend",
 		StatusTime: &now,
@@ -758,7 +779,7 @@ func (h *Handler) uninstallRecommend(req *restful.Request, resp *restful.Respons
 	defer func() {
 		if err != nil {
 			now := metav1.Now()
-			message := fmt.Sprintf(constants.OperationFailedTpl, recommendMgr.Status.OpType, err.Error())
+			message := fmt.Sprintf(constants.OperationFailedTpl, recommendMgr.Spec.OpType, err.Error())
 			opRecord := v1alpha1.OpRecord{
 				OpType:    v1alpha1.UninstallOp,
 				Message:   message,
@@ -852,7 +873,7 @@ func (h *Handler) upgradeRecommend(req *restful.Request, resp *restful.Response)
 		}
 		if err != nil {
 			opRecord.Status = v1alpha1.Failed
-			opRecord.Message = fmt.Sprintf(constants.OperationFailedTpl, recommendMgr.Status.OpType, err.Error())
+			opRecord.Message = fmt.Sprintf(constants.OperationFailedTpl, recommendMgr.Spec.OpType, err.Error())
 		}
 		e := apputils.UpdateStatus(recommendMgr, opRecord.Status, &opRecord, opRecord.Message)
 		if e != nil {
@@ -863,7 +884,6 @@ func (h *Handler) upgradeRecommend(req *restful.Request, resp *restful.Response)
 
 	now := metav1.Now()
 	recommendStatus := v1alpha1.ApplicationManagerStatus{
-		OpType:     v1alpha1.UpgradeOp,
 		State:      v1alpha1.Upgrading,
 		Message:    "try to upgrade a recommend",
 		StatusTime: &now,
@@ -871,7 +891,14 @@ func (h *Handler) upgradeRecommend(req *restful.Request, resp *restful.Response)
 	}
 
 	klog.Infof("Download latest version chart and get workflow config name=%s repoURL=%s", app, upReq.RepoURL)
-	workflowCfg, err = getWorkflowConfigFromRepo(req.Request.Context(), owner, app, upReq.RepoURL, "", token, marketSource)
+	workflowCfg, err = getWorkflowConfigFromRepo(req.Request.Context(), &apputils.ConfigOptions{
+		App:          app,
+		Owner:        owner,
+		RepoURL:      upReq.RepoURL,
+		Version:      "",
+		Token:        token,
+		MarketSource: marketSource,
+	})
 	if err != nil {
 		klog.Errorf("Failed to get workflow config name=%s repoURL=%s err=%v, ", app, upReq.RepoURL, err)
 		api.HandleError(resp, req, err)
@@ -965,13 +992,11 @@ func createAppImage(ctx context.Context, ctrlClient client.Client, request *api.
 	}
 	var am v1alpha1.AppImage
 	err = ctrlClient.Get(ctx, types.NamespacedName{Name: request.Name}, &am)
-	klog.Infof("get ...... %v", err)
 	if err == nil {
 		if am.Status.State != "completed" && am.Status.State != "failed" {
 			return nil
 		}
 		err = ctrlClient.Delete(ctx, &am)
-		klog.Infof("get2 ...... %v", err)
 
 		if err != nil && !apierrors.IsNotFound(err) {
 			return err

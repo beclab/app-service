@@ -381,6 +381,20 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Returns(http.StatusOK, "user validated success", nil)).
 		Consumes(restful.MIME_JSON)
 
+	ws.Route(ws.POST("/applicationmanager/inject").
+		To(handler.applicationManagerMutate).
+		Doc("mutating webhook for application manager").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Returns(http.StatusOK, "user validated success", nil)).
+		Consumes(restful.MIME_JSON)
+
+	ws.Route(ws.POST("/applicationmanager/validate").
+		To(handler.applicationManagerValidate).
+		Doc("validating webhook for validate user creation").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Returns(http.StatusOK, "user validated success", nil)).
+		Consumes(restful.MIME_JSON)
+
 	ws.Route(ws.POST("/metrics/highload").
 		To(handler.highload).
 		Doc("Provide system resources high load event to callback").

@@ -230,12 +230,13 @@ func (r *EntranceStatusManagerController) updateEntranceStatus(pod *corev1.Pod) 
 		}
 		var am v1alpha1.ApplicationManager
 		err = r.Get(context.TODO(), types.NamespacedName{Name: selectedApp.Name}, &am)
-		if err != nil {
+		if err != nil && !apierrors.IsNotFound(err) {
 			klog.Errorf("failed to get am name=%s, err=%v", selectedApp.Name, err)
 			return err
 		}
-
-		utils.PublishAsync(appCopy.Spec.Owner, appCopy.Spec.Name, "", "", am.Status.State.String(), "", appCopy.Status.EntranceStatuses)
+		if err == nil {
+			utils.PublishAsync(appCopy.Spec.Owner, appCopy.Spec.Name, "", "", am.Status.State.String(), "", appCopy.Status.EntranceStatuses)
+		}
 	}
 	return nil
 }

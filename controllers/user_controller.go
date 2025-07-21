@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 	"context"
 	"fmt"
 	"github.com/beclab/lldap-client/pkg/cache/memory"
@@ -9,7 +10,6 @@ import (
 	"strconv"
 	"time"
 
-	"bytetrade.io/web3os/app-service/pkg/apiserver"
 	"bytetrade.io/web3os/app-service/pkg/users"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace/v1"
 	"bytetrade.io/web3os/app-service/pkg/utils/sliceutil"
@@ -98,7 +98,6 @@ func (r *UserController) SetupWithManager(mgr ctrl.Manager) error {
 				return true
 			},
 			UpdateFunc: func(e event.UpdateEvent) bool {
-				// Only reconcile if spec changes
 				return true
 			},
 			DeleteFunc: func(e event.DeleteEvent) bool {
@@ -273,7 +272,7 @@ func (r *UserController) handleUserCreation(ctx context.Context, user *iamv1alph
 }
 
 func (r *UserController) checkResource(user *iamv1alpha2.User) error {
-	metrics, _, err := apiserver.GetClusterResource(r.KubeConfig, "")
+	metrics, _, err := apputils.GetClusterResource("")
 	if err != nil {
 		return err
 	}

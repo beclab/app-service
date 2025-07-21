@@ -13,7 +13,7 @@ func requireAdmin(h *Handler, next func(req *restful.Request, resp *restful.Resp
 	return func(req *restful.Request, resp *restful.Response) {
 		user := req.Attribute(constants.UserContextAttribute)
 
-		role, err := kubesphere.GetUserRole(req.Request.Context(), h.kubeConfig, user.(string))
+		role, err := kubesphere.GetUserRole(req.Request.Context(), user.(string))
 		if err != nil {
 			responseError(resp, err)
 			return

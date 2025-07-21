@@ -1,6 +1,7 @@
 package appstate
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -42,8 +43,7 @@ func NewInitializingApp(c client.Client,
 
 func (p *InitializingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
 	var err error
-	payload := p.manager.Status.Payload
-	token := payload["token"]
+	token := p.manager.Annotations[api.AppTokenKey]
 
 	var appCfg *appcfg.ApplicationConfig
 	err = json.Unmarshal([]byte(p.manager.Spec.Config), &appCfg)
@@ -100,7 +100,7 @@ func (p *InitializingApp) Exec(ctx context.Context) (StatefulInProgressApp, erro
 				p.finally = func() {
 					klog.Info("update app manager status to running, ", p.manager.Name)
 					message := fmt.Sprintf(constants.InstallOperationCompletedTpl, p.manager.Spec.Type.String(), p.manager.Spec.AppName)
-					if p.manager.Status.OpType == appsv1.UpgradeOp {
+					if p.manager.Spec.OpType == appsv1.UpgradeOp {
 						message = fmt.Sprintf(constants.UpgradeOperationCompletedTpl, p.manager.Spec.Type.String(), p.manager.Spec.AppName)
 					}
 					opRecord := makeRecord(p.manager, appsv1.Running, message)

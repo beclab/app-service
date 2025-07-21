@@ -501,7 +501,7 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 }
 
 func (h *HelmOps) userZone() (string, error) {
-	return kubesphere.GetUserZone(h.ctx, h.kubeConfig, h.app.OwnerName)
+	return kubesphere.GetUserZone(h.ctx, h.app.OwnerName)
 }
 
 func (h *HelmOps) registerAppPerm(perm []appcfg.SysDataPermission) (*appcfg.RegisterResp, error) {

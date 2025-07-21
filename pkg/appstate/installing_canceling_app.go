@@ -1,6 +1,7 @@
 package appstate
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"context"
 	"errors"
 	"fmt"
@@ -78,7 +79,7 @@ func (p *InstallingCancelingApp) handleInstallCancel(ctx context.Context) error 
 		klog.Errorf("app %s operation is not running", p.manager.Name)
 	}
 
-	token := p.manager.Status.Payload["token"]
+	token := p.manager.Annotations[api.AppTokenKey]
 	appCfg := &appcfg.ApplicationConfig{
 		AppName:   p.manager.Spec.AppName,
 		Namespace: p.manager.Spec.AppNamespace,

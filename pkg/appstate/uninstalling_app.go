@@ -1,6 +1,7 @@
 package appstate
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"context"
 	"fmt"
 	"time"
@@ -63,7 +64,7 @@ func (p *UninstallingApp) Exec(ctx context.Context) (StatefulInProgressApp, erro
 				if err != nil {
 					p.finally = func() {
 						klog.Infof("uninstalling app %s failed,", p.manager.Spec.AppName)
-						opRecord := makeRecord(p.manager, appsv1.UninstallFailed, fmt.Sprintf(constants.OperationFailedTpl, p.manager.Status.OpType, err.Error()))
+						opRecord := makeRecord(p.manager, appsv1.UninstallFailed, fmt.Sprintf(constants.OperationFailedTpl, p.manager.Spec.OpType, err.Error()))
 						updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.UninstallFailed, opRecord, err.Error())
 						if updateErr != nil {
 							klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.UninstallFailed.String(), err)
@@ -117,7 +118,7 @@ func (p *UninstallingApp) waitForDeleteNamespace(ctx context.Context) error {
 
 func (p *UninstallingApp) exec(ctx context.Context) error {
 	var err error
-	token := p.manager.Status.Payload["token"]
+	token := p.manager.Annotations[api.AppTokenKey]
 	appCfg := &appcfg.ApplicationConfig{
 		AppName:   p.manager.Spec.AppName,
 		Namespace: p.manager.Spec.AppNamespace,

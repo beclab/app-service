@@ -162,7 +162,7 @@ func getWorkflowStatus(ctx context.Context, kubeConfig *rest.Config, app, owner 
 	if err != nil {
 		return nil, err
 	}
-	if recommendMgr.Status.OpType == v1alpha1.UninstallOp && recommendMgr.Status.State == v1alpha1.Uninstalling {
+	if recommendMgr.Spec.OpType == v1alpha1.UninstallOp && recommendMgr.Status.State == v1alpha1.Uninstalling {
 		res.ResourceStatus = v1alpha1.Uninstalling.String()
 	}
 
