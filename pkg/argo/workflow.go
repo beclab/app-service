@@ -77,6 +77,7 @@ func UpdateWorkflowInNamespace(ctx context.Context, kubeConfig *rest.Config, wor
 		}
 
 		ns.Labels[constants.WorkflowNameLabel] = workflowName
+		ns.Labels[constants.ApplicationClusterDep] = workflowName
 		annotations := ns.Annotations
 		if annotations == nil {
 			annotations = make(map[string]string)

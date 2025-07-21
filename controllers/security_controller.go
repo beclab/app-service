@@ -10,7 +10,6 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/security"
 	"bytetrade.io/web3os/app-service/pkg/utils"
-	"bytetrade.io/web3os/app-service/pkg/wrapper"
 
 	"github.com/go-logr/logr"
 	"github.com/thoas/go-funk"
@@ -364,8 +363,8 @@ func (r *SecurityReconciler) reconcileNetworkPolicy(ctx context.Context, ns *cor
 				// get app name from np namespace
 				depApp, err := r.getAppInNs(np.Namespace, owner)
 				if err != nil {
-					logger.Error(err, "get app info ", "name", np.Namespace, "err", err)
-				} else {
+					logger.Info("get app info ", "name", np.Namespace, "err", err, "ignore to add app ref", owner)
+				} else if depApp != nil {
 					//
 					if appRefs, ok := depApp.Spec.Settings["clusterAppRef"]; ok {
 
@@ -456,47 +455,35 @@ func (r *SecurityReconciler) findOwnerOfNamespace(ctx context.Context, ns *corev
 	appIsInternal := func(labels map[string]string, owner string) (internal, system bool, err error) {
 		appName, ok := labels[constants.ApplicationNameLabel]
 		if ok && appName != "" {
-			app, err := r.getAppInNs(ns.Name, owner)
+			mgr, err := r.getAppMgrInNs(ns.Name, owner)
 			if err != nil {
 				r.Logger.Error(err, "Failed to get app in namespace", "namespace", ns.Name, "owner", owner)
 				return false, false, err
 			}
 
-			if app != nil {
-				wrapper := wrapper.ApplicationHelper{
-					Application: app,
-					Client:      r.Client,
-				}
-				mgr, err := wrapper.GetApplicationManger(ctx)
+			if mgr != nil {
+				var cfg appcfg.ApplicationConfig
+				err = mgr.GetAppConfig(&cfg)
 				if err != nil {
-					r.Logger.Error(err, "Failed to get application manager for app", "app", appName)
+					r.Logger.Error(err, "Failed to get app config for app", "app", appName)
 					return false, false, err
 				}
 
-				if mgr != nil {
-					var cfg appcfg.ApplicationConfig
-					err = mgr.GetAppConfig(&cfg)
-					if err != nil {
-						r.Logger.Error(err, "Failed to get app config for app", "app", appName)
-						return false, false, err
-					}
-
-					system = cfg.AppScope.ClusterScoped && cfg.AppScope.SystemService
-					if system && cfg.APIVersion == appcfg.V2 {
-						// V2: if the namespace is not cluster scoped, it cannot be considered as system app
-						for _, chart := range cfg.SubCharts {
-							if !chart.Shared {
-								chartNs := fmt.Sprintf("%s-%s", chart.Name, owner)
-								if chartNs != ns.Name {
-									system = false
-								}
-								break
+				system = cfg.AppScope.ClusterScoped && cfg.AppScope.SystemService
+				if system && cfg.APIVersion == appcfg.V2 {
+					// V2: if the namespace is not cluster scoped, it cannot be considered as system app
+					for _, chart := range cfg.SubCharts {
+						if !chart.Shared {
+							chartNs := fmt.Sprintf("%s-%s", chart.Name, owner)
+							if chartNs != ns.Name {
+								system = false
 							}
+							break
 						}
 					}
-
-					return cfg.Internal, system, nil
 				}
+
+				return cfg.Internal, system, nil
 			}
 		}
 
@@ -621,6 +608,25 @@ func (r *SecurityReconciler) getAppInNs(ns, owner string) (*v1alpha1.Application
 		}
 
 		return &depApp, nil
+	}
+
+	return nil, nil
+}
+
+func (r *SecurityReconciler) getAppMgrInNs(ns, owner string) (*v1alpha1.ApplicationManager, error) {
+	appName := getAppNameFromNPName(ns, owner)
+
+	if len(appName) > 0 {
+		appName = fmt.Sprintf("%s-%s", ns, appName)
+		key := types.NamespacedName{Name: appName}
+		var depAppMgr v1alpha1.ApplicationManager
+		err := r.Get(context.Background(), key, &depAppMgr)
+		if err != nil {
+			r.Logger.Info("Get app manager ", "name", appName, "err", err)
+			return nil, err
+		}
+
+		return &depAppMgr, nil
 	}
 
 	return nil, nil

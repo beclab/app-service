@@ -731,6 +731,10 @@ func toApplicationConfig(app, chart string, cfg *appcfg.AppConfiguration) (*appc
 		appid = utils.Md5String(app)[:8]
 	}
 
+	if appcfg.APIVersion(cfg.APIVersion) == appcfg.V2 {
+		// V2: additional validation for app config
+	}
+
 	return &appcfg.ApplicationConfig{
 		AppID:          appid,
 		APIVersion:     appcfg.APIVersion(cfg.APIVersion),
@@ -768,6 +772,7 @@ func toApplicationConfig(app, chart string, cfg *appcfg.AppConfiguration) (*appc
 		AllowedOutboundPorts: cfg.Options.AllowedOutboundPorts,
 		RequiredGPU:          cfg.Spec.RequiredGPU,
 		Internal:             cfg.Spec.RunAsInternal,
+		SubCharts:            cfg.Spec.SubCharts,
 	}, chart, nil
 }
 
