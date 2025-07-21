@@ -8,6 +8,7 @@ import (
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
+	"bytetrade.io/web3os/app-service/pkg/appinstaller/versioned"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/helm"
 	"bytetrade.io/web3os/app-service/pkg/images"
@@ -164,7 +165,7 @@ func (p *UpgradingApp) exec(ctx context.Context) error {
 			RepoURL:    repoURL,
 		}
 	}
-	ops, err := appinstaller.NewHelmOps(ctx, kubeConfig, appConfig, token, appinstaller.Opt{Source: p.manager.Spec.Source})
+	ops, err := versioned.NewHelmOps(ctx, kubeConfig, appConfig, token, appinstaller.Opt{Source: p.manager.Spec.Source})
 	if err != nil {
 		klog.Errorf("make helmop failed %v", err)
 		return err

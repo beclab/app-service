@@ -6,7 +6,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net/http"
 	"net/http/httputil"
 	"strconv"
 	"time"
@@ -14,17 +13,13 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/errcode"
 
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
-	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
 	"bytetrade.io/web3os/app-service/pkg/helm"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/tapr"
-	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
@@ -36,7 +31,6 @@ import (
 	"helm.sh/helm/v3/pkg/storage/driver"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -71,6 +65,8 @@ type HelmOpsInterface interface {
 	RollBack() error
 
 	WaitForLaunch() (bool, error)
+
+	UninstallClient() error
 }
 
 // Opt options for helm ops.
@@ -130,7 +126,7 @@ func NewHelmOps(ctx context.Context, kubeConfig *rest.Config, app *appcfg.Applic
 }
 
 // addApplicationLabelsToDeployment add application label to deployment or statefulset
-func (h *HelmOps) addApplicationLabelsToDeployment() error {
+func (h *HelmOps) AddApplicationLabelsToDeployment() error {
 	k8s, err := kubernetes.NewForConfig(h.kubeConfig)
 	if err != nil {
 		return err
@@ -221,7 +217,7 @@ func (h *HelmOps) status() (*helmrelease.Release, error) {
 	return status, nil
 }
 
-func (h *HelmOps) addLabelToNamespaceForDependClusterApp() error {
+func (h *HelmOps) AddLabelToNamespaceForDependClusterApp() error {
 	k8s, err := kubernetes.NewForConfig(h.kubeConfig)
 	if err != nil {
 		return err
@@ -365,333 +361,6 @@ func (h *HelmOps) ownerNamespace() string {
 	return utils.UserspaceName(h.app.OwnerName)
 }
 
-func (h *HelmOps) unregisterAppPerm() error {
-	register := appcfg.PermissionRegister{
-		App:   h.app.AppName,
-		AppID: h.app.AppID,
-	}
-
-	url := fmt.Sprintf("http://%s/permission/v1alpha1/unregister", h.systemServerHost())
-	client := resty.New()
-
-	resp, err := client.SetTimeout(2*time.Second).R().
-		SetHeader(restful.HEADER_ContentType, restful.MIME_JSON).
-		SetHeader(constants.AuthorizationTokenKey, h.token).
-		SetBody(register).Post(url)
-	if err != nil {
-		return err
-	}
-
-	if resp.StatusCode() != 200 {
-		dump, e := httputil.DumpRequest(resp.Request.RawRequest, true)
-		if e == nil {
-			klog.Errorf("Failed to get response body=%s url=%s", string(dump), url)
-		}
-
-		return errors.New(string(resp.Body()))
-	}
-
-	return nil
-}
-
-// Uninstall do a uninstall operation for release.
-func (h *HelmOps) Uninstall() error {
-	client, err := kubernetes.NewForConfig(h.kubeConfig)
-	if err != nil {
-		return err
-	}
-	if !apputils.IsProtectedNamespace(h.app.Namespace) {
-		pvcs, err := client.CoreV1().PersistentVolumeClaims(h.app.Namespace).List(context.TODO(), metav1.ListOptions{})
-		if err != nil {
-			return err
-		}
-		for _, pvc := range pvcs.Items {
-			err = client.CoreV1().PersistentVolumeClaims(pvc.Namespace).Delete(context.TODO(), pvc.Name, metav1.DeleteOptions{})
-			if err != nil && !apierrors.IsNotFound(err) {
-				return err
-			}
-		}
-	}
-
-	appCacheDirs, err := apputils.TryToGetAppdataDirFromDeployment(context.TODO(), h.app.Namespace, h.app.AppName, h.app.OwnerName)
-	if err != nil {
-		klog.Warningf("get app %s cache dir failed %v", h.app.AppName, err)
-	}
-
-	err = helm.UninstallCharts(h.actionConfig, h.app.AppName)
-	if err != nil && !errors.Is(err, driver.ErrReleaseNotFound) {
-		klog.Errorf("failed to uninstall app %s, err=%v", h.app.AppName, err)
-		return err
-	}
-	err = h.unregisterAppPerm()
-	if err != nil {
-		klog.Warningf("Failed to unregister app err=%v", err)
-	}
-
-	// delete middleware requests crd
-	namespace := fmt.Sprintf("%s-%s", "user-system", h.app.OwnerName)
-	for _, mt := range middlewareTypes {
-		name := fmt.Sprintf("%s-%s", h.app.AppName, mt)
-		err = tapr.DeleteMiddlewareRequest(context.TODO(), h.kubeConfig, namespace, name)
-		if err != nil && !apierrors.IsNotFound(err) {
-			klog.Errorf("Failed to delete middleware request namespace=%s name=%s err=%v", namespace, name, err)
-		}
-	}
-
-	if len(appCacheDirs) > 0 {
-		klog.Infof("clear app cache dirs: %v", appCacheDirs)
-		terminusNonce, e := utils.GenTerminusNonce()
-		if e != nil {
-			klog.Errorf("Failed to generate terminus nonce err=%v", e)
-		} else {
-			c := resty.New().SetTimeout(2*time.Second).
-				SetHeader(constants.AuthorizationTokenKey, h.token).
-				SetHeader("Terminus-Nonce", terminusNonce)
-			nodes, e := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
-			if e == nil {
-				for _, dir := range appCacheDirs {
-					for _, n := range nodes.Items {
-						URL := fmt.Sprintf(constants.AppDataDirURL, h.app.OwnerName, dir)
-						c.SetHeader("X-Terminus-Node", n.Name)
-						c.SetHeader("x-bfl-user", h.app.OwnerName)
-						res, e := c.R().Delete(URL)
-						if e != nil {
-							klog.Errorf("Failed to delete dir err=%v", e)
-						}
-						if res.StatusCode() != http.StatusOK {
-							klog.Infof("delete app cache failed with: %v", res.String())
-						}
-					}
-				}
-			} else {
-				klog.Errorf("Failed to get nodes err=%v", e)
-			}
-		}
-	}
-
-	if !apputils.IsProtectedNamespace(h.app.Namespace) {
-		klog.Infof("deleting namespace %s", h.app.Namespace)
-		err = client.CoreV1().Namespaces().Delete(context.TODO(), h.app.Namespace, metav1.DeleteOptions{})
-		if apierrors.IsNotFound(err) {
-			return nil
-		}
-		return err
-	}
-	return nil
-}
-
-// Upgrade do a upgrade operation for release.
-func (h *HelmOps) Upgrade() error {
-	status, err := h.status()
-	if err != nil {
-		klog.Errorf("get release status failed %v", err)
-		return err
-	}
-	if status.Info.Status == helmrelease.StatusDeployed {
-		return h.upgrade()
-	}
-	return fmt.Errorf("cannot upgrade release %s/%s, current state is %s", h.app.Namespace, h.app.AppName, status.Info.Status)
-}
-
-func (h *HelmOps) upgrade() error {
-	values, err := h.setValues()
-	if err != nil {
-		return err
-	}
-
-	err = h.taprApply(values)
-	if err != nil {
-		return err
-	}
-
-	err = helm.UpgradeCharts(h.ctx, h.actionConfig, h.settings, h.app.AppName, h.app.ChartsName, h.app.RepoURL, h.app.Namespace, values, false)
-	if err != nil {
-		klog.Errorf("Failed to upgrade chart name=%s err=%v", h.app.AppName, err)
-		return err
-	}
-	err = h.addApplicationLabelsToDeployment()
-	if err != nil {
-		//h.rollBack()
-		return err
-	}
-
-	isDepClusterScopedApp := false
-	clientset, err := versioned.NewForConfig(h.kubeConfig)
-	if err != nil {
-		return err
-	}
-	apps, err := clientset.AppV1alpha1().Applications().List(h.ctx, metav1.ListOptions{})
-	if err != nil {
-		return err
-	}
-
-	for _, dep := range h.app.Dependencies {
-		if dep.Type == constants.DependencyTypeSystem {
-			continue
-		}
-		for _, app := range apps.Items {
-			if app.Spec.Name == dep.Name && app.Spec.Settings["clusterScoped"] == "true" {
-				isDepClusterScopedApp = true
-				break
-			}
-		}
-	}
-
-	if isDepClusterScopedApp {
-		err = h.addLabelToNamespaceForDependClusterApp()
-		if err != nil {
-			//h.rollBack()
-			return err
-		}
-	}
-	appClient, err := versioned.NewForConfig(h.kubeConfig)
-	if err != nil {
-		return err
-	}
-	var deployment client.Object
-	if userspace.IsSysApp(h.app.AppName) {
-		application, err := appClient.AppV1alpha1().Applications().Get(context.Background(),
-			appv1alpha1.AppResourceName(h.app.AppName, h.app.Namespace), metav1.GetOptions{})
-		if err != nil {
-			return err
-		}
-		clientset, err := kubernetes.NewForConfig(h.kubeConfig)
-		if err != nil {
-			return err
-		}
-		deployment, err = clientset.AppsV1().Deployments(h.app.Namespace).
-			Get(context.Background(), application.Spec.DeploymentName, metav1.GetOptions{})
-		if err != nil && !kerrors.IsNotFound(err) {
-			return err
-		}
-		deployment, err = clientset.AppsV1().StatefulSets(h.app.Namespace).
-			Get(context.Background(), application.Spec.DeploymentName, metav1.GetOptions{})
-		if err != nil && !kerrors.IsNotFound(err) {
-			return err
-		}
-		entrancesLabel := deployment.GetAnnotations()[constants.ApplicationEntrancesKey]
-		entrances, err := ToEntrances(entrancesLabel)
-		if err != nil {
-			return err
-		}
-		h.app.Entrances = entrances
-	}
-	for i, v := range h.app.Entrances {
-		if v.AuthLevel == "" {
-			h.app.Entrances[i].AuthLevel = constants.AuthorizationLevelOfPrivate
-		}
-	}
-
-	var policyStr string
-	if !userspace.IsSysApp(h.app.AppName) {
-		if appCfg, err := appcfg.GetAppInstallationConfig(h.app.AppName, h.app.OwnerName); err != nil {
-			klog.Infof("Failed to get app configuration appName=%s owner=%s err=%v", h.app.AppName, h.app.OwnerName, err)
-		} else {
-			policyStr, err = getApplicationPolicy(appCfg.Policies, h.app.Entrances)
-			if err != nil {
-				klog.Errorf("Failed to encode json err=%v", err)
-			}
-		}
-	} else {
-		// sys applications.
-		type Policies struct {
-			Policies []appcfg.Policy `json:"policies"`
-		}
-		applicationPoliciesFromAnnotation, ok := deployment.GetAnnotations()[constants.ApplicationPolicies]
-
-		var policy Policies
-		if ok {
-			err := json.Unmarshal([]byte(applicationPoliciesFromAnnotation), &policy)
-			if err != nil {
-				klog.Errorf("Failed to unmarshal applicationPoliciesFromAnnotation err=%v", err)
-			}
-		}
-
-		// transform from Policy to AppPolicy
-		var appPolicies []appcfg.AppPolicy
-		for _, p := range policy.Policies {
-			d, _ := time.ParseDuration(p.Duration)
-			appPolicies = append(appPolicies, appcfg.AppPolicy{
-				EntranceName: p.EntranceName,
-				URIRegex:     p.URIRegex,
-				Level:        p.Level,
-				OneTime:      p.OneTime,
-				Duration:     d,
-			})
-		}
-		policyStr, err = getApplicationPolicy(appPolicies, h.app.Entrances)
-		if err != nil {
-			klog.Errorf("Failed to encode json err=%v", err)
-		}
-	}
-	patchData := map[string]interface{}{
-		"spec": map[string]interface{}{
-			"entrances": h.app.Entrances,
-		},
-	}
-	if len(policyStr) > 0 {
-		patchData = map[string]interface{}{
-			"spec": map[string]interface{}{
-				"entrances": h.app.Entrances,
-				"settings": map[string]string{
-					"policy": policyStr,
-				},
-			},
-		}
-	}
-	patchByte, err := json.Marshal(patchData)
-	if err != nil {
-		return err
-	}
-	name, _ := apputils.FmtAppMgrName(h.app.AppName, h.app.OwnerName, h.app.Namespace)
-	_, err = appClient.AppV1alpha1().Applications().Patch(h.ctx, name, types.MergePatchType, patchByte, metav1.PatchOptions{})
-	if err != nil {
-		return err
-	}
-
-	ok, err := h.waitForStartUp()
-	if !ok {
-		// canceled
-		//h.rollBack()
-		return err
-	}
-
-	return nil
-}
-
-// RollBack do a rollback for release if it can be rollback.
-func (h *HelmOps) RollBack() error {
-	can, err := h.canRollBack()
-	if err != nil {
-		return err
-	}
-	if can {
-		return h.rollBack()
-	}
-	return errors.New("can not do rollback")
-}
-
-func (h *HelmOps) canRollBack() (bool, error) {
-	client := action.NewGet(h.actionConfig)
-	release, err := client.Run(h.app.AppName)
-	if err != nil {
-		return false, err
-	}
-	if release.Version > 1 {
-		return true, nil
-	}
-	return false, nil
-}
-
-// rollBack to previous version
-func (h *HelmOps) rollBack() error {
-	err := helm.RollbackCharts(h.actionConfig, h.app.AppName)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func (h *HelmOps) createOIDCClient(values map[string]interface{}, userZone, namespace string) error {
 	client, err := kubernetes.NewForConfig(h.kubeConfig)
 	if err != nil {
@@ -760,37 +429,7 @@ func (h *HelmOps) createOIDCClient(values map[string]interface{}, userZone, name
 	return nil
 }
 
-func (h *HelmOps) waitForLaunch() (bool, error) {
-	ok, _ := h.waitForStartUp()
-	if !ok {
-		return false, api.ErrStartUpFailed
-	}
-
-	timer := time.NewTicker(2 * time.Second)
-	entrances := h.app.Entrances
-	entranceCount := len(entrances)
-	for {
-		select {
-		case <-timer.C:
-			count := 0
-			for _, e := range entrances {
-				klog.Info("Waiting service for launch :", e.Host)
-				host := fmt.Sprintf("%s.%s", e.Host, h.app.Namespace)
-				if apputils.TryConnect(host, strconv.Itoa(int(e.Port))) {
-					count++
-				}
-			}
-			if entranceCount == count {
-				return true, nil
-			}
-
-		case <-h.ctx.Done():
-			klog.Infof("Waiting for launch canceled appName=%s", h.app.AppName)
-			return false, api.ErrLaunchFailed
-		}
-	}
-}
-func (h *HelmOps) waitForStartUp() (bool, error) {
+func (h *HelmOps) WaitForStartUp() (bool, error) {
 	timer := time.NewTicker(1 * time.Second)
 	for {
 		select {
@@ -983,13 +622,13 @@ func parseAppPermission(data []appcfg.AppPermission) []appcfg.AppPermission {
 
 func (h *HelmOps) Install() error {
 	var err error
-	values, err := h.setValues()
+	values, err := h.SetValues()
 	if err != nil {
 		klog.Errorf("set values err %v", err)
 		return err
 	}
 
-	err = h.taprApply(values)
+	err = h.TaprApply(values, "")
 	if err != nil {
 		return err
 	}
@@ -1001,7 +640,7 @@ func (h *HelmOps) Install() error {
 		return err
 	}
 
-	err = h.addApplicationLabelsToDeployment()
+	err = h.AddApplicationLabelsToDeployment()
 	if err != nil {
 		h.Uninstall()
 		return err
@@ -1030,14 +669,14 @@ func (h *HelmOps) Install() error {
 
 	}
 	if isDepClusterScopedApp {
-		err = h.addLabelToNamespaceForDependClusterApp()
+		err = h.AddLabelToNamespaceForDependClusterApp()
 		if err != nil {
 			h.Uninstall()
 			return err
 		}
 	}
 
-	ok, err := h.waitForStartUp()
+	ok, err := h.WaitForStartUp()
 	if err != nil && errors.Is(err, errcode.ErrPodPending) {
 		return err
 	}
@@ -1079,4 +718,36 @@ func (h *HelmOps) WaitForLaunch() (bool, error) {
 			return false, h.ctx.Err()
 		}
 	}
+}
+
+func (h *HelmOps) App() *appcfg.ApplicationConfig {
+	return h.app
+}
+
+func (h *HelmOps) KubeConfig() *rest.Config {
+	return h.kubeConfig
+}
+
+func (h *HelmOps) ActionConfig() *action.Configuration {
+	return h.actionConfig
+}
+
+func (h *HelmOps) Settings() *cli.EnvSettings {
+	return h.settings
+}
+
+func (h *HelmOps) Context() context.Context {
+	return h.ctx
+}
+
+func (h *HelmOps) Token() string {
+	return h.token
+}
+
+func (h *HelmOps) Client() *clientset.ClientSet {
+	return h.client
+}
+
+func (h *HelmOps) Options() *Opt {
+	return &h.options
 }

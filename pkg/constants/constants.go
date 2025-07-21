@@ -27,6 +27,7 @@ const (
 	ApplicationPolicies           = "applications.app.bytetrade.io/policies"
 	ApplicationMobileSupported    = "applications.app.bytetrade.io/mobile_supported"
 	ApplicationClusterDep         = "applications.app.bytetrade.io/need_cluster_scoped_app"
+	ApplicationGroupClusterDep    = "applications.app.bytetrade.io/need_cluster_scoped_group"
 	UserContextAttribute          = "username"
 	KubeSphereClientAttribute     = "ksclient"
 	MarketSource                  = "X-Market-Source"

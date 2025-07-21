@@ -21,6 +21,13 @@ func (h *Handler) uninstall(req *restful.Request, resp *restful.Response) {
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 	token := req.HeaderParameter(constants.AuthorizationTokenKey)
 
+	request := &api.UninstallRequest{}
+	err := req.ReadEntity(request)
+	if err != nil {
+		api.HandleBadRequest(resp, req, err)
+		return
+	}
+
 	if userspace.IsSysApp(app) {
 		api.HandleBadRequest(resp, req, errors.New("sys app can not be uninstall"))
 		return
@@ -59,7 +66,8 @@ func (h *Handler) uninstall(req *restful.Request, resp *restful.Response) {
 		State:  v1alpha1.Uninstalling,
 		OpID:   am.ResourceVersion,
 		Payload: map[string]string{
-			"token": token,
+			"token":        token,
+			"uninstallAll": fmt.Sprintf("%t", request.All),
 		},
 		Progress:   "0.00",
 		StatusTime: &now,

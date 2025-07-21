@@ -113,6 +113,11 @@ type InstallRequest struct {
 	Source  AppSource `json:"source"`
 }
 
+// UninstallRequest represents a request to uninstall an application.
+type UninstallRequest struct {
+	All bool `json:"all"`
+}
+
 type ManifestRenderRequest struct {
 	Content string `json:"content"`
 }

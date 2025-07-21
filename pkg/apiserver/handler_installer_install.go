@@ -28,7 +28,7 @@ type depRequest struct {
 	Data []appcfg.Dependency `json:"data"`
 }
 
-type helperIntf interface {
+type installHelperIntf interface {
 	getAdminUsers() (admin []string, isAdmin bool, err error)
 	getInstalledApps() (installed bool, app []*v1alpha1.Application, err error)
 	getAppConfig(adminUsers []string, marketSource string, isAdmin, appInstalled bool, installedApps []*v1alpha1.Application) (err error)
@@ -36,8 +36,8 @@ type helperIntf interface {
 	applyApplicationManager(marketSource string) (opID string, err error)
 }
 
-var _ helperIntf = (*installHandlerHelper)(nil)
-var _ helperIntf = (*installHandlerHelperV2)(nil)
+var _ installHelperIntf = (*installHandlerHelper)(nil)
+var _ installHelperIntf = (*installHandlerHelperV2)(nil)
 
 type installHandlerHelper struct {
 	h                    *Handler
@@ -90,7 +90,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	var helper helperIntf
+	var helper installHelperIntf
 	switch apiVersion {
 	case appcfg.V1:
 		klog.Info("Using install handler helper for V1")

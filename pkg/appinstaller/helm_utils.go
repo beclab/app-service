@@ -19,7 +19,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
+func (h *HelmOps) SetValues() (values map[string]interface{}, err error) {
 	values = make(map[string]interface{})
 	values["bfl"] = map[string]interface{}{
 		"username": h.app.OwnerName,
@@ -213,8 +213,11 @@ func (h *HelmOps) setValues() (values map[string]interface{}, err error) {
 	return values, err
 }
 
-func (h *HelmOps) taprApply(values map[string]interface{}) error {
-	namespace := fmt.Sprintf("%s-%s", "user-system", h.app.OwnerName)
+func (h *HelmOps) TaprApply(values map[string]interface{}, namespace string) error {
+	if namespace == "" {
+		namespace = fmt.Sprintf("%s-%s", "user-system", h.app.OwnerName)
+	}
+
 	if err := tapr.Apply(h.app.Middleware, h.kubeConfig, h.app.AppName, h.app.Namespace,
 		namespace, h.token, h.app.OwnerName, values); err != nil {
 		klog.Errorf("Failed to apply middleware err=%v", err)
