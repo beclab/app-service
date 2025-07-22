@@ -106,6 +106,7 @@ func (imc *ImageManagerClient) UpdateStatus(ctx context.Context, name, state, me
 func (imc *ImageManagerClient) PollDownloadProgress(ctx context.Context, am *appv1alpha1.ApplicationManager) error {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
+	var lastProgress float64
 
 	for {
 		select {
@@ -158,11 +159,11 @@ func (imc *ImageManagerClient) PollDownloadProgress(ctx context.Context, am *app
 					nodeProgress = float64(p.offset) / float64(p.total)
 				}
 				if nodeProgress < ret {
-					ret = nodeProgress * 100
+					ret = nodeProgress
 				}
 
 			}
-			err = imc.updateProgress(ctx, am, ret)
+			err = imc.updateProgress(ctx, am, &lastProgress, ret*100)
 			if err == nil {
 				return nil
 			}
@@ -173,29 +174,18 @@ func (imc *ImageManagerClient) PollDownloadProgress(ctx context.Context, am *app
 	}
 }
 
-func (imc *ImageManagerClient) updateProgress(ctx context.Context, am *appv1alpha1.ApplicationManager, progress float64) error {
-	var cur appv1alpha1.ApplicationManager
-	err := imc.Get(ctx, types.NamespacedName{Name: am.Name}, &cur)
-	if err != nil {
-		klog.Infof("Failed to get applicationmanagers name=%v, err=%v", am.Name, err)
-		return err
-	}
-
-	appMgrCopy := cur.DeepCopy()
-	oldProgress, _ := strconv.ParseFloat(cur.Status.Progress, 64)
-	if oldProgress > progress {
+func (imc *ImageManagerClient) updateProgress(ctx context.Context, am *appv1alpha1.ApplicationManager, lastProgress *float64, progress float64) error {
+	if *lastProgress > progress {
 		return errors.New("no need to update progress")
 	}
-	cur.Status.Progress = strconv.FormatFloat(progress, 'f', 2, 64)
-	err = imc.Patch(ctx, &cur, client.MergeFrom(appMgrCopy))
-	if err != nil {
-		klog.Infof("Failed to patch applicationmanagers name=%v, err=%v", am.Name, err)
-		return err
-	}
-	utils.PublishAsync(am.Spec.AppOwner, am.Spec.AppName, string(am.Status.OpType), am.Status.OpID, appv1alpha1.Downloading.String(), cur.Status.Progress, nil)
 
-	klog.Infof("app %s download progress.... %v", am.Spec.AppName, cur.Status.Progress)
-	if cur.Status.Progress == "100.00" {
+	progressStr := strconv.FormatFloat(progress, 'f', 2, 64)
+	*lastProgress = progress
+
+	utils.PublishAsync(am.Spec.AppOwner, am.Spec.AppName, string(am.Status.OpType), am.Status.OpID, appv1alpha1.Downloading.String(), progressStr, nil)
+
+	klog.Infof("app %s download progress.... %v", am.Spec.AppName, progressStr)
+	if progressStr == "100.00" {
 		return nil
 	}
 	return errors.New("under downloading")
