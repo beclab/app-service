@@ -2,6 +2,7 @@ package appstate
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -120,10 +121,11 @@ func (p *UninstallingApp) exec(ctx context.Context) error {
 	var err error
 	token := p.manager.Status.Payload["token"]
 	uninstallAll := p.manager.Status.Payload["uninstallAll"]
-	appCfg := &appcfg.ApplicationConfig{
-		AppName:   p.manager.Spec.AppName,
-		Namespace: p.manager.Spec.AppNamespace,
-		OwnerName: p.manager.Spec.AppOwner,
+	var appCfg *appcfg.ApplicationConfig
+	err = json.Unmarshal([]byte(p.manager.Spec.Config), &appCfg)
+	if err != nil {
+		klog.Errorf("unmarshal to appConfig failed %v", err)
+		return err
 	}
 	kubeConfig, err := ctrl.GetConfig()
 	if err != nil {

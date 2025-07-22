@@ -129,6 +129,7 @@ func NewHelmOps(ctx context.Context, kubeConfig *rest.Config, app *appcfg.Applic
 func (h *HelmOps) AddApplicationLabelsToDeployment() error {
 	k8s, err := kubernetes.NewForConfig(h.kubeConfig)
 	if err != nil {
+		klog.Error("create kubernetes client error, ", err)
 		return err
 	}
 
@@ -137,6 +138,7 @@ func (h *HelmOps) AddApplicationLabelsToDeployment() error {
 	_, err = k8s.CoreV1().Namespaces().Patch(h.ctx, h.app.Namespace,
 		types.MergePatchType, []byte(patch), metav1.PatchOptions{})
 	if err != nil {
+		klog.Errorf("patch namespace %s error %v", h.app.Namespace, err)
 		return err
 	}
 	services := ToEntrancesLabel(h.app.Entrances)
@@ -167,6 +169,7 @@ func (h *HelmOps) AddApplicationLabelsToDeployment() error {
 
 	patchByte, err := json.Marshal(patchData)
 	if err != nil {
+		klog.Errorf("Failed to marshal patch data %v", err)
 		return err
 	}
 
@@ -178,6 +181,8 @@ func (h *HelmOps) AddApplicationLabelsToDeployment() error {
 		if apierrors.IsNotFound(err) {
 			return h.tryToAddApplicationLabelsToStatefulSet(k8s, patch)
 		}
+
+		klog.Errorf("Failed to get deployment %s in namespace %s: %v", h.app.AppName, h.app.Namespace, err)
 		return err
 	}
 
@@ -187,6 +192,9 @@ func (h *HelmOps) AddApplicationLabelsToDeployment() error {
 		[]byte(patch),
 		metav1.PatchOptions{})
 
+	if err != nil {
+		klog.Errorf("Failed to patch deployment %s in namespace %s: %v", h.app.AppName, h.app.Namespace, err)
+	}
 	return err
 }
 
@@ -196,6 +204,8 @@ func (h *HelmOps) tryToAddApplicationLabelsToStatefulSet(k8s *kubernetes.Clients
 		if apierrors.IsNotFound(err) {
 			return nil
 		}
+
+		klog.Errorf("Failed to get statefulset %s in namespace %s: %v", h.app.AppName, h.app.Namespace, err)
 		return err
 	}
 
@@ -205,6 +215,10 @@ func (h *HelmOps) tryToAddApplicationLabelsToStatefulSet(k8s *kubernetes.Clients
 		[]byte(patch),
 		metav1.PatchOptions{})
 
+	if err != nil {
+		klog.Errorf("Failed to patch statefulset %s in namespace %s: %v", h.app.AppName, h.app.Namespace, err)
+	}
+
 	return err
 }
 
@@ -212,6 +226,7 @@ func (h *HelmOps) status() (*helmrelease.Release, error) {
 	statusClient := action.NewStatus(h.actionConfig)
 	status, err := statusClient.Run(h.app.AppName)
 	if err != nil {
+		klog.Errorf("Failed to get status for release %s: %v", h.app.AppName, err)
 		return nil, err
 	}
 	return status, nil
@@ -220,6 +235,7 @@ func (h *HelmOps) status() (*helmrelease.Release, error) {
 func (h *HelmOps) AddLabelToNamespaceForDependClusterApp() error {
 	k8s, err := kubernetes.NewForConfig(h.kubeConfig)
 	if err != nil {
+		klog.Errorf("Failed to create kubernetes client: %v", err)
 		return err
 	}
 
@@ -231,6 +247,7 @@ func (h *HelmOps) AddLabelToNamespaceForDependClusterApp() error {
 	_, err = k8s.CoreV1().Namespaces().Patch(h.ctx, h.app.Namespace,
 		types.MergePatchType, patchBytes, metav1.PatchOptions{})
 	if err != nil {
+		klog.Errorf("Failed to patch namespace %s with labels %v: %v", h.app.Namespace, labels, err)
 		return err
 	}
 	return nil
@@ -252,6 +269,7 @@ func (h *HelmOps) registerAppPerm(perm []appcfg.SysDataPermission) (*appcfg.Regi
 
 	body, err := json.Marshal(register)
 	if err != nil {
+		klog.Errorf("Failed to marshal register request body: %v", err)
 		return nil, err
 	}
 
@@ -262,6 +280,7 @@ func (h *HelmOps) registerAppPerm(perm []appcfg.SysDataPermission) (*appcfg.Regi
 		SetHeader(constants.AuthorizationTokenKey, h.token).
 		SetBody(body).Post(url)
 	if err != nil {
+		klog.Errorf("Failed to make register request: %v", err)
 		return nil, err
 	}
 
@@ -295,12 +314,14 @@ func (h *HelmOps) systemServerHost() string {
 func (h *HelmOps) selectNode() (node string, appCache, userspace string, err error) {
 	k8s, err := kubernetes.NewForConfig(h.kubeConfig)
 	if err != nil {
+		klog.Errorf("Failed to create kubernetes client: %v", err)
 		return "", "", "", err
 	}
 
 	bflPods, err := k8s.CoreV1().Pods(h.ownerNamespace()).List(h.ctx,
 		metav1.ListOptions{LabelSelector: "tier=bfl"})
 	if err != nil {
+		klog.Errorf("Failed to list pods in namespace %s: %v", h.ownerNamespace(), err)
 		return "", "", "", err
 	}
 
@@ -309,6 +330,7 @@ func (h *HelmOps) selectNode() (node string, appCache, userspace string, err err
 
 		vols := bfl.Spec.Volumes
 		if len(vols) < 1 {
+			klog.Error("No volumes found in bfl pod")
 			return "", "", "", errors.New("user space not found")
 		}
 
@@ -321,11 +343,13 @@ func (h *HelmOps) selectNode() (node string, appCache, userspace string, err err
 						vol.PersistentVolumeClaim.ClaimName,
 						metav1.GetOptions{})
 					if err != nil {
+						klog.Errorf("Failed to get PVC %s in namespace %s: %v", vol.PersistentVolumeClaim.ClaimName, h.ownerNamespace(), err)
 						return "", "", "", err
 					}
 
 					pv, err := k8s.CoreV1().PersistentVolumes().Get(h.ctx, pvc.Spec.VolumeName, metav1.GetOptions{})
 					if err != nil {
+						klog.Errorf("Failed to get PV %s: %v", pvc.Spec.VolumeName, err)
 						return "", "", "", err
 					}
 
@@ -348,12 +372,14 @@ func (h *HelmOps) selectNode() (node string, appCache, userspace string, err err
 		}
 
 		if appCache == "" || userspace == "" {
+			klog.Error("No user space or app cache found in bfl pod")
 			return "", "", "", errors.New("user space not found")
 		}
 
 		return bfl.Spec.NodeName, appCache, userspace, nil
 	}
 
+	klog.Error("No bfl pod found in namespace", h.ownerNamespace())
 	return "", "", "", errors.New("node not found")
 }
 

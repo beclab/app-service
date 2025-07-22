@@ -2,6 +2,7 @@ package appstate
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -157,12 +158,10 @@ func (p *UpgradingApp) exec(ctx context.Context) error {
 			klog.Errorf("download chart failed %v", err)
 			return err
 		}
-		appConfig = &appcfg.ApplicationConfig{
-			AppName:    p.manager.Spec.AppName,
-			Namespace:  p.manager.Spec.AppNamespace,
-			OwnerName:  p.manager.Spec.AppOwner,
-			ChartsName: chartPath,
-			RepoURL:    repoURL,
+		err = json.Unmarshal([]byte(p.manager.Spec.Config), &appConfig)
+		if err != nil {
+			klog.Errorf("unmarshal to appConfig failed %v", err)
+			return err
 		}
 	}
 	ops, err := versioned.NewHelmOps(ctx, kubeConfig, appConfig, token, appinstaller.Opt{Source: p.manager.Spec.Source})

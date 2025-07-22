@@ -65,17 +65,25 @@ func (h *HelmOpsV2) Install() error {
 		return err
 	}
 
-	err = h.install(values)
+	err, sharedInstalled := h.install(values)
+	clear := func() {
+		if sharedInstalled {
+			h.UninstallAll()
+		} else {
+			h.Uninstall()
+		}
+	}
 	if err != nil && !errors.Is(err, driver.ErrReleaseExists) {
 		klog.Errorf("Failed to install chart err=%v", err)
-		h.Uninstall()
+		clear()
 		return err
 	}
 
 	// just need to add labels to the main ( client ) chart's deployment
 	err = h.AddApplicationLabelsToDeployment()
 	if err != nil {
-		h.Uninstall()
+		klog.Errorf("Failed to add application labels to deployment err=%v", err)
+		clear()
 		return err
 	}
 
@@ -83,23 +91,26 @@ func (h *HelmOpsV2) Install() error {
 	err = h.addApplicationLabelsToSharedNamespace()
 	if err != nil {
 		klog.Errorf("Failed to add application labels to shared namespace err=%v", err)
-		h.Uninstall()
+		clear()
 		return err
 	}
 
 	// v2 && multi-charts app, add labels to namespace for cluster scoped apps
 	err = h.AddLabelToNamespaceForDependClusterApp()
 	if err != nil {
-		h.Uninstall()
+		klog.Errorf("Failed to add labels to namespace for cluster scoped apps err=%v", err)
+		clear()
 		return err
 	}
 
 	ok, err := h.WaitForStartUp()
 	if err != nil && errors.Is(err, errcode.ErrPodPending) {
+		klog.Errorf("App %s is pending, err=%v", h.App().AppName, err)
 		return err
 	}
 	if !ok {
-		h.Uninstall()
+		klog.Errorf("App %s is not started, err=%v", h.App().AppName, err)
+		clear()
 		return err
 	}
 	return nil
@@ -113,13 +124,13 @@ func (h *HelmOpsV2) hasClusterSharedCharts() bool {
 	return h.App().HasClusterSharedCharts()
 }
 
-func (h *HelmOpsV2) install(values map[string]interface{}) error {
+func (h *HelmOpsV2) install(values map[string]interface{}) (err error, sharedInstalled bool) {
 	for _, chart := range h.App().SubCharts {
 		if chart.Shared {
 			isAdmin, err := kubesphere.IsAdmin(h.Context(), h.KubeConfig(), h.App().OwnerName)
 			if err != nil {
 				klog.Errorf("Failed to check if user is admin for chart %s: %v", chart.Name, err)
-				return err
+				return err, sharedInstalled
 			}
 
 			if !isAdmin {
@@ -135,8 +146,13 @@ func (h *HelmOpsV2) install(values map[string]interface{}) error {
 				continue
 			} else {
 				klog.Errorf("chart %s already exists, cannot install again", chart.Name)
-				return driver.ErrReleaseExists
+				return driver.ErrReleaseExists, sharedInstalled
 			}
+		}
+
+		if !errors.Is(err, driver.ErrReleaseNotFound) {
+			klog.Errorf("Failed to get status for chart %s: %v", chart.Name, err)
+			return err, sharedInstalled
 		}
 
 		actionConfig := h.ActionConfig()
@@ -146,30 +162,31 @@ func (h *HelmOpsV2) install(values map[string]interface{}) error {
 			actionConfig, settings, err = helm.InitConfig(h.KubeConfig(), chart.Namespace(h.App().OwnerName))
 			if err != nil {
 				klog.Errorf("Failed to create action config for shared chart %s: %v", chart.Name, err)
-				return err
+				return err, sharedInstalled
 			}
+
+			sharedInstalled = true
 		}
-		if errors.Is(err, driver.ErrReleaseNotFound) {
-			err = helm.InstallCharts(
-				h.Context(),
-				actionConfig,
-				settings,
-				chart.Name,
-				chart.ChartPath(h.App().AppName),
-				h.App().RepoURL,
-				chart.Namespace(h.App().OwnerName),
-				values,
-			)
-			if err != nil {
-				klog.Errorf("Failed to install chart %s: %v", chart.Name, err)
-				return err
-			}
+		err = helm.InstallCharts(
+			h.Context(),
+			actionConfig,
+			settings,
+			chart.Name,
+			chart.ChartPath(h.App().AppName),
+			h.App().RepoURL,
+			chart.Namespace(h.App().OwnerName),
+			values,
+		)
+
+		if err != nil {
+			klog.Errorf("Failed to install chart %s: %v", chart.Name, err)
+			return err, sharedInstalled
 		}
 
-		return err
-	}
+		klog.Infof("Successfully installed chart %s", chart.Name)
+	} // end subcharts loop
 
-	return nil
+	return nil, sharedInstalled
 }
 
 func (h *HelmOpsV2) status(releaseName string) (*helmrelease.Release, error) {
@@ -217,6 +234,10 @@ func (h *HelmOpsV2) addApplicationLabelsToSharedNamespace() error {
 			ns.Labels = make(map[string]string)
 		}
 		ns.Labels[constants.ApplicationNameLabel] = h.App().AppName
+
+		if ns.Labels[constants.ApplicationInstallUserLabel] == "" {
+			ns.Labels[constants.ApplicationInstallUserLabel] = h.App().OwnerName
+		}
 
 		if _, err := k8s.CoreV1().Namespaces().Update(h.Context(), ns, metav1.UpdateOptions{}); err != nil {
 			klog.Errorf("Failed to update namespace %s: %v", sharedNamespace, err)

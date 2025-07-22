@@ -32,6 +32,7 @@ const (
 	KubeSphereClientAttribute     = "ksclient"
 	MarketSource                  = "X-Market-Source"
 	MarketUser                    = "X-Market-User"
+	ApplicationInstallUserLabel   = "applications.app.bytetrade.io/install_user"
 
 	InstanceIDLabel         = "workflows.argoproj.io/controller-instanceid"
 	WorkflowOwnerLabel      = "workflows.app.bytetrade.io/owner"

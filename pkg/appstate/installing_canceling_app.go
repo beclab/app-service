@@ -2,6 +2,7 @@ package appstate
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -11,12 +12,15 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller/versioned"
 	"bytetrade.io/web3os/app-service/pkg/constants"
+	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
 	"helm.sh/helm/v3/pkg/storage/driver"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -80,14 +84,17 @@ func (p *InstallingCancelingApp) handleInstallCancel(ctx context.Context) error 
 	}
 
 	token := p.manager.Status.Payload["token"]
-	appCfg := &appcfg.ApplicationConfig{
-		AppName:   p.manager.Spec.AppName,
-		Namespace: p.manager.Spec.AppNamespace,
-		OwnerName: p.manager.Spec.AppOwner,
-	}
 	kubeConfig, err := ctrl.GetConfig()
 	if err != nil {
 		klog.Errorf("get kube config failed %v", err)
+		return err
+	}
+
+	// get app config from app mgr of the app
+	var appCfg *appcfg.ApplicationConfig
+	err = json.Unmarshal([]byte(p.manager.Spec.Config), &appCfg)
+	if err != nil {
+		klog.Errorf("unmarshal to appConfig failed %v", err)
 		return err
 	}
 
@@ -96,7 +103,51 @@ func (p *InstallingCancelingApp) handleInstallCancel(ctx context.Context) error 
 		klog.Errorf("make helm ops failed %v", err)
 		return err
 	}
-	err = ops.Uninstall()
+
+	// find if there is a shared chart installed by this app owner
+	sharedInstalled := false
+	isAdmin, err := kubesphere.IsAdmin(ctx, kubeConfig, appCfg.OwnerName)
+	if err != nil {
+		klog.Errorf("Failed to check if user is admin: %v", err)
+		return err
+	}
+
+	if isAdmin {
+		for _, chart := range appCfg.SubCharts {
+			if chart.Shared {
+				client, err := kubernetes.NewForConfig(kubeConfig)
+				if err != nil {
+					klog.Errorf("Failed to create Kubernetes client: %v", err)
+					return err
+				}
+
+				sharedChartNamespace, err := client.CoreV1().Namespaces().Get(ctx, chart.Namespace(appCfg.OwnerName), metav1.GetOptions{})
+				if err != nil {
+					if apierrors.IsNotFound(err) {
+						klog.Infof("Shared chart namespace %s not found, skipping uninstall", chart.Namespace(appCfg.OwnerName))
+						break
+					}
+					klog.Errorf("Failed to get shared chart namespace %s: %v", chart.Namespace(appCfg.OwnerName), err)
+					return err
+				}
+
+				appNameOfSharedChart := sharedChartNamespace.Labels[constants.ApplicationNameLabel]
+				installUserOfSharedChart := sharedChartNamespace.Labels[constants.ApplicationInstallUserLabel]
+				if appNameOfSharedChart == appCfg.AppName && installUserOfSharedChart == appCfg.OwnerName {
+					sharedInstalled = true
+					klog.Infof("Found shared chart %s installed by user %s", chart.Name, appCfg.OwnerName)
+					break
+				}
+			}
+		} // end of for loop over subcharts
+	} // end of isAdmin check
+
+	if sharedInstalled {
+		klog.Info("Shared chart found, uninstalling all")
+		err = ops.UninstallAll()
+	} else {
+		err = ops.Uninstall()
+	}
 	if err != nil && !errors.Is(err, driver.ErrReleaseNotFound) {
 		klog.Errorf("execute uninstall failed %v", err)
 		return err

@@ -2,6 +2,7 @@ package appstate
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -77,10 +78,11 @@ func (b *baseStatefulApp) updateStatus(ctx context.Context, am *appsv1.Applicati
 
 func (p *baseStatefulApp) forceDeleteApp(ctx context.Context) error {
 	token := p.manager.Status.Payload["token"]
-	appCfg := &appcfg.ApplicationConfig{
-		AppName:   p.manager.Spec.AppName,
-		Namespace: p.manager.Spec.AppNamespace,
-		OwnerName: p.manager.Spec.AppOwner,
+	var appCfg *appcfg.ApplicationConfig
+	err := json.Unmarshal([]byte(p.manager.Spec.Config), &appCfg)
+	if err != nil {
+		klog.Errorf("unmarshal to appConfig failed %v", err)
+		return err
 	}
 
 	kubeConfig, err := ctrl.GetConfig()
