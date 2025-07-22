@@ -660,7 +660,7 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 	//	return
 	//}
 	genEntranceURL := func(entrances []v1alpha1.Entrance, owner, appName string) ([]v1alpha1.Entrance, error) {
-		zone, _ := kubesphere.GetUserZone(req.Request.Context(), h.kubeConfig, owner)
+		zone, _ := kubesphere.GetUserZone(req.Request.Context(), owner)
 
 		if len(zone) > 0 {
 			appid := apputils.GetAppID(appName)
@@ -868,9 +868,13 @@ func (h *Handler) adminUserList(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
+	admins := make([]string, 0, len(adminList))
+	for _, a := range adminList {
+		admins = append(admins, a.Name)
+	}
 	resp.WriteEntity(api.AdminListResponse{
 		Response: api.Response{Code: 200},
-		Data:     adminList,
+		Data:     admins,
 	})
 }
 

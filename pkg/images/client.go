@@ -187,7 +187,7 @@ func (imc *ImageManagerClient) updateProgress(ctx context.Context, am *appv1alph
 		return errors.New("no need to update progress")
 	}
 	cur.Status.Progress = strconv.FormatFloat(progress, 'f', 2, 64)
-	err = imc.Status().Patch(ctx, &cur, client.MergeFrom(appMgrCopy))
+	err = imc.Patch(ctx, &cur, client.MergeFrom(appMgrCopy))
 	if err != nil {
 		klog.Infof("Failed to patch applicationmanagers name=%v, err=%v", am.Name, err)
 		return err

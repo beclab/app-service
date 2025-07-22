@@ -3,25 +3,24 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"github.com/beclab/lldap-client/pkg/cache/memory"
-	lconfig "github.com/beclab/lldap-client/pkg/config"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"strconv"
 	"time"
 
-	"bytetrade.io/web3os/app-service/pkg/apiserver"
 	"bytetrade.io/web3os/app-service/pkg/users"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace/v1"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 	"bytetrade.io/web3os/app-service/pkg/utils/sliceutil"
 
 	iamv1alpha2 "github.com/beclab/api/iam/v1alpha2"
+	"github.com/beclab/lldap-client/pkg/cache/memory"
 	lclient "github.com/beclab/lldap-client/pkg/client"
+	lconfig "github.com/beclab/lldap-client/pkg/config"
 	lapierrors "github.com/beclab/lldap-client/pkg/errors"
 	"github.com/beclab/lldap-client/pkg/generated"
-
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -45,22 +44,11 @@ import (
 )
 
 const (
-	// SuccessSynced is used as part of the Event 'reason' when a Foo is synced
-	successSynced = "Synced"
-	failedSynced  = "FailedSync"
-	// is synced successfully
-	messageResourceSynced = "User synced successfully"
-	// user finalizer
-	syncFailMessage = "Failed to sync: %s"
-
 	needSyncToLLdapAna = "iam.kubesphere.io/sync-to-lldap"
 	syncedToLLdapAna   = "iam.kubesphere.io/synced-to-lldap"
 	userIndexAna       = "bytetrade.io/user-index"
-	regularGroup       = "lldap_regular"
-
-	globalAdmin = "iam.kubesphere.io/globalrole"
-	interval    = time.Second
-	timeout     = 15 * time.Second
+	interval           = time.Second
+	timeout            = 15 * time.Second
 )
 
 // UserController reconciles a User object
@@ -273,7 +261,7 @@ func (r *UserController) handleUserCreation(ctx context.Context, user *iamv1alph
 }
 
 func (r *UserController) checkResource(user *iamv1alpha2.User) error {
-	metrics, _, err := apiserver.GetClusterResource(r.KubeConfig, "")
+	metrics, _, err := apputils.GetClusterResource("")
 	if err != nil {
 		return err
 	}

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller/versioned"
@@ -66,18 +67,19 @@ func (b *baseStatefulApp) updateStatus(ctx context.Context, am *appsv1.Applicati
 	if len(amCopy.Status.OpRecords) > 20 {
 		amCopy.Status.OpRecords = amCopy.Status.OpRecords[:20:20]
 	}
-	err = b.client.Status().Patch(ctx, amCopy, client.MergeFrom(am))
+	err = b.client.Patch(ctx, amCopy, client.MergeFrom(am))
 	if err != nil {
 		klog.Errorf("patch appmgr's  %s status failed %v", am.Name, err)
 		return err
 	}
-	utils.PublishAsync(b.manager.Spec.AppOwner, b.manager.Spec.AppName, string(b.manager.Status.OpType), b.manager.Status.OpID, state.String(), "", nil)
+	utils.PublishAsync(b.manager.Spec.AppOwner, b.manager.Spec.AppName, string(b.manager.Spec.OpType), b.manager.Status.OpID, state.String(), "", nil)
 
 	return nil
 }
 
 func (p *baseStatefulApp) forceDeleteApp(ctx context.Context) error {
-	token := p.manager.Status.Payload["token"]
+	token := p.manager.Annotations[api.AppTokenKey]
+
 	var appCfg *appcfg.ApplicationConfig
 	err := json.Unmarshal([]byte(p.manager.Spec.Config), &appCfg)
 	if err != nil {

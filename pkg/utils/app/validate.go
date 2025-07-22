@@ -1,11 +1,10 @@
-package apiserver
+package app
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -13,7 +12,6 @@ import (
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
-	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	v1alpha1client "bytetrade.io/web3os/app-service/pkg/client/clientset/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned/scheme"
@@ -23,11 +21,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/tapr"
 	"bytetrade.io/web3os/app-service/pkg/upgrade"
 	"bytetrade.io/web3os/app-service/pkg/utils"
-	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
-	"bytetrade.io/web3os/app-service/pkg/workflowinstaller"
 
-	"github.com/emicklei/go-restful/v3"
-	"github.com/pkg/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -40,54 +34,27 @@ import (
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/yaml"
 )
 
-func getAppByName(req *restful.Request, resp *restful.Response) (*v1alpha1.Application, error) {
-	appName := req.PathParameter(ParamAppName)
-	owner := req.Attribute(constants.UserContextAttribute) // get owner from request token
-
-	client := req.Attribute(constants.KubeSphereClientAttribute).(*clientset.ClientSet)
-
-	// run with request context for incoming client
-	applist, err := client.AppClient.AppV1alpha1().Applications().List(req.Request.Context(), metav1.ListOptions{})
-	if err != nil {
-		api.HandleError(resp, req, err)
-		return nil, err
+func CheckChartSource(source api.AppSource) error {
+	if source != api.Market && source != api.Custom && source != api.DevBox {
+		return fmt.Errorf("unsupported chart source: %s", source)
 	}
-
-	if applist.Items == nil || len(applist.Items) == 0 {
-		api.HandleNotFound(resp, req, errors.New("there is not any application"))
-		return nil, err
-	}
-
-	for _, app := range applist.Items {
-		if app.Spec.Name == appName && app.Spec.Owner == owner {
-			return &app, nil
-		}
-	}
-
-	api.HandleNotFound(resp, req, fmt.Errorf("the application %s not found", appName))
-	return nil, err
+	return nil
 }
 
 // CheckDependencies check application dependencies, returns unsatisfied dependency.
-func CheckDependencies(ctx context.Context, deps []appcfg.Dependency, ctrlClient client.Client, owner string, checkAll bool) ([]appcfg.Dependency, error) {
+func CheckDependencies(ctx context.Context, ctrlClient client.Client, deps []appcfg.Dependency, owner string, checkAll bool) ([]appcfg.Dependency, error) {
 	unSatisfiedDeps := make([]appcfg.Dependency, 0)
-	client, err := utils.GetClient()
+	var appList v1alpha1.ApplicationList
+	err := ctrlClient.List(ctx, &appList)
 	if err != nil {
-		klog.Errorf("Failed to get client err=%v", err)
 		return unSatisfiedDeps, err
 	}
 
-	applist, err := client.AppV1alpha1().Applications().List(ctx, metav1.ListOptions{})
-	if err != nil {
-		klog.Errorf("Failed to list application err=%v", err)
-		return unSatisfiedDeps, err
-	}
 	appToVersion := make(map[string]string)
-	appNames := make([]string, 0, len(applist.Items))
-	for _, app := range applist.Items {
+	appNames := make([]string, 0, len(appList.Items))
+	for _, app := range appList.Items {
 		clusterScoped, _ := strconv.ParseBool(app.Spec.Settings["clusterScoped"])
 		// add app name to list if app is cluster scoped or owner equal app.Spec.Name
 		if clusterScoped || owner == app.Spec.Owner {
@@ -101,14 +68,13 @@ func CheckDependencies(ctx context.Context, deps []appcfg.Dependency, ctrlClient
 		if dep.Type == constants.DependencyTypeSystem {
 			terminus, err := upgrade.GetTerminusVersion(ctx, ctrlClient)
 			if err != nil {
-				klog.Errorf("Failed to get olares version err=%v", err)
 				return unSatisfiedDeps, err
 			}
 
 			if !utils.MatchVersion(terminus.Spec.Version, dep.Version) {
 				unSatisfiedDeps = append(unSatisfiedDeps, dep)
 				if !checkAll {
-					return unSatisfiedDeps, fmt.Errorf("olares version %s not match dependency %s", terminus.Spec.Version, dep.Version)
+					return unSatisfiedDeps, fmt.Errorf("terminus version %s not match dependency %s", terminus.Spec.Version, dep.Version)
 				}
 			}
 		}
@@ -136,9 +102,110 @@ func CheckDependencies(ctx context.Context, deps []appcfg.Dependency, ctrlClient
 	return unSatisfiedDeps, nil
 }
 
+func CheckDependencies2(ctx context.Context, ctrlClient client.Client, deps []appcfg.Dependency, owner string, checkAll bool) error {
+	unSatisfiedDeps, err := CheckDependencies(ctx, ctrlClient, deps, owner, checkAll)
+	if err != nil {
+		return err
+	}
+	if len(unSatisfiedDeps) > 0 {
+		return FormatDependencyError(unSatisfiedDeps)
+	}
+	return nil
+}
+
+func FormatDependencyError(deps []appcfg.Dependency) error {
+	var systemDeps, appDeps []string
+
+	for _, dep := range deps {
+		depInfo := fmt.Sprintf("%s version=%s",
+			dep.Name, dep.Version)
+
+		if dep.Type == "system" {
+			systemDeps = append(systemDeps, depInfo)
+		} else if dep.Type == "application" {
+			appDeps = append(appDeps, depInfo)
+		}
+	}
+
+	var errMsg strings.Builder
+	errMsg.WriteString("Missing dependencies:\n")
+
+	if len(systemDeps) > 0 {
+		errMsg.WriteString("\nSystem Dependencies:\n")
+		for _, dep := range systemDeps {
+			errMsg.WriteString(fmt.Sprintf("- %s\n", dep))
+		}
+	}
+
+	if len(appDeps) > 0 {
+		errMsg.WriteString("\nApplication Dependencies:\n")
+		for _, dep := range appDeps {
+			errMsg.WriteString(fmt.Sprintf("- %s\n", dep))
+		}
+	}
+
+	return fmt.Errorf(errMsg.String())
+}
+
+func CheckConflicts(ctx context.Context, conflicts []appcfg.Conflict, owner string) error {
+	installedConflictApp := make([]string, 0)
+	client, err := utils.GetClient()
+	if err != nil {
+		return err
+	}
+	appSet := sets.NewString()
+	applist, err := client.AppV1alpha1().Applications().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+	for _, app := range applist.Items {
+		if app.Spec.Owner != owner {
+			continue
+		}
+		appSet.Insert(app.Spec.Name)
+	}
+	for _, cf := range conflicts {
+		if cf.Type != "application" {
+			continue
+		}
+		if appSet.Has(cf.Name) {
+			installedConflictApp = append(installedConflictApp, cf.Name)
+		}
+	}
+	if len(installedConflictApp) > 0 {
+		return fmt.Errorf("this app conflict with those installed app: %v", installedConflictApp)
+	}
+	return nil
+}
+
+func CheckCfgFileVersion(version, constraint string) error {
+	if !utils.MatchVersion(version, constraint) {
+		return fmt.Errorf("olaresManifest.version must >= %s", constraint)
+	}
+	return nil
+}
+
+func CheckNamespace(ns string) error {
+	if IsForbidNamespace(ns) {
+		return fmt.Errorf("unsupported namespace: %s", ns)
+	}
+	return nil
+}
+
+func CheckUserRole(appConfig *appcfg.ApplicationConfig, owner string) error {
+	role, err := kubesphere.GetUserRole(context.TODO(), owner)
+	if err != nil {
+		return err
+	}
+	if (appConfig.OnlyAdmin || appConfig.AppScope.ClusterScoped) && role != "owner" && role != "admin" {
+		return errors.New("only admin user can install this app")
+	}
+	return nil
+}
+
 // CheckAppRequirement check if the cluster has enough resources for application install/upgrade.
-func CheckAppRequirement(kubeConfig *rest.Config, token string, appConfig *appcfg.ApplicationConfig) (string, error) {
-	metrics, _, err := GetClusterResource(kubeConfig, token)
+func CheckAppRequirement(token string, appConfig *appcfg.ApplicationConfig) (string, error) {
+	metrics, _, err := GetClusterResource(token)
 	if err != nil {
 		return "", err
 	}
@@ -198,64 +265,51 @@ func CheckAppRequirement(kubeConfig *rest.Config, token string, appConfig *appcf
 	return "", nil
 }
 
-// CheckUserResRequirement check if the user has enough resources for application install/upgrade.
-func CheckUserResRequirement(ctx context.Context, appConfig *appcfg.ApplicationConfig, username string) (string, error) {
-	metrics, err := prometheus.GetCurUserResource(ctx, username)
+func getRequestResources() (map[string]resources, error) {
+	config, err := ctrl.GetConfig()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	switch {
-	case appConfig.Requirement.Memory != nil && metrics.Memory.Total != 0 &&
-		appConfig.Requirement.Memory.CmpInt64(int64(metrics.Memory.Total*0.9-metrics.Memory.Usage)) > 0:
-		return "memory", errors.New("The user's app MEMORY requirement cannot be satisfied")
-	case appConfig.Requirement.CPU != nil && metrics.CPU.Total != 0:
-		availableCPU, _ := resource.ParseQuantity(strconv.FormatFloat(metrics.CPU.Total*0.9-metrics.CPU.Usage, 'f', -1, 64))
-		if appConfig.Requirement.CPU.Cmp(availableCPU) > 0 {
-			return "cpu", errors.New("The user's app CPU requirement cannot be satisfied")
+	client, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, err
+	}
+	nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	allocatedResources := make(map[string]resources)
+	for _, node := range nodes.Items {
+		allocatedResources[node.Name] = resources{cpu: usage{allocatable: node.Status.Allocatable.Cpu()},
+			memory: usage{allocatable: node.Status.Allocatable.Memory()}}
+		fieldSelector := fmt.Sprintf("spec.nodeName=%s,status.phase!=Failed,status.phase!=Succeeded", node.Name)
+		pods, err := client.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{
+			FieldSelector: fieldSelector,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, pod := range pods.Items {
+			for _, container := range pod.Spec.Containers {
+				allocatedResources[node.Name].cpu.allocatable.Sub(*container.Resources.Requests.Cpu())
+				allocatedResources[node.Name].memory.allocatable.Sub(*container.Resources.Requests.Memory())
+			}
 		}
 	}
-	return "", nil
+	return allocatedResources, nil
 }
 
-func CheckConflicts(ctx context.Context, conflicts []appcfg.Conflict, owner string) ([]string, error) {
-	installedConflictApp := make([]string, 0)
-	client, err := utils.GetClient()
-	if err != nil {
-		return installedConflictApp, err
-	}
-	appSet := sets.NewString()
-	applist, err := client.AppV1alpha1().Applications().List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return installedConflictApp, err
-	}
-	for _, app := range applist.Items {
-		if app.Spec.Owner != owner {
-			continue
-		}
-		appSet.Insert(app.Spec.Name)
-	}
-	for _, cf := range conflicts {
-		if cf.Type != "application" {
-			continue
-		}
-		if appSet.Has(cf.Name) {
-			installedConflictApp = append(installedConflictApp, cf.Name)
-		}
-	}
-	return installedConflictApp, nil
+type resources struct {
+	cpu    usage
+	memory usage
 }
 
-type Conflict struct {
-	Name string `yaml:"name" json:"name"`
-	// conflict type: application
-	Type string `yaml:"type" json:"type"`
-}
-type Options struct {
-	Conflicts *[]Conflict `yaml:"conflicts" json:"conflicts"`
+type usage struct {
+	allocatable *resource.Quantity
 }
 
 // GetClusterResource returns cluster resource metrics and cluster arches.
-func GetClusterResource(kubeConfig *rest.Config, token string) (*prometheus.ClusterMetrics, []string, error) {
+func GetClusterResource(token string) (*prometheus.ClusterMetrics, []string, error) {
 	supportArch := make([]string, 0)
 	arches := sets.String{}
 
@@ -287,7 +341,7 @@ func GetClusterResource(kubeConfig *rest.Config, token string) (*prometheus.Clus
 		return nil, supportArch, res.Error()
 	}
 
-	var metrics apputils.Metrics
+	var metrics Metrics
 	data, err := res.Raw()
 	if err != nil {
 		return nil, supportArch, err
@@ -319,6 +373,11 @@ func GetClusterResource(kubeConfig *rest.Config, token string) (*prometheus.Clus
 	}
 
 	// get k8s client with node list privileges
+	kubeConfig, err := ctrl.GetConfig()
+	if err != nil {
+		return nil, supportArch, err
+	}
+
 	k8sClient, err := v1alpha1client.NewKubeClient("", kubeConfig)
 	if err != nil {
 		klog.Errorf("Failed to create k8s client err=%v", err)
@@ -362,115 +421,23 @@ func getValue(m *kubesphere.Metric) float64 {
 	return m.MetricData.MetricValues[0].Sample[1]
 }
 
-type resources struct {
-	cpu    usage
-	memory usage
-}
-
-type usage struct {
-	allocatable *resource.Quantity
-}
-
-func getRequestResources() (map[string]resources, error) {
-	config, err := ctrl.GetConfig()
+// CheckUserResRequirement check if the user has enough resources for application install/upgrade.
+func CheckUserResRequirement(ctx context.Context, appConfig *appcfg.ApplicationConfig, username string) (string, error) {
+	metrics, err := prometheus.GetCurUserResource(ctx, username)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	client, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return nil, err
-	}
-	nodes, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
-	if err != nil {
-		return nil, err
-	}
-	allocatedResources := make(map[string]resources)
-	for _, node := range nodes.Items {
-		allocatedResources[node.Name] = resources{cpu: usage{allocatable: node.Status.Allocatable.Cpu()},
-			memory: usage{allocatable: node.Status.Allocatable.Memory()}}
-		fieldSelector := fmt.Sprintf("spec.nodeName=%s,status.phase!=Failed,status.phase!=Succeeded", node.Name)
-		pods, err := client.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{
-			FieldSelector: fieldSelector,
-		})
-		if err != nil {
-			return nil, err
-		}
-		for _, pod := range pods.Items {
-			for _, container := range pod.Spec.Containers {
-				allocatedResources[node.Name].cpu.allocatable.Sub(*container.Resources.Requests.Cpu())
-				allocatedResources[node.Name].memory.allocatable.Sub(*container.Resources.Requests.Memory())
-			}
+	switch {
+	case appConfig.Requirement.Memory != nil && metrics.Memory.Total != 0 &&
+		appConfig.Requirement.Memory.CmpInt64(int64(metrics.Memory.Total*0.9-metrics.Memory.Usage)) > 0:
+		return "memory", errors.New("The user's app MEMORY requirement cannot be satisfied")
+	case appConfig.Requirement.CPU != nil && metrics.CPU.Total != 0:
+		availableCPU, _ := resource.ParseQuantity(strconv.FormatFloat(metrics.CPU.Total*0.9-metrics.CPU.Usage, 'f', -1, 64))
+		if appConfig.Requirement.CPU.Cmp(availableCPU) > 0 {
+			return "cpu", errors.New("The user's app CPU requirement cannot be satisfied")
 		}
 	}
-	return allocatedResources, nil
-}
-
-func getWorkflowConfigFromRepo(ctx context.Context, options *apputils.ConfigOptions) (*workflowinstaller.WorkflowConfig, error) {
-	chartPath, err := apputils.GetIndexAndDownloadChart(ctx, options)
-	if err != nil {
-		return nil, err
-	}
-
-	f, err := os.Open(chartPath + "/" + apputils.AppCfgFileName)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	data, err := io.ReadAll(f)
-	if err != nil {
-		return nil, err
-	}
-
-	var cfg appcfg.AppConfiguration
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, err
-	}
-
-	namespace, _ := utils.AppNamespace(options.App, options.Owner, cfg.Spec.Namespace)
-
-	return &workflowinstaller.WorkflowConfig{
-		WorkflowName: options.App,
-		ChartsName:   chartPath,
-		RepoURL:      options.RepoURL,
-		Namespace:    namespace,
-		OwnerName:    options.Owner,
-		Cfg:          &cfg}, nil
-}
-
-func getMiddlewareConfigFromRepo(ctx context.Context, options *apputils.ConfigOptions) (*middlewareinstaller.MiddlewareConfig, error) {
-	chartPath, err := apputils.GetIndexAndDownloadChart(ctx, options)
-	if err != nil {
-		return nil, err
-	}
-
-	f, err := os.Open(chartPath + "/OlaresManifest.yaml")
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	data, err := io.ReadAll(f)
-	if err != nil {
-		return nil, err
-	}
-
-	var cfg appcfg.AppConfiguration
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, err
-	}
-
-	namespace, _ := utils.AppNamespace(options.App, options.Owner, cfg.Spec.Namespace)
-
-	return &middlewareinstaller.MiddlewareConfig{
-		MiddlewareName: options.App,
-		Title:          cfg.Metadata.Title,
-		Version:        cfg.Metadata.Version,
-		ChartsName:     chartPath,
-		RepoURL:        options.RepoURL,
-		Namespace:      namespace,
-		OwnerName:      options.Owner,
-		Cfg:            &cfg}, nil
+	return "", nil
 }
 
 func CheckMiddlewareRequirement(ctx context.Context, kubeConfig *rest.Config, middleware *tapr.Middleware) (bool, error) {
@@ -500,54 +467,4 @@ func CheckMiddlewareRequirement(ctx context.Context, kubeConfig *rest.Config, mi
 		return false, nil
 	}
 	return true, nil
-}
-
-func FormatDependencyError(deps []appcfg.Dependency) error {
-	var systemDeps, appDeps []string
-
-	for _, dep := range deps {
-		depInfo := fmt.Sprintf("%s version=%s",
-			dep.Name, dep.Version)
-
-		if dep.Type == "system" {
-			systemDeps = append(systemDeps, depInfo)
-		} else if dep.Type == "application" {
-			appDeps = append(appDeps, depInfo)
-		}
-	}
-
-	var errMsg strings.Builder
-	errMsg.WriteString("Missing dependencies:\n")
-
-	if len(systemDeps) > 0 {
-		errMsg.WriteString("\nSystem Dependencies:\n")
-		for _, dep := range systemDeps {
-			errMsg.WriteString(fmt.Sprintf("- %s\n", dep))
-		}
-	}
-
-	if len(appDeps) > 0 {
-		errMsg.WriteString("\nApplication Dependencies:\n")
-		for _, dep := range appDeps {
-			errMsg.WriteString(fmt.Sprintf("- %s\n", dep))
-		}
-	}
-
-	return fmt.Errorf(errMsg.String())
-}
-
-type ListResult struct {
-	Code   int   `json:"code"`
-	Data   []any `json:"data"`
-	Totals int   `json:"totals"`
-}
-
-func NewListResult[T any](items []T) ListResult {
-	vs := make([]any, 0)
-	if len(items) > 0 {
-		for _, item := range items {
-			vs = append(vs, item)
-		}
-	}
-	return ListResult{Code: 200, Data: vs, Totals: len(items)}
 }

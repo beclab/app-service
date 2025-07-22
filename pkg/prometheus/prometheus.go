@@ -14,7 +14,6 @@ import (
 	apiv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/client-go/rest"
 )
 
 const MeteringDefaultTimeout = 20 * time.Second
@@ -161,7 +160,7 @@ func makeExpr(metric string, opts QueryOptions) string {
 	}
 }
 
-func GetCurUserResource(ctx context.Context, kubeConfig *rest.Config, username string) (*ClusterMetrics, error) {
+func GetCurUserResource(ctx context.Context, username string) (*ClusterMetrics, error) {
 	p, err := New(Endpoint)
 	if err != nil {
 		return nil, err
@@ -174,11 +173,11 @@ func GetCurUserResource(ctx context.Context, kubeConfig *rest.Config, username s
 	if err != nil {
 		return nil, err
 	}
-	cpuS, err := kubesphere.GetUserCPULimit(ctx, kubeConfig, username)
+	cpuS, err := kubesphere.GetUserCPULimit(ctx, username)
 	if err != nil && err.Error() != "user annotation bytetrade.io/user-cpu-limit not found" {
 		return nil, err
 	}
-	memoryS, err := kubesphere.GetUserMemoryLimit(ctx, kubeConfig, username)
+	memoryS, err := kubesphere.GetUserMemoryLimit(ctx, username)
 	if err != nil && err.Error() != "user annotation bytetrade.io/user-memory-limit not found" {
 		return nil, err
 	}

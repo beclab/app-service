@@ -5,21 +5,27 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	iamv1alpha2 "github.com/beclab/api/iam/v1alpha2"
+	"strconv"
 	"strings"
 
+	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
+	"bytetrade.io/web3os/app-service/pkg/appstate"
 	"bytetrade.io/web3os/app-service/pkg/constants"
+	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/provider"
 	"bytetrade.io/web3os/app-service/pkg/upgrade"
 	"bytetrade.io/web3os/app-service/pkg/users"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/utils"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
+	"bytetrade.io/web3os/app-service/pkg/utils/config"
 	"bytetrade.io/web3os/app-service/pkg/utils/registry"
 	"bytetrade.io/web3os/app-service/pkg/webhook"
 
 	wfv1alpha1 "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
+	iamv1alpha2 "github.com/beclab/api/iam/v1alpha2"
 	"github.com/containerd/containerd/reference/docker"
 	"github.com/emicklei/go-restful/v3"
 	"github.com/google/uuid"
@@ -899,8 +905,368 @@ func isInPrivateNamespace(namespace string) bool {
 	return strings.HasPrefix(namespace, "user-space-") || strings.HasPrefix(namespace, "user-system-")
 }
 
-//func checkCreatorRole(creatorRole string, ownerRole string) bool {
-//	m := map[string]string {
-//		"owner"
-//	}
-//}
+func (h *Handler) applicationManagerValidate(req *restful.Request, resp *restful.Response) {
+	klog.Infof("Received user validate webhook request: Method=%v, URL=%v", req.Request.Method, req.Request.URL)
+	admissionReqBody, ok := h.sidecarWebhook.GetAdmissionRequestBody(req, resp)
+	if !ok {
+		return
+	}
+	var admissionReq, admissionResp admissionv1.AdmissionReview
+	proxyUUID := uuid.New()
+	if _, _, err := webhook.Deserializer.Decode(admissionReqBody, nil, &admissionReq); err != nil {
+		klog.Errorf("Failed to decode admission request body err=%v", err)
+		admissionResp.Response = h.sidecarWebhook.AdmissionError("", err)
+	} else {
+		admissionResp.Response = h.validateApplicationManager(req.Request.Context(), admissionReq.Request, proxyUUID)
+	}
+	admissionResp.TypeMeta = admissionReq.TypeMeta
+	admissionResp.Kind = admissionReq.Kind
+
+	requestForNamespace := "unknown"
+	if admissionReq.Request != nil {
+		requestForNamespace = admissionReq.Request.Namespace
+	}
+	err := resp.WriteAsJson(&admissionResp)
+	if err != nil {
+		klog.Errorf("Failed to write response validate review[user] in namespace=%s err=%v", requestForNamespace, err)
+		return
+	}
+	klog.Infof("Done responding to admission[validate user] request with uuid=%s namespace=%s", proxyUUID, requestForNamespace)
+}
+
+func (h *Handler) validateApplicationManager(ctx context.Context, req *admissionv1.AdmissionRequest, proxyUUID uuid.UUID) *admissionv1.AdmissionResponse {
+	if req == nil {
+		klog.Error("Failed to get admission request err=admission request is nil")
+		return h.sidecarWebhook.AdmissionError("", errNilAdmissionRequest)
+	}
+	klog.Infof("Enter validate application manager logic namespace=%s name=%s, kind=%s", req.Namespace, req.Name, req.Kind.Kind)
+	resp := &admissionv1.AdmissionResponse{
+		Allowed: true,
+		UID:     req.UID,
+	}
+
+	// Decode the User spec from the request.
+	var am v1alpha1.ApplicationManager
+	raw := req.OldObject.Raw
+	err := json.Unmarshal(raw, &am)
+	if err != nil {
+		klog.Errorf("Failed to unmarshal request object raw to application manager with uuid=%s namespace=%s", proxyUUID, req.Namespace)
+		return h.sidecarWebhook.AdmissionError(req.UID, err)
+	}
+
+	if t := appstate.OperatingStates[am.Status.State]; t == true {
+		resp.Allowed = false
+		return h.sidecarWebhook.AdmissionError(req.UID, errors.New("ing state application manager can not be delete"))
+	}
+
+	klog.Infof("User validation passed for application manager=%s with UID=%s", am.Name, am.UID)
+	return resp
+}
+
+func (h *Handler) applicationManagerMutate(req *restful.Request, resp *restful.Response) {
+	klog.Infof("Received mutating webhook[application-manager inject] request: Method=%v, URL=%v", req.Request.Method, req.Request.URL)
+	admissionRequestBody, ok := h.sidecarWebhook.GetAdmissionRequestBody(req, resp)
+	if !ok {
+		return
+	}
+	var pam *v1alpha1.ApplicationManager
+	var admissionReq, admissionResp admissionv1.AdmissionReview
+	proxyUUID := uuid.New()
+	if _, _, err := webhook.Deserializer.Decode(admissionRequestBody, nil, &admissionReq); err != nil {
+		klog.Errorf("Failed to decode admission request body err=%v", err)
+		admissionResp.Response = h.sidecarWebhook.AdmissionError("", err)
+	} else {
+		admissionResp.Response, pam = h.applicationManagerInject(req.Request.Context(), admissionReq.Request, proxyUUID)
+	}
+	admissionResp.TypeMeta = admissionReq.TypeMeta
+	admissionResp.Kind = admissionReq.Kind
+
+	requestForNamespace := "unknown"
+	if admissionReq.Request != nil {
+		requestForNamespace = admissionReq.Request.Namespace
+	}
+	err := resp.WriteAsJson(&admissionResp)
+	if err != nil {
+		klog.Errorf("Failed to write response[application-manager inject] admin review in namespace=%s err=%v", requestForNamespace, err)
+		return
+	}
+	if pam != nil {
+		utils.PublishAsync(pam.Spec.AppOwner, pam.Spec.AppName, string(pam.Spec.OpType), pam.Status.OpID, pam.Status.State.String(), "", nil)
+	}
+
+	klog.Infof("Done[application-manager inject] with uuid=%s in namespace=%s", proxyUUID, requestForNamespace)
+}
+
+func (h *Handler) applicationManagerInject(ctx context.Context, req *admissionv1.AdmissionRequest, proxyUUID uuid.UUID) (*admissionv1.AdmissionResponse, *v1alpha1.ApplicationManager) {
+	if req == nil {
+		klog.Error("failed to get admission Request, err=admission request is nil")
+		return h.sidecarWebhook.AdmissionError("", errNilAdmissionRequest), nil
+	}
+	klog.Infof("enter application-manager namespace=%s name=%s kind=%s", req.Namespace, req.Name, req.Kind.Kind)
+
+	var oldAm v1alpha1.ApplicationManager
+	var newAm v1alpha1.ApplicationManager
+
+	err := json.Unmarshal(req.Object.Raw, &newAm)
+	if err != nil {
+		klog.Errorf("failed to unmarshal request with UUID %s in namespace %s, error %v ", proxyUUID, req.Namespace, err)
+		return h.sidecarWebhook.AdmissionError(req.UID, err), nil
+	}
+	// only monitor update/create operation
+	if req.Operation == admissionv1.Update {
+		err = json.Unmarshal(req.OldObject.Raw, &oldAm)
+		if err != nil {
+			return h.sidecarWebhook.AdmissionError(req.UID, err), nil
+		}
+	}
+	if req.Operation == admissionv1.Create {
+		oldAm = newAm
+	}
+	resp := &admissionv1.AdmissionResponse{
+		Allowed: true,
+		UID:     req.UID,
+	}
+	if newAm.Annotations[api.AppInstallSourceKey] == "app-service" {
+		return resp, nil
+	}
+	if oldAm.Spec.OpType == newAm.Spec.OpType && req.Operation != admissionv1.Create {
+		return resp, nil
+	}
+
+	if !appstate.IsOperationAllowed(oldAm.Status.State, newAm.Spec.OpType) {
+		return h.sidecarWebhook.AdmissionError(req.UID, fmt.Errorf("operation %s is now allowed for state: %s", newAm.Spec.OpType, newAm.Status.State)), nil
+	}
+
+	appConfig, err := h.validateApplicationManagerOperation(ctx, &newAm, &oldAm)
+	if err != nil {
+		return h.sidecarWebhook.AdmissionError(req.UID, err), nil
+	}
+
+	pam, patchBytes, err := h.makePatchesForApplicationManager(ctx, req, &oldAm, &newAm, appConfig)
+	if err != nil {
+		klog.Errorf("make patches err=%v", patchBytes)
+		return h.sidecarWebhook.AdmissionError(req.UID, err), nil
+	}
+
+	klog.Info("patchBytes:", string(patchBytes))
+	h.sidecarWebhook.PatchAdmissionResponse(resp, patchBytes)
+	return resp, pam
+}
+
+func (h *Handler) makePatchesForApplicationManager(ctx context.Context, req *admissionv1.AdmissionRequest, oldAm *v1alpha1.ApplicationManager, newAm *v1alpha1.ApplicationManager, appConfig *appcfg.ApplicationConfig) (*v1alpha1.ApplicationManager, []byte, error) {
+	original := req.Object.Raw
+	var patchBytes []byte
+
+	if newAm.Spec.OpType == v1alpha1.InstallOp || newAm.Spec.OpType == v1alpha1.UpgradeOp {
+		config, err := json.Marshal(appConfig)
+		if err != nil {
+			return newAm, patchBytes, err
+		}
+		newAm.Spec.Config = string(config)
+	}
+
+	now := metav1.Now()
+	newAm.Status.OpID = strconv.FormatInt(now.Unix(), 10)
+	newAm.Status.StatusTime = &now
+	newAm.Status.UpdateTime = &now
+	newAm.Status.OpGeneration += 1
+	opType := newAm.Spec.OpType
+	newAm.Status.OpType = opType
+
+	switch opType {
+	case v1alpha1.InstallOp:
+		newAm.Status.State = v1alpha1.Pending
+	case v1alpha1.UpgradeOp:
+		newAm.Status.State = v1alpha1.Upgrading
+	case v1alpha1.UninstallOp:
+		newAm.Status.State = v1alpha1.Uninstalling
+	case v1alpha1.StopOp:
+		newAm.Status.State = v1alpha1.Stopping
+	case v1alpha1.ResumeOp:
+		newAm.Status.State = v1alpha1.Resuming
+	case v1alpha1.CancelOp:
+		newAm.Status.State = getCancelState(oldAm.Status.State)
+	}
+
+	current, err := json.Marshal(newAm)
+	if err != nil {
+		return newAm, patchBytes, err
+	}
+	admissionResponse := admission.PatchResponseFromRaw(original, current)
+	patchBytes, err = json.Marshal(admissionResponse.Patches)
+	if err != nil {
+		return newAm, patchBytes, err
+	}
+
+	return newAm, patchBytes, nil
+}
+
+func getCancelState(state v1alpha1.ApplicationManagerState) v1alpha1.ApplicationManagerState {
+	var cancelState v1alpha1.ApplicationManagerState
+	switch state {
+	case v1alpha1.Pending:
+		cancelState = v1alpha1.PendingCanceling
+	case v1alpha1.Downloading:
+		cancelState = v1alpha1.DownloadingCanceling
+	case v1alpha1.Installing:
+		cancelState = v1alpha1.InstallingCanceling
+	case v1alpha1.Initializing:
+		cancelState = v1alpha1.InitializingCanceling
+	case v1alpha1.Resuming:
+		cancelState = v1alpha1.ResumingCanceling
+	case v1alpha1.Upgrading:
+		cancelState = v1alpha1.UpgradingCanceling
+	}
+	return cancelState
+}
+
+func (h *Handler) validateApplicationManagerOperation(ctx context.Context, newAm *v1alpha1.ApplicationManager, oldAm *v1alpha1.ApplicationManager) (*appcfg.ApplicationConfig, error) {
+	if newAm.Spec.AppName == "" {
+		return nil, fmt.Errorf("appName is required")
+	}
+	if newAm.Spec.Source == "" {
+		return nil, fmt.Errorf("source is required")
+	}
+	if newAm.Spec.OpType == "" {
+		return nil, fmt.Errorf("opType is required")
+	}
+	if newAm.Spec.Type == "" {
+		return nil, fmt.Errorf("type is required")
+	}
+	if newAm.Spec.Type != "app" {
+		return nil, fmt.Errorf("invalid type: %s", newAm.Spec.Type)
+	}
+	if err := apputils.CheckChartSource(api.AppSource(newAm.Spec.Source)); err != nil {
+		return nil, err
+	}
+	if newAm.Spec.Source == "market" {
+		newAm.Annotations[api.AppMarketSourceKey] = "Official-Market-Sources"
+	} else {
+		newAm.Annotations[api.AppMarketSourceKey] = "local"
+	}
+
+	// make spec.AppOwner default is owner user
+	owner, err := kubesphere.GetOwner(ctx, h.kubeConfig)
+	if err != nil {
+		return nil, err
+	}
+	if newAm.Spec.AppOwner == "" {
+		newAm.Spec.AppOwner = owner
+	}
+	if newAm.Spec.AppNamespace == "" {
+		newAm.Spec.AppNamespace = fmt.Sprintf("%s-%s", newAm.Spec.AppName, newAm.Spec.AppOwner)
+	}
+
+	if newAm.Name != fmt.Sprintf("%s-%s", newAm.Spec.AppNamespace, newAm.Spec.AppName) {
+		return nil, errors.New("invalid application manager name")
+	}
+
+	admin, err := kubesphere.GetAdminUsername(ctx, h.kubeConfig)
+	if err != nil {
+		return nil, err
+	}
+	isAdmin, err := kubesphere.IsAdmin(ctx, h.kubeConfig, newAm.Spec.AppOwner)
+	if err != nil {
+		return nil, err
+	}
+
+	annotations := newAm.Annotations
+	var version string
+	if newAm.Spec.OpType == v1alpha1.UpgradeOp {
+		version = newAm.Annotations[api.AppVersionKey]
+		if version == "" {
+			return nil, errors.New("annotation bytetrade.io/app-version can not be empty")
+		}
+	}
+	var opt *apputils.ConfigOptions
+	var appConfig *appcfg.ApplicationConfig
+	if newAm.Spec.OpType == v1alpha1.InstallOp || newAm.Spec.OpType == v1alpha1.UpgradeOp {
+		opt = &apputils.ConfigOptions{
+			App:          newAm.Spec.AppName,
+			RepoURL:      annotations[api.AppRepoURLKey],
+			Owner:        newAm.Spec.AppOwner,
+			Version:      version,
+			Token:        annotations[api.AppTokenKey],
+			MarketSource: annotations[api.AppMarketSourceKey],
+			Admin:        admin,
+			IsAdmin:      isAdmin,
+		}
+		appConfig, _, err = apputils.GetAppConfig(ctx, opt)
+		if err != nil {
+			klog.Errorf("failed to get appConfig %v", err)
+			return nil, err
+		}
+	}
+
+	switch newAm.Spec.OpType {
+	case v1alpha1.InstallOp:
+		err = h.installOpValidate(ctx, appConfig)
+		if err != nil {
+			klog.Errorf("install operation validate failed %v", err)
+			return nil, err
+		}
+
+	case v1alpha1.UpgradeOp:
+		err = h.upgradeOpValidate(ctx, appConfig)
+		if err != nil {
+			klog.Errorf("upgrade operation validate failed %v", err)
+			return nil, err
+		}
+
+	}
+	return appConfig, nil
+
+}
+func (h *Handler) installOpValidate(ctx context.Context, appConfig *appcfg.ApplicationConfig) error {
+	err := apputils.CheckDependencies2(ctx, h.ctrlClient, appConfig.Dependencies, appConfig.OwnerName, true)
+	if err != nil {
+		return err
+	}
+	err = apputils.CheckConflicts(ctx, appConfig.Conflicts, appConfig.OwnerName)
+	if err != nil {
+		return err
+	}
+	err = apputils.CheckTailScaleACLs(appConfig.TailScale.ACLs)
+	if err != nil {
+		return err
+	}
+	err = apputils.CheckCfgFileVersion(appConfig.CfgFileVersion, config.MinCfgFileVersion)
+	if err != nil {
+		return err
+	}
+	err = apputils.CheckNamespace(appConfig.Namespace)
+	if err != nil {
+		return err
+	}
+	err = apputils.CheckUserRole(appConfig, appConfig.OwnerName)
+	if err != nil {
+		return err
+	}
+	_, err = apputils.CheckAppRequirement("", appConfig)
+	if err != nil {
+		return err
+	}
+
+	_, err = apputils.CheckUserResRequirement(ctx, appConfig, appConfig.OwnerName)
+	if err != nil {
+		return err
+	}
+
+	_, err = apputils.CheckMiddlewareRequirement(ctx, h.kubeConfig, appConfig.Middleware)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (h *Handler) upgradeOpValidate(ctx context.Context, appConfig *appcfg.ApplicationConfig) error {
+	err := apputils.CheckTailScaleACLs(appConfig.TailScale.ACLs)
+	if err != nil {
+		return err
+	}
+	err = apputils.CheckCfgFileVersion(appConfig.CfgFileVersion, config.MinCfgFileVersion)
+	if err != nil {
+		return err
+	}
+	return nil
+}

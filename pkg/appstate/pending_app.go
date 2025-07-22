@@ -72,12 +72,12 @@ func (p *PendingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
 	p.manager.Status.StatusTime = &now
 	p.manager.Status.UpdateTime = &now
 	p.manager.Status.OpGeneration += 1
-	err := p.client.Status().Update(ctx, p.manager)
+	err := p.client.Update(ctx, p.manager)
 	if err != nil {
 		klog.Error("update app manager status error, ", err, ", ", p.manager.Name)
 		return nil, err
 	}
-	utils.PublishAsync(p.manager.Spec.AppOwner, p.manager.Spec.AppName, string(p.manager.Status.OpType), p.manager.Status.OpID, appsv1.Downloading.String(), "", nil)
+	utils.PublishAsync(p.manager.Spec.AppOwner, p.manager.Spec.AppName, string(p.manager.Spec.OpType), p.manager.Status.OpID, appsv1.Downloading.String(), "", nil)
 
 	return nil, nil
 }

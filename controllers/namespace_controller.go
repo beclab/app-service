@@ -17,9 +17,11 @@ limitations under the License.
 package controllers
 
 import (
-	"bytetrade.io/web3os/app-service/pkg/utils/sliceutil"
 	"context"
 	"fmt"
+
+	"bytetrade.io/web3os/app-service/pkg/utils/sliceutil"
+
 	iamv1alpha2 "github.com/beclab/api/iam/v1alpha2"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -35,7 +37,7 @@ const (
 	controllerNamespaceName = "namespace-controller"
 )
 
-// Reconciler reconciles a Namespace object
+// NamespaceReconciler reconciles a Namespace object
 type NamespaceReconciler struct {
 	client.Client
 }
@@ -46,7 +48,7 @@ func (r *NamespaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
-		Named(controllerName).
+		Named(controllerNamespaceName).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: 1,
 		}).

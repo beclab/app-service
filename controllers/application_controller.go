@@ -8,10 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"bytetrade.io/web3os/app-service/pkg/appcfg"
-
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
 	"bytetrade.io/web3os/app-service/pkg/helm"
@@ -593,7 +592,7 @@ func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, app
 					}
 					settings["oidc.client.secret"] = encryptSecret
 
-					zone, err := kubesphere.GetUserZone(ctx, r.Kubeconfig, owner)
+					zone, err := kubesphere.GetUserZone(ctx, owner)
 					if err != nil {
 						klog.Error("get user zone error, ", err)
 					} else {

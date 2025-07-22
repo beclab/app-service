@@ -1,4 +1,4 @@
-package apiserver
+package app
 
 import (
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"

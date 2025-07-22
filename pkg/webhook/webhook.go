@@ -324,11 +324,7 @@ func (wh *Webhook) createSidecarConfigMap(
 		klog.Errorf("Failed to get app config err=%v", err)
 		return "", err
 	}
-	kubeConfig, err := ctrl.GetConfig()
-	if err != nil {
-		return "", err
-	}
-	zone, err := kubesphere.GetUserZone(ctx, kubeConfig, appcfg.OwnerName)
+	zone, err := kubesphere.GetUserZone(ctx, appcfg.OwnerName)
 	if err != nil {
 		return "", err
 	}
