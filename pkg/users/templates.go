@@ -22,6 +22,7 @@ type UserCreateOption struct {
 var (
 	AnnotationGroup       = "bytetrade.io"
 	AnnotationUserCreator = "bytetrade.io/creator"
+	AnnotationUserDeleter = "bytetrade.io/deleter"
 
 	UserAnnotationTerminusNameKey = fmt.Sprintf("%s/terminus-name", AnnotationGroup)
 	UserAvatar                    = fmt.Sprintf("%s/avatar", AnnotationGroup)
