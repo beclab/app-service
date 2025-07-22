@@ -3,6 +3,8 @@ package apiserver
 import (
 	"errors"
 	"fmt"
+	"strconv"
+	"time"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
@@ -38,6 +40,7 @@ func (h *Handler) uninstall(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
+
 	var am v1alpha1.ApplicationManager
 	err = h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: name}, &am)
 	if err != nil {
@@ -59,16 +62,21 @@ func (h *Handler) uninstall(req *restful.Request, resp *restful.Response) {
 		api.HandleBadRequest(resp, req, fmt.Errorf("%s operation is not allowed for %s state", v1alpha1.UninstallOp, am.Status.State))
 		return
 	}
+	am.Spec.OpType = v1alpha1.UninstallOp
+	am.Annotations[api.AppTokenKey] = token
+	am.Annotations[api.AppUninstallAllKey] = fmt.Sprintf("%t", request.All)
+	err = h.ctrlClient.Update(req.Request.Context(), &am)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
 
 	now := metav1.Now()
+	opID := strconv.FormatInt(time.Now().Unix(), 10)
 	status := v1alpha1.ApplicationManagerStatus{
-		OpType: v1alpha1.UninstallOp,
-		State:  v1alpha1.Uninstalling,
-		OpID:   am.ResourceVersion,
-		Payload: map[string]string{
-			"token":        token,
-			"uninstallAll": fmt.Sprintf("%t", request.All),
-		},
+		OpType:     v1alpha1.UninstallOp,
+		State:      v1alpha1.Uninstalling,
+		OpID:       opID,
 		Progress:   "0.00",
 		StatusTime: &now,
 		UpdateTime: &now,
@@ -79,10 +87,10 @@ func (h *Handler) uninstall(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
-	utils.PublishAsync(a.Spec.AppOwner, a.Spec.AppName, string(a.Status.OpType), a.Status.OpID, v1alpha1.Uninstalling.String(), "", nil)
+	utils.PublishAsync(a.Spec.AppOwner, a.Spec.AppName, string(a.Status.OpType), opID, v1alpha1.Uninstalling.String(), "", nil)
 
 	resp.WriteEntity(api.InstallationResponse{
 		Response: api.Response{Code: 200},
-		Data:     api.InstallationResponseData{UID: app, OpID: status.OpID},
+		Data:     api.InstallationResponseData{UID: app, OpID: opID},
 	})
 }

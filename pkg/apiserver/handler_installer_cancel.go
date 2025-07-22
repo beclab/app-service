@@ -2,6 +2,8 @@ package apiserver
 
 import (
 	"fmt"
+	"strconv"
+	"time"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
@@ -56,11 +58,17 @@ func (h *Handler) cancel(req *restful.Request, resp *restful.Response) {
 	case v1alpha1.Upgrading:
 		cancelState = v1alpha1.UpgradingCanceling
 	}
-
+	opID := strconv.FormatInt(time.Now().Unix(), 10)
+	am.Spec.OpType = v1alpha1.CancelOp
+	err = h.ctrlClient.Update(req.Request.Context(), &am)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
 	now := metav1.Now()
 	status := v1alpha1.ApplicationManagerStatus{
 		OpType:     v1alpha1.CancelOp,
-		OpID:       am.ResourceVersion,
+		OpID:       opID,
 		LastState:  am.Status.LastState,
 		State:      cancelState,
 		Progress:   "0.00",
@@ -77,10 +85,10 @@ func (h *Handler) cancel(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
-	utils.PublishAsync(a.Spec.AppOwner, a.Spec.AppName, string(a.Status.OpType), a.Status.OpID, cancelState.String(), "", nil)
+	utils.PublishAsync(a.Spec.AppOwner, a.Spec.AppName, string(a.Status.OpType), opID, cancelState.String(), "", nil)
 
 	resp.WriteAsJson(api.InstallationResponse{
 		Response: api.Response{Code: 200},
-		Data:     api.InstallationResponseData{UID: app, OpID: status.OpID},
+		Data:     api.InstallationResponseData{UID: app, OpID: opID},
 	})
 }

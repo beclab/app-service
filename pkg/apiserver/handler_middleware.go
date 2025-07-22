@@ -39,7 +39,15 @@ func (h *Handler) installMiddleware(req *restful.Request, resp *restful.Response
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 	marketSource := req.HeaderParameter(constants.MarketSource)
 
-	middlewareConfig, err := getMiddlewareConfigFromRepo(req.Request.Context(), owner, app, insReq.RepoURL, "", token, marketSource)
+	middlewareConfig, err := getMiddlewareConfigFromRepo(req.Request.Context(), &apputils.ConfigOptions{
+		App:          app,
+		Owner:        owner,
+		RepoURL:      insReq.RepoURL,
+		Version:      "",
+		Token:        token,
+		MarketSource: marketSource,
+	})
+
 	if err != nil {
 		api.HandleBadRequest(resp, req, err)
 		return
@@ -52,7 +60,7 @@ func (h *Handler) installMiddleware(req *restful.Request, resp *restful.Response
 		return
 	}
 
-	role, err := kubesphere.GetUserRole(req.Request.Context(), h.kubeConfig, owner)
+	role, err := kubesphere.GetUserRole(req.Request.Context(), owner)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return

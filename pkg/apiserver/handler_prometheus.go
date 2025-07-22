@@ -7,6 +7,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/prometheus"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
 	"github.com/emicklei/go-restful/v3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -29,7 +30,7 @@ func (h *Handler) userMetrics(req *restful.Request, resp *restful.Response) {
 
 func (h *Handler) clusterResource(req *restful.Request, resp *restful.Response) {
 	token := req.HeaderParameter(constants.AuthorizationTokenKey)
-	metrics, supportArch, err := GetClusterResource(h.kubeConfig, token)
+	metrics, supportArch, err := apputils.GetClusterResource(token)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return

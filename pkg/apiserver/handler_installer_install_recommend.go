@@ -143,14 +143,23 @@ func (h *Handler) installRecommend(req *restful.Request, resp *restful.Response)
 	marketSource := req.HeaderParameter(constants.MarketSource)
 
 	klog.Infof("Download chart and get workflow config appName=%s repoURL=%s", app, insReq.RepoURL)
-	workflowCfg, err := getWorkflowConfigFromRepo(req.Request.Context(), owner, app, insReq.RepoURL, "", token, marketSource)
+	//workflowCfg, err := getWorkflowConfigFromRepo(req.Request.Context(), owner, app, insReq.RepoURL, "", token, marketSource)
+
+	workflowCfg, err := getWorkflowConfigFromRepo(req.Request.Context(), &apputils.ConfigOptions{
+		App:          app,
+		Owner:        owner,
+		RepoURL:      insReq.RepoURL,
+		Version:      "",
+		Token:        token,
+		MarketSource: marketSource,
+	})
 	if err != nil {
 		klog.Errorf("Failed to get workflow config appName=%s repoURL=%s err=%v", app, insReq.RepoURL, err)
 		api.HandleError(resp, req, err)
 		return
 	}
 
-	satisfied, err := CheckMiddlewareRequirement(req.Request.Context(), h.kubeConfig, workflowCfg.Cfg.Middleware)
+	satisfied, err := apputils.CheckMiddlewareRequirement(req.Request.Context(), h.kubeConfig, workflowCfg.Cfg.Middleware)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -424,7 +433,15 @@ func (h *Handler) upgradeRecommend(req *restful.Request, resp *restful.Response)
 	}
 
 	klog.Infof("Download latest version chart and get workflow config name=%s repoURL=%s", app, upReq.RepoURL)
-	workflowCfg, err = getWorkflowConfigFromRepo(req.Request.Context(), owner, app, upReq.RepoURL, "", token, marketSource)
+
+	workflowCfg, err = getWorkflowConfigFromRepo(req.Request.Context(), &apputils.ConfigOptions{
+		App:          app,
+		Owner:        owner,
+		RepoURL:      upReq.RepoURL,
+		Version:      "",
+		Token:        token,
+		MarketSource: marketSource,
+	})
 	if err != nil {
 		klog.Errorf("Failed to get workflow config name=%s repoURL=%s err=%v, ", app, upReq.RepoURL, err)
 		api.HandleError(resp, req, err)

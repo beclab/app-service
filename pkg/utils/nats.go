@@ -46,15 +46,14 @@ func PublishAsync(owner, name, opType, opID, state, progress string, entranceSta
 		if err := publish(subject, data); err != nil {
 			klog.Errorf("async publish subject %s,data %v, failed %v", subject, data, err)
 		}
+		klog.Infof("publish event success data: %#v", data)
 	}()
 }
 
 func publish(subject string, data interface{}) error {
-	klog.Infof("receive request")
 	natsHost := os.Getenv("NATS_HOST")
 	natsPort := os.Getenv("NATS_PORT")
 
-	//subject = os.Getenv("NATS_SUBJECT")
 	username := os.Getenv("NATS_USERNAME")
 	password := os.Getenv("NATS_PASSWORD")
 

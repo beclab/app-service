@@ -104,7 +104,7 @@ func (p *DownloadingApp) Exec(ctx context.Context) (StatefulInProgressApp, error
 	err := p.exec(ctx)
 	if err != nil {
 		klog.Errorf("app %s downloading failed %v", p.manager.Spec.AppName, err)
-		opRecord := makeRecord(p.manager, appsv1.DownloadFailed, fmt.Sprintf(constants.OperationFailedTpl, p.manager.Status.OpType, err.Error()))
+		opRecord := makeRecord(p.manager, appsv1.DownloadFailed, fmt.Sprintf(constants.OperationFailedTpl, p.manager.Spec.OpType, err.Error()))
 		updateErr := p.updateStatus(ctx, p.manager, appsv1.DownloadFailed, opRecord, err.Error())
 		if updateErr != nil {
 			klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.DownloadFailed.String(), updateErr)

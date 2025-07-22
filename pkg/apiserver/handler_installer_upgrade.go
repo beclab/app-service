@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strconv"
+	"time"
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
@@ -47,10 +49,13 @@ type upgradeHandlerHelperV2 struct {
 }
 
 func (h *upgradeHandlerHelper) getAdminUsers() (admins []string, isAdmin bool, err error) {
-	admins, err = kubesphere.GetAdminUserList(h.req.Request.Context(), h.h.kubeConfig)
+	adminList, err := kubesphere.GetAdminUserList(h.req.Request.Context(), h.h.kubeConfig)
 	if err != nil {
 		api.HandleError(h.resp, h.req, err)
 		return
+	}
+	for _, user := range adminList {
+		admins = append(admins, user.Name)
 	}
 	isAdmin, err = kubesphere.IsAdmin(h.req.Request.Context(), h.h.kubeConfig, h.owner)
 	if err != nil {
@@ -77,10 +82,17 @@ func (h *upgradeHandlerHelper) getAppConfig(prevCfg *appcfg.ApplicationConfig, a
 	} else {
 		admin = h.owner
 	}
-	appConfig, _, err := config.GetAppConfig(
-		h.req.Request.Context(), h.app, h.owner, h.request.CfgURL, h.request.RepoURL,
-		h.request.Version, h.token, admin, marketSource, prevCfg.AppScope.ClusterScoped,
-	)
+
+	appConfig, _, err := apputils.GetAppConfig(h.req.Request.Context(), &apputils.ConfigOptions{
+		App:          h.app,
+		Owner:        h.owner,
+		RepoURL:      h.request.RepoURL,
+		Version:      h.request.Version,
+		Token:        h.token,
+		Admin:        admin,
+		MarketSource: marketSource,
+		IsAdmin:      prevCfg.AppScope.ClusterScoped,
+	})
 	if err != nil {
 		api.HandleError(h.resp, h.req, err)
 		return
@@ -135,10 +147,16 @@ func (h *upgradeHandlerHelperV2) getAppConfig(prevCfg *appcfg.ApplicationConfig,
 		admin = adminUsers[0]
 	}
 
-	appConfig, _, err := config.GetAppConfig(
-		h.req.Request.Context(), h.app, h.owner, h.request.CfgURL, h.request.RepoURL,
-		h.request.Version, h.token, admin, marketSource, isAdmin,
-	)
+	appConfig, _, err := apputils.GetAppConfig(h.req.Request.Context(), &apputils.ConfigOptions{
+		App:          h.app,
+		Owner:        h.owner,
+		RepoURL:      h.request.RepoURL,
+		Version:      h.request.Version,
+		Token:        h.token,
+		Admin:        admin,
+		MarketSource: marketSource,
+		IsAdmin:      isAdmin,
+	})
 	if err != nil {
 		api.HandleError(h.resp, h.req, err)
 		return
@@ -190,8 +208,12 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 
 	token := req.HeaderParameter(constants.AuthorizationTokenKey)
 
-	apiVersion, err := apputils.GetApiVersionFromAppConfig(req.Request.Context(), app, owner,
-		request.CfgURL, request.RepoURL, marketSource)
+	apiVersion, err := apputils.GetApiVersionFromAppConfig(req.Request.Context(), &apputils.ConfigOptions{
+		App:          app,
+		Owner:        owner,
+		RepoURL:      request.RepoURL,
+		MarketSource: marketSource,
+	})
 	if err != nil {
 		klog.Errorf("Failed to get api version err=%v", err)
 		api.HandleBadRequest(resp, req, err)
@@ -267,6 +289,11 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 	}
 
 	appCopy.Spec.Config = config
+	appCopy.Spec.OpType = appv1alpha1.UpgradeOp
+	appCopy.Annotations[api.AppRepoURLKey] = request.RepoURL
+	appCopy.Annotations[api.AppVersionKey] = request.Version
+	appCopy.Annotations[api.AppTokenKey] = token
+	appCopy.Annotations[api.AppMarketSourceKey] = marketSource
 
 	err = h.ctrlClient.Patch(req.Request.Context(), appCopy, client.MergeFrom(&appMgr))
 	if err != nil {
@@ -274,18 +301,13 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		return
 	}
 	now := metav1.Now()
+	opID := strconv.FormatInt(time.Now().Unix(), 10)
+
 	status := appv1alpha1.ApplicationManagerStatus{
-		OpType:  appv1alpha1.UpgradeOp,
-		OpID:    appMgr.ResourceVersion,
-		State:   appv1alpha1.Upgrading,
-		Message: "waiting for upgrade",
-		Payload: map[string]string{
-			"cfgURL":       request.CfgURL,
-			"repoURL":      request.RepoURL,
-			"version":      request.Version,
-			"token":        token,
-			"marketSource": marketSource,
-		},
+		OpType:     appv1alpha1.UpgradeOp,
+		OpID:       opID,
+		State:      appv1alpha1.Upgrading,
+		Message:    "waiting for upgrade",
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
@@ -295,10 +317,10 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
-	utils.PublishAsync(am.Spec.AppOwner, am.Spec.AppName, string(am.Status.OpType), am.Status.OpID, appv1alpha1.Upgrading.String(), "", nil)
+	utils.PublishAsync(am.Spec.AppOwner, am.Spec.AppName, string(am.Status.OpType), opID, appv1alpha1.Upgrading.String(), "", nil)
 
 	resp.WriteEntity(api.InstallationResponse{
 		Response: api.Response{Code: 200},
-		Data:     api.InstallationResponseData{UID: app, OpID: status.OpID},
+		Data:     api.InstallationResponseData{UID: app, OpID: opID},
 	})
 }

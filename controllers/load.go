@@ -2,10 +2,13 @@ package controllers
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appstate"
+	"bytetrade.io/web3os/app-service/pkg/utils"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -31,17 +34,39 @@ func LoadStatefulApp(ctx context.Context, appmgr *ApplicationManagerController, 
 							delCtx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 							defer cancel()
 							klog.Infof("LoadStatefulApp: force delete application %s", app.Name)
-							err := appmgr.Delete(delCtx,
-								&corev1.Namespace{
-									ObjectMeta: metav1.ObjectMeta{
-										Name: app.Spec.Namespace,
-									},
-								})
+							if !apputils.IsProtectedNamespace(app.Spec.Namespace) {
+								err := appmgr.Delete(delCtx,
+									&corev1.Namespace{
+										ObjectMeta: metav1.ObjectMeta{
+											Name: app.Spec.Namespace,
+										},
+									})
 
-							if err != nil {
-								klog.Errorf("LoadStatefulApp: force delete application %s failed: %v", app.Name, err)
-							} else {
-								klog.Infof("LoadStatefulApp: force delete application %s successfully", app.Name)
+								if err != nil {
+									klog.Errorf("LoadStatefulApp: force delete application %s failed: %v", app.Name, err)
+								} else {
+									klog.Infof("LoadStatefulApp: force delete application %s successfully", app.Name)
+								}
+								opID := strconv.FormatInt(time.Now().Unix(), 10)
+								utils.PublishAsync(app.Spec.Owner, app.Spec.Name, string(appv1alpha1.UninstallOp), opID, string(appv1alpha1.Uninstalling), "", nil)
+
+								ticker := time.NewTicker(2 * time.Second)
+								defer ticker.Stop()
+								for {
+									select {
+									case <-delCtx.Done():
+										return
+									case <-ticker.C:
+										var ns corev1.Namespace
+										err = appmgr.Get(delCtx, types.NamespacedName{Name: app.Spec.Namespace}, &ns)
+										klog.Infof("wait for namespace: %s to be deleted", app.Spec.Namespace)
+										if apierrors.IsNotFound(err) {
+											utils.PublishAsync(app.Spec.Owner, app.Spec.Name, string(appv1alpha1.UninstallOp), opID, string(appv1alpha1.Uninstalled), "", nil)
+											return
+										}
+									}
+								}
+
 							}
 						}()
 

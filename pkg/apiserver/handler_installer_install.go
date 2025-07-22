@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strconv"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
@@ -17,7 +18,9 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/utils"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 	"bytetrade.io/web3os/app-service/pkg/utils/config"
+
 	"github.com/emicklei/go-restful/v3"
+	"helm.sh/helm/v3/pkg/time"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -75,8 +78,12 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	apiVersion, err := apputils.GetApiVersionFromAppConfig(req.Request.Context(), app, owner,
-		insReq.CfgURL, insReq.RepoURL, marketSource)
+	apiVersion, err := apputils.GetApiVersionFromAppConfig(req.Request.Context(), &apputils.ConfigOptions{
+		App:          app,
+		Owner:        owner,
+		RepoURL:      insReq.RepoURL,
+		MarketSource: marketSource,
+	})
 	if err != nil {
 		klog.Errorf("Failed to get api version err=%v", err)
 		api.HandleBadRequest(resp, req, err)
@@ -170,42 +177,40 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 }
 
 func (h *installHandlerHelper) getAdminUsers() (admin []string, isAdmin bool, err error) {
-	admin, err = kubesphere.GetAdminUserList(h.req.Request.Context(), h.h.kubeConfig)
+	adminList, err := kubesphere.GetAdminUserList(h.req.Request.Context(), h.h.kubeConfig)
 	if err != nil {
 		api.HandleError(h.resp, h.req, err)
 		return
 	}
 
-	isAdmin = slices.Contains(admin, h.owner)
+	for _, user := range adminList {
+		admin = append(admin, user.Name)
+		if user.Name == h.owner {
+			isAdmin = true
+		}
+	}
 
 	return
 }
 
 func (h *installHandlerHelper) validate(isAdmin bool, installedApps []*v1alpha1.Application) (err error) {
 	unSatisfiedDeps, err := CheckDependencies(h.req.Request.Context(), h.appConfig.Dependencies, h.h.ctrlClient, h.owner, true)
-	if err != nil {
-		klog.Errorf("Failed to check dependencies err=%v", err)
-	}
 
 	responseBadRequest := func(e error) {
 		err = e
 		api.HandleBadRequest(h.resp, h.req, err)
 	}
-
-	if len(unSatisfiedDeps) > 0 {
+	err = apputils.CheckDependencies2(h.req.Request.Context(), h.h.ctrlClient, h.appConfig.Dependencies, h.owner, true)
+	if err != nil {
+		klog.Errorf("Failed to check dependencies err=%v", err)
 		responseBadRequest(FormatDependencyError(unSatisfiedDeps))
 		return
 	}
 
-	installedConflictApp, err := CheckConflicts(h.req.Request.Context(), h.appConfig.Conflicts, h.owner)
+	err = apputils.CheckConflicts(h.req.Request.Context(), h.appConfig.Conflicts, h.owner)
 	if err != nil {
 		klog.Errorf("Failed to check installed conflict app err=%v", err)
 		api.HandleBadRequest(h.resp, h.req, err)
-		return
-	}
-
-	if len(installedConflictApp) > 0 {
-		responseBadRequest(fmt.Errorf("this app conflict with those installed app: %v", installedConflictApp))
 		return
 	}
 
@@ -216,13 +221,15 @@ func (h *installHandlerHelper) validate(isAdmin bool, installedApps []*v1alpha1.
 		return
 	}
 
-	if !utils.MatchVersion(h.appConfig.CfgFileVersion, config.MinCfgFileVersion) {
-		responseBadRequest(fmt.Errorf("olaresManifest.version must %s", config.MinCfgFileVersion))
+	err = apputils.CheckCfgFileVersion(h.appConfig.CfgFileVersion, config.MinCfgFileVersion)
+	if err != nil {
+		responseBadRequest(err)
 		return
 	}
 
-	if apputils.IsForbidNamespace(h.appConfig.Namespace) {
-		responseBadRequest(fmt.Errorf("unsupported namespace: %s", h.appConfig.Namespace))
+	err = apputils.CheckNamespace(h.appConfig.Namespace)
+	if err != nil {
+		responseBadRequest(err)
 		return
 	}
 
@@ -242,7 +249,8 @@ func (h *installHandlerHelper) validate(isAdmin bool, installedApps []*v1alpha1.
 		return
 	}
 
-	resourceType, err := CheckAppRequirement(h.h.kubeConfig, h.token, h.appConfig)
+	//resourceType, err := CheckAppRequirement(h.h.kubeConfig, h.token, h.appConfig)
+	resourceType, err := apputils.CheckAppRequirement(h.token, h.appConfig)
 	if err != nil {
 		klog.Errorf("Failed to check app requirement err=%v", err)
 		h.resp.WriteHeaderAndEntity(http.StatusBadRequest, api.RequirementResp{
@@ -253,7 +261,7 @@ func (h *installHandlerHelper) validate(isAdmin bool, installedApps []*v1alpha1.
 		return
 	}
 
-	resourceType, err = CheckUserResRequirement(h.req.Request.Context(), h.h.kubeConfig, h.appConfig, h.owner)
+	resourceType, err = apputils.CheckUserResRequirement(h.req.Request.Context(), h.appConfig, h.owner)
 	if err != nil {
 		h.resp.WriteHeaderAndEntity(http.StatusBadRequest, api.RequirementResp{
 			Response: api.Response{Code: 400},
@@ -263,7 +271,7 @@ func (h *installHandlerHelper) validate(isAdmin bool, installedApps []*v1alpha1.
 		return
 	}
 
-	satisfied, err := CheckMiddlewareRequirement(h.req.Request.Context(), h.h.kubeConfig, h.appConfig.Middleware)
+	satisfied, err := apputils.CheckMiddlewareRequirement(h.req.Request.Context(), h.h.kubeConfig, h.appConfig.Middleware)
 	if err != nil {
 		api.HandleError(h.resp, h.req, err)
 		return
@@ -350,8 +358,15 @@ func (h *installHandlerHelper) getAppConfig(adminUsers []string, marketSource st
 		installAsAdmin = true
 	}
 
-	appConfig, _, err := apputils.GetAppConfig(h.req.Request.Context(), h.app, h.owner,
-		h.insReq.CfgURL, h.insReq.RepoURL, "", h.token, admin, marketSource, installAsAdmin)
+	appConfig, _, err := apputils.GetAppConfig(h.req.Request.Context(), &apputils.ConfigOptions{
+		App:          h.app,
+		Owner:        h.owner,
+		RepoURL:      h.insReq.RepoURL,
+		Version:      "",
+		Admin:        admin,
+		IsAdmin:      installAsAdmin,
+		MarketSource: marketSource,
+	})
 	if err != nil {
 		klog.Errorf("Failed to get appconfig err=%v", err)
 		api.HandleBadRequest(h.resp, h.req, err)
@@ -374,6 +389,13 @@ func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opI
 	appMgr := &v1alpha1.ApplicationManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
+			Annotations: map[string]string{
+				api.AppTokenKey:         h.token,
+				api.AppRepoURLKey:       h.insReq.RepoURL,
+				api.AppVersionKey:       h.appConfig.Version,
+				api.AppMarketSourceKey:  marketSource,
+				api.AppInstallSourceKey: "app-service",
+			},
 		},
 		Spec: v1alpha1.ApplicationManagerSpec{
 			AppName:      h.app,
@@ -382,6 +404,7 @@ func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opI
 			Config:       string(config),
 			Source:       h.insReq.Source.String(),
 			Type:         v1alpha1.App,
+			OpType:       v1alpha1.InstallOp,
 		},
 	}
 	a, err = h.client.AppV1alpha1().ApplicationManagers().Get(h.req.Request.Context(), name, metav1.GetOptions{})
@@ -398,7 +421,15 @@ func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opI
 	} else {
 		// update Spec.Config
 		patchData := map[string]interface{}{
+			"metadata": map[string]interface{}{
+				api.AppTokenKey:         h.token,
+				api.AppRepoURLKey:       h.insReq.RepoURL,
+				api.AppVersionKey:       h.appConfig.Version,
+				api.AppMarketSourceKey:  marketSource,
+				api.AppInstallSourceKey: "app-service",
+			},
 			"spec": map[string]interface{}{
+				"opType": v1alpha1.InstallOp,
 				"config": string(config),
 				"source": h.insReq.Source.String(),
 			},
@@ -419,20 +450,14 @@ func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opI
 			return
 		}
 	}
+	opID = strconv.FormatInt(time.Now().Unix(), 10)
 
 	now := metav1.Now()
 	status := v1alpha1.ApplicationManagerStatus{
-		OpType:  v1alpha1.InstallOp,
-		State:   v1alpha1.Pending,
-		OpID:    a.ResourceVersion,
-		Message: "waiting for install",
-		Payload: map[string]string{
-			"token":        h.token,
-			"cfgURL":       h.insReq.CfgURL,
-			"repoURL":      h.insReq.RepoURL,
-			"version":      h.appConfig.Version,
-			"marketSource": marketSource,
-		},
+		OpType:     v1alpha1.InstallOp,
+		State:      v1alpha1.Pending,
+		OpID:       opID,
+		Message:    "waiting for install",
 		Progress:   "0.00",
 		StatusTime: &now,
 		UpdateTime: &now,
@@ -445,9 +470,7 @@ func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opI
 		return
 	}
 
-	utils.PublishAsync(a.Spec.AppOwner, a.Spec.AppName, string(a.Status.OpType), a.Status.OpID, v1alpha1.Pending.String(), "", nil)
-
-	opID = a.Status.OpID
+	utils.PublishAsync(a.Spec.AppOwner, a.Spec.AppName, string(a.Status.OpType), opID, v1alpha1.Pending.String(), "", nil)
 	return
 }
 
@@ -490,8 +513,16 @@ func (h *installHandlerHelperV2) getAppConfig(adminUsers []string, marketSource 
 		admin = adminUsers[0]
 	}
 
-	appConfig, _, err := apputils.GetAppConfig(h.req.Request.Context(), h.app, h.owner,
-		h.insReq.CfgURL, h.insReq.RepoURL, "", h.token, admin, marketSource, isAdmin)
+	appConfig, _, err := apputils.GetAppConfig(h.req.Request.Context(), &apputils.ConfigOptions{
+		App:          h.app,
+		Owner:        h.owner,
+		RepoURL:      h.insReq.RepoURL,
+		Version:      "",
+		Token:        h.token,
+		Admin:        admin,
+		MarketSource: marketSource,
+		IsAdmin:      isAdmin,
+	})
 	if err != nil {
 		klog.Errorf("Failed to get appconfig err=%v", err)
 		api.HandleBadRequest(h.resp, h.req, err)

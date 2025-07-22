@@ -11,7 +11,9 @@ import (
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/constants"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 	"bytetrade.io/web3os/app-service/pkg/workflowinstaller"
+
 	"github.com/emicklei/go-restful/v3"
 	"github.com/go-resty/resty/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -47,7 +49,7 @@ func (h *Handler) checkDependencies(req *restful.Request, resp *restful.Response
 		api.HandleError(resp, req, err)
 		return
 	}
-	unSatisfiedDeps, _ := CheckDependencies(req.Request.Context(), depReq.Data, h.ctrlClient, owner.(string), true)
+	unSatisfiedDeps, _ := apputils.CheckDependencies(req.Request.Context(), h.ctrlClient, depReq.Data, owner.(string), true)
 	klog.Infof("Check application dependencies unSatisfiedDeps=%v", unSatisfiedDeps)
 
 	data := make([]api.DependenciesRespData, 0)

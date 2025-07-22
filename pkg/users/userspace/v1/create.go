@@ -369,7 +369,7 @@ func (c *Creator) findBflAPIPort(ctx context.Context, namespace string) (int32, 
 }
 
 func (c *Creator) getUserSubnet(ctx context.Context) (string, string, error) {
-	userIndex, err := kubesphere.GetUserIndexByName(ctx, c.k8sConfig, c.user)
+	userIndex, err := kubesphere.GetUserIndexByName(ctx, c.user)
 	if err != nil {
 		return "0", "", err
 	}

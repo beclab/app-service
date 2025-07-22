@@ -739,6 +739,20 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get admin username", nil))
 
+	ws.Route(ws.POST("/applicationmanager/inject").
+		To(handler.applicationManagerMutate).
+		Doc("mutating webhook for application manager").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Returns(http.StatusOK, "user validated success", nil)).
+		Consumes(restful.MIME_JSON)
+
+	ws.Route(ws.POST("/applicationmanager/validate").
+		To(handler.applicationManagerValidate).
+		Doc("validating webhook for validate user creation").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Returns(http.StatusOK, "user validated success", nil)).
+		Consumes(restful.MIME_JSON)
+
 	c.Add(ws)
 
 	return nil

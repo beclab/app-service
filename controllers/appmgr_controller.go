@@ -57,10 +57,7 @@ func (r *ApplicationManagerController) SetupWithManager(mgr ctrl.Manager) error 
 				return r.preEnqueueCheckForUpdate(e.ObjectOld, e.ObjectNew)
 			},
 			DeleteFunc: func(e event.DeleteEvent) bool {
-				// TODO:hysyeah
-				// is there need to uninstall app when delete application manager
-				// ?? may be need
-				return false
+				return true
 			},
 		},
 	)
@@ -144,9 +141,12 @@ func (r *ApplicationManagerController) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, err
 	}
 
-	// FIXME: reconcile the failed state app
+	var state string
+	if statefulApp != nil {
+		state = statefulApp.State()
+	}
 
-	klog.Infof("reconciled application manager request name=%s state=%s", req.Name, statefulApp.State())
+	klog.Infof("reconciled application manager request name=%s state=%s", req.Name, state)
 
 	return ctrl.Result{}, nil
 }
@@ -186,6 +186,7 @@ func (r *ApplicationManagerController) loadStatefulAppAndReconcile(ctx context.C
 					klog.Errorf("reconcile stateful app failed %v", err)
 					return nil, err
 				}
+				return statefulApp, nil
 			}
 		case appstate.IsUnknownInProgressApp(err):
 			// this is a special case, the app is in progress but the state is unknown
@@ -211,7 +212,7 @@ func (r *ApplicationManagerController) updateStatus(ctx context.Context, am *app
 	amCopy.Status.StatusTime = &now
 	amCopy.Status.UpdateTime = &now
 	amCopy.Status.OpGeneration += 1
-	err = r.Status().Patch(ctx, amCopy, client.MergeFrom(am))
+	err = r.Patch(ctx, amCopy, client.MergeFrom(am))
 	if err != nil {
 		klog.Errorf("update app manager %s status failed %v", am.Name, err)
 		return err
