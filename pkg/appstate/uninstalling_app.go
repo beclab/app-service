@@ -119,6 +119,7 @@ func (p *UninstallingApp) waitForDeleteNamespace(ctx context.Context) error {
 func (p *UninstallingApp) exec(ctx context.Context) error {
 	var err error
 	token := p.manager.Status.Payload["token"]
+	uninstallAll := p.manager.Status.Payload["uninstallAll"]
 	appCfg := &appcfg.ApplicationConfig{
 		AppName:   p.manager.Spec.AppName,
 		Namespace: p.manager.Spec.AppNamespace,
@@ -134,7 +135,12 @@ func (p *UninstallingApp) exec(ctx context.Context) error {
 		klog.Errorf("make helm ops failed %v", err)
 		return err
 	}
-	err = ops.Uninstall()
+	if uninstallAll == "true" {
+		klog.Infof("uninstall all related resources for app %s", p.manager.Spec.AppName)
+		err = ops.UninstallAll()
+	} else {
+		err = ops.Uninstall()
+	}
 	if err != nil {
 		klog.Errorf("uninstall app %s failed %v", p.manager.Spec.AppName, err)
 		return err

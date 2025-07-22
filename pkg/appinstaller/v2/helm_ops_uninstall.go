@@ -13,7 +13,9 @@ import (
 	"k8s.io/klog/v2"
 )
 
-func (h *HelmOpsV2) Uninstall() error {
+// In v2, when we do uninstall operation, we just uninstall the client by default.
+// Only the UninstallAll method is used to uninstall all related resources including shared charts.
+func (h *HelmOpsV2) UninstallAll() error {
 	if !h.isMultiCharts() {
 		return h.HelmOps.Uninstall()
 	}
@@ -58,17 +60,13 @@ func (h *HelmOpsV2) Uninstall() error {
 		}
 	}
 
-	err = h.UninstallClient()
+	err = h.HelmOps.Uninstall()
 	if err != nil {
 		klog.Errorf("Failed to uninstall client err=%v", err)
 		return err
 	}
 
 	return nil
-}
-
-func (h *HelmOpsV2) UninstallClient() error {
-	return h.HelmOps.Uninstall()
 }
 
 func (h *HelmOpsV2) tryToGetSharedAppCache(ctx context.Context, client kubernetes.Interface, namespace string) (appCacheDirs []string, err error) {

@@ -24,7 +24,7 @@ import (
 )
 
 // Uninstall do a uninstall operation for release.
-func (h *HelmOps) Uninstall() error {
+func (h *HelmOps) UninstallAll() error {
 	client, err := kubernetes.NewForConfig(h.kubeConfig)
 	if err != nil {
 		return err
@@ -171,6 +171,6 @@ func (h *HelmOps) unregisterAppPerm() error {
 	return nil
 }
 
-func (h *HelmOps) UninstallClient() error {
-	return errors.ErrUnsupported
+func (h *HelmOps) Uninstall() error {
+	return h.UninstallAll()
 }

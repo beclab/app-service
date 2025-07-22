@@ -66,7 +66,7 @@ type HelmOpsInterface interface {
 
 	WaitForLaunch() (bool, error)
 
-	UninstallClient() error
+	UninstallAll() error
 }
 
 // Opt options for helm ops.
