@@ -24,6 +24,38 @@ type Event struct {
 	EntranceStatuses []v1alpha1.EntranceStatus `json:"entranceStatuses,omitempty"`
 }
 
+type UserEvent struct {
+	Topic   string  `json:"topic"`
+	Payload Payload `json:"payload"`
+}
+
+type Payload struct {
+	User      string    `json:"user"`
+	Operator  string    `json:"operator"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
+func PublishUserEventAsync(topic, user, operator string) {
+	subject := "os.users"
+	data := UserEvent{
+		Topic: topic,
+		Payload: Payload{
+			User:      user,
+			Operator:  operator,
+			Timestamp: time.Now(),
+		},
+	}
+	go func() {
+		if err := publish(subject, data); err != nil {
+			klog.Errorf("async publish subject %s,data %v, failed %v", subject, data, err)
+		} else {
+			t, _ := json.Marshal(data)
+			klog.Infof("publish user event success. data: %v", string(t))
+		}
+	}()
+
+}
+
 func PublishAsync(owner, name, opType, opID, state, progress string, entranceStatuses []v1alpha1.EntranceStatus) {
 	subject := fmt.Sprintf("os.application.%s", owner)
 

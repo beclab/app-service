@@ -8,6 +8,7 @@ import (
 
 	"bytetrade.io/web3os/app-service/pkg/users"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace/v1"
+	"bytetrade.io/web3os/app-service/pkg/utils"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 	"bytetrade.io/web3os/app-service/pkg/utils/sliceutil"
 
@@ -152,6 +153,7 @@ func (r *UserController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 				klog.Infof("update user failed %v", updateErr)
 				return ctrl.Result{}, updateErr
 			}
+			utils.PublishUserEventAsync("Delete", user.Name, user.Annotations[users.AnnotationUserDeleter])
 		}
 	}
 	if r.LLdapClient == nil {
@@ -171,8 +173,11 @@ func (r *UserController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	if user.Status.State == "" || user.Status.State == "Creating" {
-		return r.handleUserCreation(ctx, user)
-
+		ret, err := r.handleUserCreation(ctx, user)
+		if err == nil {
+			utils.PublishUserEventAsync("Create", user.Name, user.Annotations[users.AnnotationUserCreator])
+		}
+		return ret, err
 	}
 	klog.Infof("finish reconcile user %s", req.Name)
 

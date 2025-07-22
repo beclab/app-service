@@ -194,6 +194,8 @@ func (h *Handler) createUser(req *restful.Request, resp *restful.Response) {
 }
 
 func (h *Handler) deleteUser(req *restful.Request, resp *restful.Response) {
+	owner := req.Attribute(constants.UserContextAttribute).(string)
+
 	username := req.PathParameter("user")
 	if username == "" {
 		api.HandleBadRequest(resp, req, errors.New("user delete: no username provided"))
@@ -208,6 +210,12 @@ func (h *Handler) deleteUser(req *restful.Request, resp *restful.Response) {
 	}
 	if err != nil {
 		api.HandleBadRequest(resp, req, fmt.Errorf("user %s not found", username))
+		return
+	}
+	user.Annotations[users.AnnotationUserDeleter] = owner
+	err = h.ctrlClient.Update(req.Request.Context(), &user)
+	if err != nil {
+		api.HandleError(resp, req, err)
 		return
 	}
 
