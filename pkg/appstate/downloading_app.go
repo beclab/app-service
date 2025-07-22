@@ -160,7 +160,7 @@ func (p *DownloadingApp) exec(ctx context.Context) error {
 		"Cuda": os.Getenv("CUDA_VERSION"),
 	}
 
-	refs, err := utils.GetRefFromResourceList(appConfig.ChartsName, values)
+	refs, err := p.getRefsForImageManager(appConfig, values)
 	if err != nil {
 		klog.Errorf("get image refs from resources failed %v", err)
 		return err
@@ -174,4 +174,24 @@ func (p *DownloadingApp) exec(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (p *DownloadingApp) getRefsForImageManager(appConfig *appcfg.ApplicationConfig, values map[string]interface{}) (refs []appsv1.Ref, err error) {
+	switch {
+	case appConfig.APIVersion == appcfg.V2 && appConfig.IsMultiCharts():
+		// For V2 multi-charts, we need to get refs from each chart
+		var chartRefs []appsv1.Ref
+		for _, chart := range appConfig.SubCharts {
+			chartRefs, err = utils.GetRefFromResourceList(chart.ChartPath(appConfig.AppName), values)
+			if err != nil {
+				klog.Errorf("get refs from chart %s failed %v", chart.Name, err)
+				return
+			}
+
+			refs = append(refs, chartRefs...)
+		}
+	default:
+		refs, err = utils.GetRefFromResourceList(appConfig.ChartsName, values)
+	}
+	return
 }

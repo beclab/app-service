@@ -2,6 +2,7 @@ package appcfg
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/tapr"
@@ -160,5 +161,5 @@ func (c *Chart) Namespace(owner string) string {
 }
 
 func (c *Chart) ChartPath(appName string) string {
-	return fmt.Sprintf("%s/%s", appName, c.Name)
+	return AppChartPath(filepath.Join(appName, c.Name))
 }

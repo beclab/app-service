@@ -106,16 +106,11 @@ func (h *HelmOpsV2) Install() error {
 }
 
 func (h *HelmOpsV2) isMultiCharts() bool {
-	return len(h.App().SubCharts) > 1
+	return h.App().IsMultiCharts()
 }
 
 func (h *HelmOpsV2) hasClusterSharedCharts() bool {
-	for _, chart := range h.App().SubCharts {
-		if chart.Shared {
-			return true
-		}
-	}
-	return false
+	return h.App().HasClusterSharedCharts()
 }
 
 func (h *HelmOpsV2) install(values map[string]interface{}) error {
