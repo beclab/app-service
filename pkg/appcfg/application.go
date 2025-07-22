@@ -94,3 +94,20 @@ type ApplicationConfig struct {
 	Internal             bool
 	SubCharts            []Chart
 }
+
+func (c *ApplicationConfig) IsV2() bool {
+	return c.APIVersion == V2
+}
+
+func (c *ApplicationConfig) IsMultiCharts() bool {
+	return len(c.SubCharts) > 1
+}
+
+func (c *ApplicationConfig) HasClusterSharedCharts() bool {
+	for _, chart := range c.SubCharts {
+		if chart.Shared {
+			return true
+		}
+	}
+	return false
+}

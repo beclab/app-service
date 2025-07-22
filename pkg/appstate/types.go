@@ -2,12 +2,14 @@ package appstate
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"time"
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
+	"bytetrade.io/web3os/app-service/pkg/appinstaller/versioned"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -76,10 +78,11 @@ func (b *baseStatefulApp) updateStatus(ctx context.Context, am *appsv1.Applicati
 
 func (p *baseStatefulApp) forceDeleteApp(ctx context.Context) error {
 	token := p.manager.Status.Payload["token"]
-	appCfg := &appcfg.ApplicationConfig{
-		AppName:   p.manager.Spec.AppName,
-		Namespace: p.manager.Spec.AppNamespace,
-		OwnerName: p.manager.Spec.AppOwner,
+	var appCfg *appcfg.ApplicationConfig
+	err := json.Unmarshal([]byte(p.manager.Spec.Config), &appCfg)
+	if err != nil {
+		klog.Errorf("unmarshal to appConfig failed %v", err)
+		return err
 	}
 
 	kubeConfig, err := ctrl.GetConfig()
@@ -87,7 +90,7 @@ func (p *baseStatefulApp) forceDeleteApp(ctx context.Context) error {
 		klog.Errorf("get kube config failed %v", err)
 		return err
 	}
-	ops, err := appinstaller.NewHelmOps(ctx, kubeConfig, appCfg, token, appinstaller.Opt{})
+	ops, err := versioned.NewHelmOps(ctx, kubeConfig, appCfg, token, appinstaller.Opt{})
 	if err != nil {
 		klog.Errorf("make helm ops failed %v", err)
 		return err

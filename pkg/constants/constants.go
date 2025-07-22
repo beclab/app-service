@@ -27,10 +27,12 @@ const (
 	ApplicationPolicies           = "applications.app.bytetrade.io/policies"
 	ApplicationMobileSupported    = "applications.app.bytetrade.io/mobile_supported"
 	ApplicationClusterDep         = "applications.app.bytetrade.io/need_cluster_scoped_app"
+	ApplicationGroupClusterDep    = "applications.app.bytetrade.io/need_cluster_scoped_group"
 	UserContextAttribute          = "username"
 	KubeSphereClientAttribute     = "ksclient"
 	MarketSource                  = "X-Market-Source"
 	MarketUser                    = "X-Market-User"
+	ApplicationInstallUserLabel   = "applications.app.bytetrade.io/install_user"
 
 	InstanceIDLabel         = "workflows.argoproj.io/controller-instanceid"
 	WorkflowOwnerLabel      = "workflows.app.bytetrade.io/owner"

@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -169,34 +170,26 @@ func (r *SecurityReconciler) Reconcile(rootCtx context.Context, req ctrl.Request
 func (r *SecurityReconciler) reconcileNamespaceLabels(ctx context.Context, ns *corev1.Namespace) error {
 	logger := ctx.Value(loggerKey).(logr.Logger)
 	updated := false
+	if ns.Labels == nil {
+		ns.Labels = make(map[string]string)
+	}
+
 	if security.IsOSSystemNamespace(ns.Name) ||
 		security.IsUnderLayerNamespace(ns.Name) ||
 		security.IsOSGpuNamespace(ns.Name) {
 		// make underlay namespaces can access other namespaces' network
 		// especially for prometheus exporters
-		if ns.Labels == nil {
-			ns.Labels = make(map[string]string)
-		}
-
 		if label, ok := ns.Labels[security.NamespaceTypeLabel]; !ok || label != security.System {
 			ns.Labels[security.NamespaceTypeLabel] = security.System
 			updated = true
 		}
 	} else if security.IsOSNetworkNamespace(ns.Name) {
 		// make os network namespace can access other namespaces' network
-		if ns.Labels == nil {
-			ns.Labels = make(map[string]string)
-		}
-
 		if label, ok := ns.Labels[security.NamespaceTypeLabel]; !ok || label != security.Network {
 			ns.Labels[security.NamespaceTypeLabel] = security.Network
 			updated = true
 		}
 	} else if ok, owner := security.IsUserInternalNamespaces(ns.Name); ok {
-		if ns.Labels == nil {
-			ns.Labels = make(map[string]string)
-		}
-
 		if label, ok := ns.Labels[security.NamespaceTypeLabel]; !ok || label != security.Internal {
 			ns.Labels[security.NamespaceTypeLabel] = security.Internal
 			updated = true
@@ -207,21 +200,19 @@ func (r *SecurityReconciler) reconcileNamespaceLabels(ctx context.Context, ns *c
 			updated = true
 		}
 	} else {
-		owner, internal, system, err := r.findOwnerOfNamespace(ctx, ns)
+		owner, internal, system, shared, err := r.findOwnerOfNamespace(ctx, ns)
 		if err != nil {
+			klog.Errorf("Failed to find owner of namespace %s: %v", ns.Name, err)
 			return err
 		}
 
+		logger.Info("find owner of namespace", "namespace", ns.Name, "owner", owner, "internal", internal, "system", system, "shared", shared)
+
 		if owner != "" {
-			if ns.Labels == nil {
-				ns.Labels = make(map[string]string)
-			}
 
 			if label, ok := ns.Labels[security.NamespaceOwnerLabel]; !ok || label != owner {
 				ns.Labels[security.NamespaceOwnerLabel] = owner
 				switch {
-				case system:
-					ns.Labels[security.NamespaceTypeLabel] = security.System
 				case internal:
 					ns.Labels[security.NamespaceTypeLabel] = security.Internal
 				}
@@ -231,6 +222,22 @@ func (r *SecurityReconciler) reconcileNamespaceLabels(ctx context.Context, ns *c
 			// remove owner label
 			if _, ok := ns.Labels[security.NamespaceOwnerLabel]; ok {
 				delete(ns.Labels, security.NamespaceOwnerLabel)
+				updated = true
+			}
+
+			if system {
+				ns.Labels[security.NamespaceTypeLabel] = security.System
+			}
+		}
+
+		if shared {
+			if label, ok := ns.Labels[security.NamespaceSharedLabel]; !ok || label != "true" {
+				ns.Labels[security.NamespaceSharedLabel] = "true"
+				updated = true
+			}
+		} else {
+			if _, ok := ns.Labels[security.NamespaceSharedLabel]; ok {
+				delete(ns.Labels, security.NamespaceSharedLabel)
 				updated = true
 			}
 		}
@@ -369,6 +376,20 @@ func (r *SecurityReconciler) reconcileNetworkPolicy(ctx context.Context, ns *cor
 					if appRefs, ok := depApp.Spec.Settings["clusterAppRef"]; ok {
 
 						for _, app := range strings.Split(appRefs, ",") {
+							if strings.HasSuffix(app, ".*") {
+								// it's a app group
+								group := strings.TrimSuffix(app, ".*")
+								np.Spec.Ingress[0].From = append(np.Spec.Ingress[0].From, netv1.NetworkPolicyPeer{
+									NamespaceSelector: &metav1.LabelSelector{
+										MatchLabels: map[string]string{
+											constants.ApplicationGroupClusterDep: group,
+										},
+									},
+								})
+
+								continue
+							}
+
 							np.Spec.Ingress[0].From = append(np.Spec.Ingress[0].From, netv1.NetworkPolicyPeer{
 								NamespaceSelector: &metav1.LabelSelector{
 									MatchLabels: map[string]string{
@@ -381,6 +402,66 @@ func (r *SecurityReconciler) reconcileNetworkPolicy(ctx context.Context, ns *cor
 				}
 
 			}
+		} else if shared, ok := ns.Labels[security.NamespaceSharedLabel]; ok && shared != "false" {
+			// shared namespace networkpolicy
+			npName = "shared-np"
+			networkPolicy = security.NPSharedSpace.DeepCopy()
+			npFix = func(np *netv1.NetworkPolicy) {
+				logger.Info("Update network policy", "name", npName)
+				// get app name from np namespace
+				sharedRefAppName := ns.Labels[constants.ApplicationNameLabel]
+				if sharedRefAppName == "" {
+					logger.Info("No application name label found in shared namespace, skip adding app ref")
+					return
+				}
+
+				namespace := fmt.Sprintf("%s-%s", sharedRefAppName, owner)
+				depApp, err := r.getAppInNs(namespace, owner)
+				if err != nil {
+					logger.Info("get app info ", "name", namespace, "err", err, "ignore to add app ref", owner)
+				} else if depApp != nil {
+					//add app himself to the network policy by default
+					np.Spec.Ingress[0].From = append(np.Spec.Ingress[0].From, netv1.NetworkPolicyPeer{
+						NamespaceSelector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								constants.ApplicationClusterDep: sharedRefAppName,
+							},
+						},
+					})
+
+					if appRefs, ok := depApp.Spec.Settings["clusterAppRef"]; ok {
+
+						for _, app := range strings.Split(appRefs, ",") {
+							if app == sharedRefAppName {
+								continue
+							}
+
+							if strings.HasSuffix(app, ".*") {
+								// it's a app group
+								group := strings.TrimSuffix(app, ".*")
+								np.Spec.Ingress[0].From = append(np.Spec.Ingress[0].From, netv1.NetworkPolicyPeer{
+									NamespaceSelector: &metav1.LabelSelector{
+										MatchLabels: map[string]string{
+											constants.ApplicationGroupClusterDep: group,
+										},
+									},
+								})
+
+								continue
+							}
+
+							np.Spec.Ingress[0].From = append(np.Spec.Ingress[0].From, netv1.NetworkPolicyPeer{
+								NamespaceSelector: &metav1.LabelSelector{
+									MatchLabels: map[string]string{
+										constants.ApplicationClusterDep: app,
+									},
+								},
+							})
+						}
+					}
+				}
+			} // end of func npFix
+
 		} else {
 			npName = "others-np"
 			networkPolicy = security.NPDenyAll.DeepCopy()
@@ -449,16 +530,15 @@ func (r *SecurityReconciler) reconcileNetworkPolicy(ctx context.Context, ns *cor
 	return nil
 }
 
-func (r *SecurityReconciler) findOwnerOfNamespace(ctx context.Context, ns *corev1.Namespace) (owner string, internal, system bool, err error) {
-	var deployemnts appsv1.DeploymentList
-
-	appIsInternal := func(labels map[string]string, owner string) (internal, system bool, err error) {
+func (r *SecurityReconciler) findOwnerOfNamespace(ctx context.Context, ns *corev1.Namespace) (owner string, internal, system, shared bool, err error) {
+	appIsInternal := func(labels map[string]string, owner string) (internal, system, shared bool, err error) {
 		appName, ok := labels[constants.ApplicationNameLabel]
 		if ok && appName != "" {
-			mgr, err := r.getAppMgrInNs(ns.Name, owner)
+			appNamespace := fmt.Sprintf("%s-%s", appName, owner)
+			mgr, err := r.getAppMgrInNs(appNamespace, owner)
 			if err != nil {
-				r.Logger.Error(err, "Failed to get app in namespace", "namespace", ns.Name, "owner", owner)
-				return false, false, err
+				r.Logger.Error(err, "Failed to get app mgr in namespace", "namespace", ns.Name, "owner", owner)
+				return false, false, false, err
 			}
 
 			if mgr != nil {
@@ -466,31 +546,38 @@ func (r *SecurityReconciler) findOwnerOfNamespace(ctx context.Context, ns *corev
 				err = mgr.GetAppConfig(&cfg)
 				if err != nil {
 					r.Logger.Error(err, "Failed to get app config for app", "app", appName)
-					return false, false, err
+					return false, false, false, err
 				}
 
 				system = cfg.AppScope.ClusterScoped && cfg.AppScope.SystemService
-				if system && cfg.APIVersion == appcfg.V2 {
-					// V2: if the namespace is not cluster scoped, it cannot be considered as system app
-					for _, chart := range cfg.SubCharts {
-						if !chart.Shared {
-							chartNs := fmt.Sprintf("%s-%s", chart.Name, owner)
-							if chartNs != ns.Name {
+				shared := false
+				for _, chart := range cfg.SubCharts {
+					if chart.Namespace(owner) == ns.Name {
+						if cfg.APIVersion == appcfg.V2 {
+							if !chart.Shared {
+								// V2: if the namespace is not cluster scoped, it cannot be considered as system app
 								system = false
+							} else {
+								shared = true
 							}
-							break
 						}
+
+						break
 					}
 				}
 
-				return cfg.Internal, system, nil
-			}
+				return cfg.Internal, system, shared, nil
+			} // end of mgr != nil
+
+			klog.Infof("App manager not found in namespace %s for owner %s", appNamespace, owner)
 		}
 
-		return false, false, nil
+		return false, false, false, nil
 	}
 
 	// get deployments installed by app installer
+	var deployemnts appsv1.DeploymentList
+
 	if err := r.List(ctx, &deployemnts, client.InNamespace(ns.Name)); err == nil {
 		for _, d := range deployemnts.Items {
 			if d.GetLabels() == nil {
@@ -499,11 +586,11 @@ func (r *SecurityReconciler) findOwnerOfNamespace(ctx context.Context, ns *corev
 
 			owner, ok := d.GetLabels()[constants.ApplicationOwnerLabel]
 			if ok && owner != "" {
-				runAsInternal, system, err := appIsInternal(d.GetLabels(), owner)
+				runAsInternal, system, shared, err := appIsInternal(d.GetLabels(), owner)
 				if err != nil {
-					return "", false, false, err
+					return "", false, false, false, err
 				}
-				return owner, runAsInternal, system, nil
+				return owner, runAsInternal, system, shared, nil
 			}
 		} // end loop deployment.Items
 	}
@@ -518,11 +605,11 @@ func (r *SecurityReconciler) findOwnerOfNamespace(ctx context.Context, ns *corev
 
 			owner, ok := d.GetLabels()[constants.ApplicationOwnerLabel]
 			if ok && owner != "" {
-				runAsInternal, system, err := appIsInternal(d.GetLabels(), owner)
+				runAsInternal, system, shared, err := appIsInternal(d.GetLabels(), owner)
 				if err != nil {
-					return "", false, false, err
+					return "", false, false, false, err
 				}
-				return owner, runAsInternal, system, nil
+				return owner, runAsInternal, system, shared, nil
 			}
 		} // end loop sts.Items
 	}
@@ -542,16 +629,39 @@ func (r *SecurityReconciler) findOwnerOfNamespace(ctx context.Context, ns *corev
 
 			owner, ok := w.GetLabels()[constants.WorkflowOwnerLabel]
 			if ok && owner != "" {
-				runAsInternal, system, err := appIsInternal(w.GetLabels(), owner)
+				runAsInternal, system, shared, err := appIsInternal(w.GetLabels(), owner)
 				if err != nil {
-					return "", false, false, err
+					return "", false, false, false, err
 				}
-				return owner, runAsInternal, system, nil
+				return owner, runAsInternal, system, shared, nil
 			}
 		}
 	}
 
-	return "", false, false, nil
+	klog.Infof("No owner found in workload for namespace %s", ns.Name)
+	if appName, ok := ns.Labels[constants.ApplicationNameLabel]; ok && appName != "" {
+		// if the namespace is labeled with application name,
+		// find the application manager from the one of user
+		var appMgrs v1alpha1.ApplicationManagerList
+		if err := r.List(ctx, &appMgrs); err == nil {
+			for _, appMgr := range appMgrs.Items {
+				if appMgr.Spec.AppName == appName {
+					owner := appMgr.Spec.AppOwner
+					runAsInternal, system, shared, err := appIsInternal(ns.Labels, owner)
+					if err != nil {
+						klog.Errorf("Failed to get app manager %s in namespace %s: %v", appMgr.Name, ns.Name, err)
+						return "", false, false, false, err
+					}
+
+					// should not return the owner, it should be the shared namespace
+					return "", runAsInternal, system, shared, nil
+				}
+			}
+		}
+	}
+
+	klog.Infof("No owner found in namespace %s", ns.Name)
+	return "", false, false, false, nil
 }
 
 func (r *SecurityReconciler) namespaceMustAdd(networkPolicy *netv1.NetworkPolicy, ns *corev1.Namespace) bool {

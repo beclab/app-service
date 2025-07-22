@@ -2,12 +2,14 @@ package appstate
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
+	"bytetrade.io/web3os/app-service/pkg/appinstaller/versioned"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
@@ -118,22 +120,29 @@ func (p *UninstallingApp) waitForDeleteNamespace(ctx context.Context) error {
 func (p *UninstallingApp) exec(ctx context.Context) error {
 	var err error
 	token := p.manager.Status.Payload["token"]
-	appCfg := &appcfg.ApplicationConfig{
-		AppName:   p.manager.Spec.AppName,
-		Namespace: p.manager.Spec.AppNamespace,
-		OwnerName: p.manager.Spec.AppOwner,
+	uninstallAll := p.manager.Status.Payload["uninstallAll"]
+	var appCfg *appcfg.ApplicationConfig
+	err = json.Unmarshal([]byte(p.manager.Spec.Config), &appCfg)
+	if err != nil {
+		klog.Errorf("unmarshal to appConfig failed %v", err)
+		return err
 	}
 	kubeConfig, err := ctrl.GetConfig()
 	if err != nil {
 		klog.Errorf("get kube config failed %v", err)
 		return err
 	}
-	ops, err := appinstaller.NewHelmOps(ctx, kubeConfig, appCfg, token, appinstaller.Opt{})
+	ops, err := versioned.NewHelmOps(ctx, kubeConfig, appCfg, token, appinstaller.Opt{})
 	if err != nil {
 		klog.Errorf("make helm ops failed %v", err)
 		return err
 	}
-	err = ops.Uninstall()
+	if uninstallAll == "true" {
+		klog.Infof("uninstall all related resources for app %s", p.manager.Spec.AppName)
+		err = ops.UninstallAll()
+	} else {
+		err = ops.Uninstall()
+	}
 	if err != nil {
 		klog.Errorf("uninstall app %s failed %v", p.manager.Spec.AppName, err)
 		return err

@@ -8,11 +8,12 @@ import (
 )
 
 const (
-	NamespaceTypeLabel  = "bytetrade.io/ns-type"
-	NamespaceOwnerLabel = "bytetrade.io/ns-owner"
-	System              = "system"
-	Network             = "network"
-	Internal            = "user-internal"
+	NamespaceTypeLabel   = "bytetrade.io/ns-type"
+	NamespaceOwnerLabel  = "bytetrade.io/ns-owner"
+	NamespaceSharedLabel = "bytetrade.io/ns-shared"
+	System               = "system"
+	Network              = "network"
+	Internal             = "user-internal"
 )
 
 var (
@@ -250,6 +251,34 @@ var (
 			},
 		},
 	} // end NPAppSpace
+
+	// NPSharedSpace is a network policy template for shared app namespace.
+	NPSharedSpace = netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{},
+			Ingress: []netv1.NetworkPolicyIngressRule{
+				{
+					From: []netv1.NetworkPolicyPeer{
+						{
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									NamespaceTypeLabel: Internal,
+								},
+							},
+						},
+						{
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									NamespaceTypeLabel: System,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	} // end NPSharedSpace
 )
 
 // NodeTunnelRule returns node tunnel rule.

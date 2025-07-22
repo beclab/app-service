@@ -9,6 +9,7 @@ import (
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
+	"bytetrade.io/web3os/app-service/pkg/appinstaller/versioned"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -59,7 +60,7 @@ func (p *InitializingApp) Exec(ctx context.Context) (StatefulInProgressApp, erro
 
 	opCtx, cancel := context.WithCancel(context.Background())
 
-	ops, err := appinstaller.NewHelmOps(opCtx, kubeConfig, appCfg, token, appinstaller.Opt{Source: p.manager.Spec.Source})
+	ops, err := versioned.NewHelmOps(opCtx, kubeConfig, appCfg, token, appinstaller.Opt{Source: p.manager.Spec.Source})
 	if err != nil {
 		klog.Errorf("make helm ops failed %v", err)
 		cancel()

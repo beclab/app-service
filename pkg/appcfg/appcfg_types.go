@@ -1,6 +1,9 @@
 package appcfg
 
 import (
+	"fmt"
+	"path/filepath"
+
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/tapr"
 )
@@ -148,4 +151,15 @@ type OIDC struct {
 type Chart struct {
 	Name   string `yaml:"name" json:"name"`
 	Shared bool   `yaml:"shared" json:"shared"`
+}
+
+func (c *Chart) Namespace(owner string) string {
+	if c.Shared {
+		return fmt.Sprintf("%s-%s", c.Name, "shared")
+	}
+	return fmt.Sprintf("%s-%s", c.Name, owner)
+}
+
+func (c *Chart) ChartPath(appName string) string {
+	return AppChartPath(filepath.Join(appName, c.Name))
 }

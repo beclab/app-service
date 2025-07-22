@@ -58,6 +58,7 @@ func UpdateWorkflowInNamespace(ctx context.Context, kubeConfig *rest.Config, wor
 			labels := obj.GetLabels()
 			labels[constants.InstanceIDLabel] = instanceID
 			labels[constants.WorkflowOwnerLabel] = owner
+			labels[constants.ApplicationClusterDep] = workflowName
 			obj.SetLabels(labels)
 
 			_, err := client.Resource(gvr).Namespace(namespace).Update(ctx, &obj, metav1.UpdateOptions{})
@@ -77,6 +78,7 @@ func UpdateWorkflowInNamespace(ctx context.Context, kubeConfig *rest.Config, wor
 
 		ns.Labels[constants.WorkflowNameLabel] = workflowName
 		ns.Labels[constants.ApplicationClusterDep] = workflowName
+		ns.Labels[constants.ApplicationGroupClusterDep] = "workflow"
 		annotations := ns.Annotations
 		if annotations == nil {
 			annotations = make(map[string]string)

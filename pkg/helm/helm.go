@@ -71,6 +71,7 @@ func InstallCharts(ctx context.Context, actionConfig *action.Configuration, sett
 		// 		ctrl.Log.Error(errDel, "delete the app error", "appname", hin.app.AppName, "namespace", hin.app.Namespace)
 		// 	}
 		// }
+		ctrl.Log.Error(err, "helm install error", "appName", appName, "chartsName", chartsName, "namespace", namespace)
 		return err
 	}
 	logReleaseInfo(r)

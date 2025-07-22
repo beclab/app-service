@@ -45,7 +45,7 @@ func actionConfig() (*action.Configuration, error) {
 		KubeClient:     &kubefake.FailingKubeClient{PrintingKubeClient: kubefake.PrintingKubeClient{Out: ioutil.Discard}},
 		Capabilities:   chartutil.DefaultCapabilities,
 		RegistryClient: registryClient,
-		Log:            func(s string, i ...interface{}) {},
+		Log:            func(s string, i ...interface{}) { klog.Infof(s, i...) },
 	}
 	return &configuration, nil
 }
@@ -64,15 +64,16 @@ func InitAction() (*action.Install, error) {
 }
 
 func getChart(instAction *action.Install, filepath string) (*chart.Chart, error) {
-	cp, err := instAction.ChartPathOptions.LocateChart(filepath, &cli.EnvSettings{})
+	settings := cli.New()
+	cp, err := instAction.ChartPathOptions.LocateChart(filepath, settings)
 	if err != nil {
-		klog.Infof("locate chart error: %v", err)
+		klog.Errorf("locate chart [%s] error: %v", filepath, err)
 		return nil, err
 	}
-	p := getter.All(&cli.EnvSettings{})
+	p := getter.All(settings)
 	chartRequested, err := helmLoader.Load(cp)
 	if err != nil {
-		klog.Infof("Load err=%v", err)
+		klog.Errorf("Load err=%v", err)
 		return nil, err
 	}
 	if req := chartRequested.Metadata.Dependencies; req != nil {
