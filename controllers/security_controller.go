@@ -10,7 +10,6 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/security"
 	"bytetrade.io/web3os/app-service/pkg/utils"
-	"bytetrade.io/web3os/app-service/pkg/wrapper"
 
 	"github.com/go-logr/logr"
 	"github.com/thoas/go-funk"
@@ -416,10 +415,10 @@ func (r *SecurityReconciler) reconcileNetworkPolicy(ctx context.Context, ns *cor
 					return
 				}
 
-				depApp, err := r.tryToFindDependencyAppOfSharedNamespace(ctx, ns, sharedRefAppName)
+				depAppMgr, err := r.tryToFindDependencyAppMgrOfSharedNamespace(ctx, ns, sharedRefAppName)
 				if err != nil {
-					logger.Info("get app info ", "name", sharedRefAppName, "err", err, "ignore to add app ref", owner)
-				} else if depApp != nil {
+					logger.Info("get app mgr info ", "name", sharedRefAppName, "err", err, "ignore to add app ref", owner)
+				} else if depAppMgr != nil {
 					//add app himself to the network policy by default
 					np.Spec.Ingress[0].From = append(np.Spec.Ingress[0].From, netv1.NetworkPolicyPeer{
 						NamespaceSelector: &metav1.LabelSelector{
@@ -429,37 +428,41 @@ func (r *SecurityReconciler) reconcileNetworkPolicy(ctx context.Context, ns *cor
 						},
 					})
 
-					if appRefs, ok := depApp.Spec.Settings["clusterAppRef"]; ok {
+					var appConfig appcfg.ApplicationConfig
+					if err := depAppMgr.GetAppConfig(&appConfig); err != nil {
+						logger.Error(err, "Failed to get app config for shared app", "app", sharedRefAppName)
+						return
+					}
 
-						for _, app := range strings.Split(appRefs, ",") {
-							if app == sharedRefAppName {
-								continue
-							}
+					for _, app := range appConfig.AppScope.AppRef {
+						if app == sharedRefAppName {
+							continue
+						}
 
-							if strings.HasSuffix(app, ".*") {
-								// it's a app group
-								group := strings.TrimSuffix(app, ".*")
-								np.Spec.Ingress[0].From = append(np.Spec.Ingress[0].From, netv1.NetworkPolicyPeer{
-									NamespaceSelector: &metav1.LabelSelector{
-										MatchLabels: map[string]string{
-											constants.ApplicationGroupClusterDep: group,
-										},
-									},
-								})
-
-								continue
-							}
-
+						if strings.HasSuffix(app, ".*") {
+							// it's a app group
+							group := strings.TrimSuffix(app, ".*")
 							np.Spec.Ingress[0].From = append(np.Spec.Ingress[0].From, netv1.NetworkPolicyPeer{
 								NamespaceSelector: &metav1.LabelSelector{
 									MatchLabels: map[string]string{
-										constants.ApplicationClusterDep: app,
+										constants.ApplicationGroupClusterDep: group,
 									},
 								},
 							})
+
+							continue
 						}
+
+						np.Spec.Ingress[0].From = append(np.Spec.Ingress[0].From, netv1.NetworkPolicyPeer{
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									constants.ApplicationClusterDep: app,
+								},
+							},
+						})
 					}
 				}
+
 			} // end of func npFix
 
 		} else {
@@ -664,12 +667,12 @@ func (r *SecurityReconciler) findOwnerOfNamespace(ctx context.Context, ns *corev
 	return "", false, false, false, nil
 }
 
-func (r *SecurityReconciler) tryToFindDependencyAppOfSharedNamespace(ctx context.Context, ns *corev1.Namespace, sharedRefAppName string) (*v1alpha1.Application, error) {
+func (r *SecurityReconciler) tryToFindDependencyAppMgrOfSharedNamespace(ctx context.Context, ns *corev1.Namespace, sharedRefAppName string) (*v1alpha1.ApplicationManager, error) {
 	// try to find the dependency app in the namespace
 	owner := ns.Labels[constants.ApplicationInstallUserLabel]
 
 	namespace := fmt.Sprintf("%s-%s", sharedRefAppName, owner)
-	depApp, err := r.getAppInNs(namespace, owner)
+	depApp, err := r.getAppMgrInNs(namespace, owner)
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
 			klog.Info("dependency app not found in install user's app , try to find in other admin user, ", sharedRefAppName)
@@ -677,17 +680,6 @@ func (r *SecurityReconciler) tryToFindDependencyAppOfSharedNamespace(ctx context
 			if err := r.List(ctx, &appMgrs); err == nil {
 				for _, appMgr := range appMgrs.Items {
 					if appMgr.Spec.AppName == sharedRefAppName && appMgr.Spec.AppOwner != owner {
-						applictionManagerWrapper := wrapper.ApplicationManagerHelper{
-							Client:             r.Client,
-							ApplicationManager: &appMgr,
-						}
-
-						depApp, err = applictionManagerWrapper.GetApplication(ctx)
-						if err != nil {
-							klog.Error(err, "Failed to get application from application manager", "appName", sharedRefAppName, "appMgr", appMgr.Name)
-							return nil, err
-						}
-
 						return depApp, nil
 					}
 				} // end of loop appMgrs.Items
@@ -698,7 +690,7 @@ func (r *SecurityReconciler) tryToFindDependencyAppOfSharedNamespace(ctx context
 
 		} // end of if !apierrors.IsNotFound(err)
 
-		klog.Error("failed to get dependency app in namespace, ", namespace, " err: ", err)
+		klog.Error("failed to get dependency app manager in namespace, ", namespace, " err: ", err)
 	} // end of if err != nil
 
 	return depApp, nil
