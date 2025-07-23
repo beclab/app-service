@@ -104,7 +104,7 @@ func LoadStatefulApp(ctx context.Context, appmgr *ApplicationManagerController, 
 		case appv1alpha1.DownloadingCanceling:
 			return appstate.NewDownloadingCancelingApp(appmgr, &am)
 		case appv1alpha1.InstallingCanceling:
-			return appstate.NewInstallingCancelingApp(appmgr, &am, 10*time.Minute)
+			return appstate.NewInstallingCancelingApp(appmgr, &am, 30*time.Minute)
 		case appv1alpha1.InitializingCanceling:
 			return appstate.NewInitializingCancelingApp(appmgr, &am)
 		case appv1alpha1.ResumingCanceling:

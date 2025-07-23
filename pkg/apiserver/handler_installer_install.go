@@ -390,11 +390,12 @@ func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opI
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 			Annotations: map[string]string{
-				api.AppTokenKey:         h.token,
-				api.AppRepoURLKey:       h.insReq.RepoURL,
-				api.AppVersionKey:       h.appConfig.Version,
-				api.AppMarketSourceKey:  marketSource,
-				api.AppInstallSourceKey: "app-service",
+				api.AppTokenKey:                 h.token,
+				api.AppRepoURLKey:               h.insReq.RepoURL,
+				api.AppVersionKey:               h.appConfig.Version,
+				api.AppMarketSourceKey:          marketSource,
+				api.AppInstallSourceKey:         "app-service",
+				constants.ApplicationTitleLabel: h.appConfig.Title,
 			},
 		},
 		Spec: v1alpha1.ApplicationManagerSpec{
@@ -422,11 +423,14 @@ func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opI
 		// update Spec.Config
 		patchData := map[string]interface{}{
 			"metadata": map[string]interface{}{
-				api.AppTokenKey:         h.token,
-				api.AppRepoURLKey:       h.insReq.RepoURL,
-				api.AppVersionKey:       h.appConfig.Version,
-				api.AppMarketSourceKey:  marketSource,
-				api.AppInstallSourceKey: "app-service",
+				"annotations": map[string]interface{}{
+					api.AppTokenKey:                 h.token,
+					api.AppRepoURLKey:               h.insReq.RepoURL,
+					api.AppVersionKey:               h.appConfig.Version,
+					api.AppMarketSourceKey:          marketSource,
+					api.AppInstallSourceKey:         "app-service",
+					constants.ApplicationTitleLabel: h.appConfig.Title,
+				},
 			},
 			"spec": map[string]interface{}{
 				"opType": v1alpha1.InstallOp,

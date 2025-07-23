@@ -414,6 +414,9 @@ func (h *Handler) apps(req *restful.Request, resp *restful.Response) {
 				Owner:     owner,
 				Entrances: appconfig.Entrances,
 				Icon:      appconfig.Icon,
+				Settings: map[string]string{
+					"title": am.Annotations[constants.ApplicationTitleLabel],
+				},
 			},
 			Status: v1alpha1.ApplicationStatus{
 				State:      am.Status.State.String(),
@@ -734,6 +737,9 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 				Owner:     am.Spec.AppOwner,
 				Entrances: appconfig.Entrances,
 				Icon:      appconfig.Icon,
+				Settings: map[string]string{
+					"title": am.Annotations[constants.ApplicationTitleLabel],
+				},
 			},
 			Status: v1alpha1.ApplicationStatus{
 				State:      am.Status.State.String(),
