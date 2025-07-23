@@ -24,10 +24,12 @@ func (h *Handler) uninstall(req *restful.Request, resp *restful.Response) {
 	token := req.HeaderParameter(constants.AuthorizationTokenKey)
 
 	request := &api.UninstallRequest{}
-	err := req.ReadEntity(request)
-	if err != nil {
-		api.HandleBadRequest(resp, req, err)
-		return
+	if req.Request.ContentLength > 0 {
+		err := req.ReadEntity(request)
+		if err != nil {
+			api.HandleBadRequest(resp, req, err)
+			return
+		}
 	}
 
 	if userspace.IsSysApp(app) {
