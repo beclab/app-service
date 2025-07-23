@@ -1026,6 +1026,9 @@ func (h *Handler) applicationManagerInject(ctx context.Context, req *admissionv1
 		Allowed: true,
 		UID:     req.UID,
 	}
+	if newAm.Spec.Type != v1alpha1.App {
+		return resp, nil
+	}
 	if newAm.Annotations[api.AppInstallSourceKey] == "app-service" {
 		return resp, nil
 	}
@@ -1138,6 +1141,9 @@ func (h *Handler) validateApplicationManagerOperation(ctx context.Context, newAm
 	}
 	if err := apputils.CheckChartSource(api.AppSource(newAm.Spec.Source)); err != nil {
 		return nil, err
+	}
+	if newAm.Annotations == nil {
+		newAm.Annotations = make(map[string]string)
 	}
 	if newAm.Spec.Source == "market" {
 		newAm.Annotations[api.AppMarketSourceKey] = "Official-Market-Sources"
