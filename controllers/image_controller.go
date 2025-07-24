@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"sync"
+	"time"
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/images"
@@ -137,7 +138,13 @@ func (r *ImageManagerController) reconcile(ctx context.Context, instance *appv1a
 			return err
 		}
 	}
-	err = r.download(ctx, cur.Spec.Refs, images.PullOptions{AppName: instance.Spec.AppName, OwnerName: instance.Spec.AppOwner, AppNamespace: instance.Spec.AppNamespace})
+
+	err = r.download(ctx, cur.Spec.Refs,
+		images.PullOptions{
+			AppName:      instance.Spec.AppName,
+			OwnerName:    instance.Spec.AppOwner,
+			AppNamespace: instance.Spec.AppNamespace,
+		})
 	if err != nil {
 		klog.Infof("download failed err=%v", err)
 
@@ -151,13 +158,14 @@ func (r *ImageManagerController) reconcile(ctx context.Context, instance *appv1a
 		}
 		return err
 	}
+	time.Sleep(2 * time.Second)
 	err = r.updateStatus(context.TODO(), instance, "completed", "image download completed")
 	if err != nil {
 		klog.Infof("Failed to update status err=%v", err)
 		return err
 	}
 
-	klog.Infof("download image success")
+	klog.Infof("download app: %s image success", instance.Spec.AppName)
 	return nil
 }
 
@@ -229,23 +237,20 @@ func (r *ImageManagerController) updateStatus(ctx context.Context, im *appv1alph
 		imCopy.Status.StatusTime = &now
 		imCopy.Status.UpdateTime = &now
 
-		//if imCopy.Status.NodeDownloadStatus == nil {
-		//	imCopy.Status.NodeDownloadStatus = make(map[string]string)
-		//}
-		//imCopy.Status.NodeDownloadStatus[thisNode] = state
 		if state == "completed" {
-			if _, ok := imCopy.Status.Conditions[thisNode]; !ok {
-				if imCopy.Status.Conditions == nil {
-					imCopy.Status.Conditions = make(map[string]map[string]map[string]string)
+			for _, node := range imCopy.Spec.Nodes {
+				if node != thisNode {
+					continue
 				}
 				if imCopy.Status.Conditions[thisNode] == nil {
 					imCopy.Status.Conditions[thisNode] = make(map[string]map[string]string)
 				}
 				for _, ref := range imCopy.Spec.Refs {
-
-					imCopy.Status.Conditions[thisNode][ref.Name] = map[string]string{
-						"offset": "56782302",
-						"total":  "56782302",
+					if _, ok := imCopy.Status.Conditions[thisNode][ref.Name]; !ok {
+						imCopy.Status.Conditions[thisNode][ref.Name] = map[string]string{
+							"offset": "56782302",
+							"total":  "56782302",
+						}
 					}
 				}
 			}
@@ -271,6 +276,7 @@ func (r *ImageManagerController) updateStatus(ctx context.Context, im *appv1alph
 				return true
 			}
 			if checkAllCompleted() {
+				klog.Errorf("checkallcompleted............")
 				imCopy.Status.State = state
 			}
 
@@ -278,6 +284,7 @@ func (r *ImageManagerController) updateStatus(ctx context.Context, im *appv1alph
 
 		err = r.Status().Patch(ctx, imCopy, client.MergeFrom(im))
 		if err != nil {
+			klog.Errorf("failed to patch im %s status with state=%s %v", imCopy.Name, imCopy.Status.State, err)
 			return err
 		}
 		return nil

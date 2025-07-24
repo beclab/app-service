@@ -2,6 +2,7 @@ package images
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"math"
 	"strconv"
@@ -9,8 +10,10 @@ import (
 	"time"
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 
+	refdocker "github.com/containerd/containerd/reference/docker"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,6 +21,11 @@ import (
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+type Image struct {
+	Name string
+	Size int64
+}
 
 type ImageManager interface {
 	Create(ctx context.Context, am *appv1alpha1.ApplicationManager, refs []appv1alpha1.Ref) error
@@ -65,6 +73,9 @@ func (imc *ImageManagerClient) Create(ctx context.Context, am *appv1alpha1.Appli
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   am.Name,
 			Labels: labels,
+			Annotations: map[string]string{
+				constants.ApplicationImageLabel: am.Annotations[constants.ApplicationImageLabel],
+			},
 		},
 		Spec: appv1alpha1.ImageManagerSpec{
 			AppName:      am.Spec.AppName,
@@ -107,6 +118,15 @@ func (imc *ImageManagerClient) PollDownloadProgress(ctx context.Context, am *app
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 	var lastProgress float64
+	imageList := make([]Image, 0)
+	err := json.Unmarshal([]byte(am.Annotations[constants.ApplicationImageLabel]), &imageList)
+	if err != nil {
+		klog.Errorf("failed unmarshal to images %v", err)
+	}
+	for i, ref := range imageList {
+		name, _ := refdocker.ParseDockerRef(ref.Name)
+		imageList[i].Name = name.String()
+	}
 
 	for {
 		select {
@@ -126,14 +146,20 @@ func (imc *ImageManagerClient) PollDownloadProgress(ctx context.Context, am *app
 				offset int64
 				total  int64
 			}
-			maxImageSize := int64(50173680066)
+			maxImageSize := int64(5086840033)
 
 			nodeMap := make(map[string]*progress)
 			for _, nodeName := range im.Spec.Nodes {
 				for _, ref := range im.Spec.Refs {
 					t := im.Status.Conditions[nodeName][ref.Name]["total"]
 					if t == "" {
-						t = strconv.FormatInt(maxImageSize, 10)
+						imageSize := maxImageSize
+						info := findImageSize(imageList, ref.Name)
+						if info != nil {
+							klog.Infof("get image:%s size:%d", ref.Name, info.Size)
+							imageSize = info.Size
+						}
+						t = strconv.FormatInt(imageSize, 10)
 					}
 
 					total, _ := strconv.ParseInt(t, 10, 64)
@@ -153,11 +179,15 @@ func (imc *ImageManagerClient) PollDownloadProgress(ctx context.Context, am *app
 				}
 			}
 			ret := math.MaxFloat64
-			for _, p := range nodeMap {
+			for n, p := range nodeMap {
 				var nodeProgress float64
 				if p.total != 0 {
 					nodeProgress = float64(p.offset) / float64(p.total)
 				}
+				if len(nodeMap) > 1 {
+					klog.Infof("node: %s,app: %s, progress: %.2f", n, am.Spec.AppNamespace, nodeProgress)
+				}
+
 				if nodeProgress < ret {
 					ret = nodeProgress
 				}
@@ -189,4 +219,13 @@ func (imc *ImageManagerClient) updateProgress(ctx context.Context, am *appv1alph
 		return nil
 	}
 	return errors.New("under downloading")
+}
+
+func findImageSize(imageList []Image, ref string) *Image {
+	for _, v := range imageList {
+		if v.Name == ref {
+			return &v
+		}
+	}
+	return nil
 }

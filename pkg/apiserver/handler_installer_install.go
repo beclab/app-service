@@ -73,6 +73,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		api.HandleBadRequest(resp, req, err)
 		return
 	}
+	klog.Infof("insReq: images: %v", insReq.Images)
 	if insReq.Source != api.Market && insReq.Source != api.Custom && insReq.Source != api.DevBox {
 		api.HandleBadRequest(resp, req, fmt.Errorf("unsupported chart source: %s", insReq.Source))
 		return
@@ -386,6 +387,11 @@ func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opI
 	}
 	var a *v1alpha1.ApplicationManager
 	name, _ := apputils.FmtAppMgrName(h.app, h.owner, h.appConfig.Namespace)
+	images := make([]api.Image, 0)
+	if len(h.insReq.Images) != 0 {
+		images = h.insReq.Images
+	}
+	imagesStr, _ := json.Marshal(images)
 	appMgr := &v1alpha1.ApplicationManager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
@@ -396,6 +402,7 @@ func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opI
 				api.AppMarketSourceKey:          marketSource,
 				api.AppInstallSourceKey:         "app-service",
 				constants.ApplicationTitleLabel: h.appConfig.Title,
+				constants.ApplicationImageLabel: string(imagesStr),
 			},
 		},
 		Spec: v1alpha1.ApplicationManagerSpec{
