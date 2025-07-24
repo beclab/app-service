@@ -85,13 +85,11 @@ func createAppImage(ctx context.Context, ctrlClient client.Client, request *api.
 	}
 	var am v1alpha1.AppImage
 	err = ctrlClient.Get(ctx, types.NamespacedName{Name: request.Name}, &am)
-	klog.Infof("get ...... %v", err)
 	if err == nil {
 		if am.Status.State != "completed" && am.Status.State != "failed" {
 			return nil
 		}
 		err = ctrlClient.Delete(ctx, &am)
-		klog.Infof("get2 ...... %v", err)
 
 		if err != nil && !apierrors.IsNotFound(err) {
 			return err

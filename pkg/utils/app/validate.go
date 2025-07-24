@@ -37,7 +37,7 @@ import (
 )
 
 func CheckChartSource(source api.AppSource) error {
-	if source != api.Market && source != api.Custom && source != api.DevBox {
+	if source != api.Market && source != api.Custom && source != api.DevBox && source != api.System {
 		return fmt.Errorf("unsupported chart source: %s", source)
 	}
 	return nil

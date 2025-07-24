@@ -45,11 +45,11 @@ func (h *Handler) cancel(req *restful.Request, resp *restful.Response) {
 	}
 	var cancelState v1alpha1.ApplicationManagerState
 	switch state {
-	case v1alpha1.Pending:
+	case v1alpha1.Pending, v1alpha1.PendingCancelFailed:
 		cancelState = v1alpha1.PendingCanceling
-	case v1alpha1.Downloading:
+	case v1alpha1.Downloading, v1alpha1.DownloadingCancelFailed:
 		cancelState = v1alpha1.DownloadingCanceling
-	case v1alpha1.Installing:
+	case v1alpha1.Installing, v1alpha1.InstallingCancelFailed:
 		cancelState = v1alpha1.InstallingCanceling
 	case v1alpha1.Initializing:
 		cancelState = v1alpha1.InitializingCanceling

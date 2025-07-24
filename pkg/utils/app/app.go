@@ -207,6 +207,7 @@ func CreateSysAppMgr(app, owner string) error {
 			Name: fmt.Sprintf("%s-%s", appNamespace, app),
 		},
 		Spec: v1alpha1.ApplicationManagerSpec{
+			OpType:       v1alpha1.InstallOp,
 			AppName:      app,
 			AppNamespace: appNamespace,
 			AppOwner:     owner,
@@ -236,7 +237,7 @@ func CreateSysAppMgr(app, owner string) error {
 		StatusTime:   &now,
 	}
 	appMgrCopy.Status = status
-	_, err = client.AppV1alpha1().ApplicationManagers().UpdateStatus(context.TODO(), appMgrCopy, metav1.UpdateOptions{})
+	_, err = client.AppV1alpha1().ApplicationManagers().Update(context.TODO(), appMgrCopy, metav1.UpdateOptions{})
 	return err
 }
 

@@ -120,6 +120,12 @@ type InstallRequest struct {
 	RepoURL string    `json:"repoUrl"`
 	CfgURL  string    `json:"cfgUrl"`
 	Source  AppSource `json:"source"`
+	Images  []Image   `json:"images"`
+}
+
+type Image struct {
+	Name string `json:"name"`
+	Size int64  `json:"size"`
 }
 
 // UninstallRequest represents a request to uninstall an application.

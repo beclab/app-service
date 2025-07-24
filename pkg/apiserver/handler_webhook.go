@@ -1029,6 +1029,9 @@ func (h *Handler) applicationManagerInject(ctx context.Context, req *admissionv1
 	if newAm.Spec.Type != v1alpha1.App {
 		return resp, nil
 	}
+	if userspace.IsSysApp(newAm.Spec.AppName) {
+		return resp, nil
+	}
 	if newAm.Annotations[api.AppInstallSourceKey] == "app-service" {
 		return resp, nil
 	}
@@ -1037,7 +1040,7 @@ func (h *Handler) applicationManagerInject(ctx context.Context, req *admissionv1
 	}
 
 	if !appstate.IsOperationAllowed(oldAm.Status.State, newAm.Spec.OpType) {
-		return h.sidecarWebhook.AdmissionError(req.UID, fmt.Errorf("operation %s is now allowed for state: %s", newAm.Spec.OpType, newAm.Status.State)), nil
+		return h.sidecarWebhook.AdmissionError(req.UID, fmt.Errorf("operation %s is not allowed for state: %s", newAm.Spec.OpType, newAm.Status.State)), nil
 	}
 
 	appConfig, err := h.validateApplicationManagerOperation(ctx, &newAm, &oldAm)
@@ -1107,11 +1110,11 @@ func (h *Handler) makePatchesForApplicationManager(ctx context.Context, req *adm
 func getCancelState(state v1alpha1.ApplicationManagerState) v1alpha1.ApplicationManagerState {
 	var cancelState v1alpha1.ApplicationManagerState
 	switch state {
-	case v1alpha1.Pending:
+	case v1alpha1.Pending, v1alpha1.PendingCancelFailed:
 		cancelState = v1alpha1.PendingCanceling
-	case v1alpha1.Downloading:
+	case v1alpha1.Downloading, v1alpha1.DownloadingCancelFailed:
 		cancelState = v1alpha1.DownloadingCanceling
-	case v1alpha1.Installing:
+	case v1alpha1.Installing, v1alpha1.InstallingCancelFailed:
 		cancelState = v1alpha1.InstallingCanceling
 	case v1alpha1.Initializing:
 		cancelState = v1alpha1.InitializingCanceling

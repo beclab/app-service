@@ -18,6 +18,7 @@ const (
 	ApplicationPortsKey           = "applications.app.bytetrade.io/ports"
 	ApplicationSystemServiceLabel = "applications.app.bytetrade.io/system_service"
 	ApplicationTitleLabel         = "applications.app.bytetrade.io/title"
+	ApplicationImageLabel         = "applications.app.bytetrade.io/images"
 	ApplicationTargetLabel        = "applications.app.bytetrade.io/target"
 	ApplicationRunAsUserLabel     = "applications.apps.bytetrade.io/runasuser"
 	ApplicationVersionLabel       = "applications.app.bytetrade.io/version"
