@@ -181,11 +181,7 @@ func (h *Handler) setupAppEntranceDomain(req *restful.Request, resp *restful.Res
 	if ok {
 		// upgrade app set values
 		owner := req.Attribute(constants.UserContextAttribute).(string)
-		repoURL, err := getRepoURL(client, owner)
-		if err != nil {
-			api.HandleError(resp, req, err)
-			return
-		}
+		repoURL := getRepoURL()
 		actionConfig, cliSttings, err := helm.InitConfig(h.kubeConfig, app.Spec.Namespace)
 		if err != nil {
 			api.HandleError(resp, req, err)
@@ -269,16 +265,9 @@ func (h *Handler) getAppSettings(req *restful.Request, resp *restful.Response) {
 	resp.WriteAsJson(app.Spec.Settings)
 }
 
-func getRepoURL(client *clientset.ClientSet, owner string) (string, error) {
-
-	namespace := fmt.Sprintf("user-space-%s", owner)
-	ep, err := client.KubeClient.Kubernetes().CoreV1().Endpoints(namespace).
-		Get(context.TODO(), "appstore-service", metav1.GetOptions{})
-	if err != nil {
-		return "", err
-	}
-	repoURL := fmt.Sprintf("http://%s:82/charts", ep.Subsets[0].Addresses[0].IP)
-	return repoURL, nil
+func getRepoURL() string {
+	repoURL := "http://chart-repo-service.os-framework:82/"
+	return repoURL
 }
 
 func (h *Handler) setupAppAuthLevel(req *restful.Request, resp *restful.Response) {
