@@ -459,7 +459,7 @@ func (h *Handler) apps(req *restful.Request, resp *restful.Response) {
 
 	// sort by create time desc
 	sort.Slice(filteredApps, func(i, j int) bool {
-		return filteredApps[j].CreationTimestamp.Before(&filteredApps[i].CreationTimestamp)
+		return filteredApps[i].CreationTimestamp.Before(&filteredApps[j].CreationTimestamp)
 	})
 
 	resp.WriteAsJson(filteredApps)
@@ -780,7 +780,6 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 		}
 		app.Spec.Entrances = entrances
 		if v, ok := appsEntranceMap[app.Name]; ok {
-			klog.Infof("app: %s, appEntrance: %#v", app.Name, v.Status.EntranceStatuses)
 			app.Status.EntranceStatuses = v.Status.EntranceStatuses
 		}
 		filteredApps = append(filteredApps, *app)
