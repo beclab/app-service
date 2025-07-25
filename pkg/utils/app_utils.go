@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
@@ -77,4 +78,13 @@ func GetClient() (*versioned.Clientset, error) {
 		return nil, err
 	}
 	return client, nil
+}
+
+func EnvOrDefault(name, def string) string {
+	v := os.Getenv(name)
+
+	if v == "" && def != "" {
+		return def
+	}
+	return v
 }
