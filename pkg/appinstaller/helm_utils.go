@@ -209,6 +209,7 @@ func (h *HelmOps) SetValues() (values map[string]interface{}, err error) {
 	values["rootPath"] = rootPath
 
 	values["downloadCdnURL"] = os.Getenv("DOWNLOAD_CDN_URL")
+	values["fs_type"] = utils.EnvOrDefault("OLARES_FS_TYPE", "fs")
 
 	return values, err
 }
