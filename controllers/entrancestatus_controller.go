@@ -91,7 +91,7 @@ func (r *EntranceStatusManagerController) Reconcile(ctx context.Context, req ctr
 		}
 		return ctrl.Result{}, err
 	}
-	err = r.updateEntranceStatus(&pod)
+	err = r.updateEntranceStatus(ctx, &pod)
 	if err != nil {
 		klog.Errorf("update entrance status err=%v", err)
 		return ctrl.Result{}, err
@@ -109,7 +109,7 @@ func (r *EntranceStatusManagerController) preEnqueueCheckForUpdate(_, new client
 	return false
 }
 
-func (r *EntranceStatusManagerController) getStsOrDeploymentReplicasByPod(pod *corev1.Pod) (replicas int32, labelSelector *metav1.LabelSelector, err error) {
+func (r *EntranceStatusManagerController) getStsOrDeploymentReplicasByPod(ctx context.Context, pod *corev1.Pod) (replicas int32, labelSelector *metav1.LabelSelector, err error) {
 	replicas = 1
 	if len(pod.OwnerReferences) == 0 {
 		return replicas, nil, nil
@@ -120,7 +120,7 @@ func (r *EntranceStatusManagerController) getStsOrDeploymentReplicasByPod(pod *c
 	case replicaSet:
 		key := types.NamespacedName{Namespace: pod.Namespace, Name: ownerRef.Name}
 		var rs appsv1.ReplicaSet
-		err = r.Get(context.TODO(), key, &rs)
+		err = r.Get(ctx, key, &rs)
 		if err != nil {
 			return replicas, nil, err
 		}
@@ -139,7 +139,7 @@ func (r *EntranceStatusManagerController) getStsOrDeploymentReplicasByPod(pod *c
 	case deployment:
 		var deploy appsv1.Deployment
 		key := types.NamespacedName{Name: name, Namespace: pod.Namespace}
-		err = r.Get(context.TODO(), key, &deploy)
+		err = r.Get(ctx, key, &deploy)
 		if err != nil {
 			return replicas, nil, err
 		}
@@ -149,7 +149,7 @@ func (r *EntranceStatusManagerController) getStsOrDeploymentReplicasByPod(pod *c
 	case statefulSet:
 		var sts appsv1.StatefulSet
 		key := types.NamespacedName{Name: name, Namespace: pod.Namespace}
-		err = r.Get(context.TODO(), key, &sts)
+		err = r.Get(ctx, key, &sts)
 		if err != nil {
 			return replicas, nil, err
 		}
@@ -161,10 +161,10 @@ func (r *EntranceStatusManagerController) getStsOrDeploymentReplicasByPod(pod *c
 	return replicas, labelSelector, nil
 }
 
-func (r *EntranceStatusManagerController) updateEntranceStatus(pod *corev1.Pod) error {
+func (r *EntranceStatusManagerController) updateEntranceStatus(ctx context.Context, pod *corev1.Pod) error {
 	namespace := pod.Namespace
 	var apps v1alpha1.ApplicationList
-	err := r.List(context.TODO(), &apps)
+	err := r.List(ctx, &apps)
 	if err != nil {
 		return err
 	}
@@ -180,7 +180,7 @@ func (r *EntranceStatusManagerController) updateEntranceStatus(pod *corev1.Pod) 
 			continue
 		}
 		for _, e := range a.Spec.Entrances {
-			isSelected, err := r.isEntrancePod(pod, e.Host, namespace)
+			isSelected, err := r.isEntrancePod(ctx, pod, e.Host, namespace)
 			if err != nil && !apierrors.IsNotFound(err) {
 				return err
 			}
@@ -200,15 +200,17 @@ func (r *EntranceStatusManagerController) updateEntranceStatus(pod *corev1.Pod) 
 		//	continue
 		//}
 		var selectedApp v1alpha1.Application
-		err = r.Get(context.TODO(), types.NamespacedName{Name: a.name}, &selectedApp)
+		err = r.Get(ctx, types.NamespacedName{Name: a.name}, &selectedApp)
 		if err != nil {
 			return err
 		}
 		appCopy := selectedApp.DeepCopy()
-		entranceState, rm, err := r.calEntranceState(pod)
+		entranceState, rm, err := r.calEntranceState(ctx, pod)
 		if err != nil {
+			klog.Errorf("failed to cal entrance state %v", err)
 			return err
 		}
+
 		for i := len(appCopy.Status.EntranceStatuses) - 1; i >= 0; i-- {
 			if appCopy.Status.EntranceStatuses[i].Name == a.entranceName {
 
@@ -221,7 +223,7 @@ func (r *EntranceStatusManagerController) updateEntranceStatus(pod *corev1.Pod) 
 		}
 
 		patchApp := client.MergeFrom(&selectedApp)
-		err = r.Status().Patch(context.TODO(), appCopy, patchApp)
+		err = r.Status().Patch(ctx, appCopy, patchApp)
 		klog.Infof("updateEntrances ...:name: %v", appCopy.Name)
 
 		if err != nil {
@@ -229,7 +231,7 @@ func (r *EntranceStatusManagerController) updateEntranceStatus(pod *corev1.Pod) 
 			return err
 		}
 		var am v1alpha1.ApplicationManager
-		err = r.Get(context.TODO(), types.NamespacedName{Name: selectedApp.Name}, &am)
+		err = r.Get(ctx, types.NamespacedName{Name: selectedApp.Name}, &am)
 		if err != nil && !apierrors.IsNotFound(err) {
 			klog.Errorf("failed to get am name=%s, err=%v", selectedApp.Name, err)
 			return err
@@ -241,10 +243,10 @@ func (r *EntranceStatusManagerController) updateEntranceStatus(pod *corev1.Pod) 
 	return nil
 }
 
-func (r *EntranceStatusManagerController) isEntrancePod(pod *corev1.Pod, svcName, namespace string) (bool, error) {
+func (r *EntranceStatusManagerController) isEntrancePod(ctx context.Context, pod *corev1.Pod, svcName, namespace string) (bool, error) {
 	var svc corev1.Service
 	key := types.NamespacedName{Namespace: namespace, Name: svcName}
-	err := r.Get(context.TODO(), key, &svc)
+	err := r.Get(ctx, key, &svc)
 	if err != nil {
 		return false, err
 	}
@@ -256,11 +258,11 @@ func (r *EntranceStatusManagerController) isEntrancePod(pod *corev1.Pod, svcName
 	return isSelected, nil
 }
 
-func (r *EntranceStatusManagerController) calEntranceState(pod *corev1.Pod) (v1alpha1.EntranceState, ReasonedMessage, error) {
+func (r *EntranceStatusManagerController) calEntranceState(ctx context.Context, pod *corev1.Pod) (v1alpha1.EntranceState, ReasonedMessage, error) {
 	var message string
 	reason := string(pod.Status.Phase)
 
-	replicas, labelSelector, err := r.getStsOrDeploymentReplicasByPod(pod)
+	replicas, labelSelector, err := r.getStsOrDeploymentReplicasByPod(ctx, pod)
 	if err != nil {
 		klog.Error("get sts or deployment replicas error, ", err, ", ", pod.Namespace, "/", pod.Name)
 		return "", ReasonedMessage{Reason: reason}, err
@@ -278,7 +280,7 @@ func (r *EntranceStatusManagerController) calEntranceState(pod *corev1.Pod) (v1a
 	}
 
 	var podList corev1.PodList
-	err = r.List(context.TODO(), &podList, client.InNamespace(pod.Namespace), client.MatchingLabels(labelSelector.MatchLabels))
+	err = r.List(ctx, &podList, client.InNamespace(pod.Namespace), client.MatchingLabels(labelSelector.MatchLabels))
 	if err != nil {
 		klog.Error("failed to list pods, err=", err, ", ", pod.Namespace, ", ", labelSelector.MatchLabels)
 		return state, ReasonedMessage{}, err
