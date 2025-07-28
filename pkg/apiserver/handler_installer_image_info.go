@@ -19,7 +19,6 @@ import (
 )
 
 func (h *Handler) imageInfo(req *restful.Request, resp *restful.Response) {
-	klog.Infof("request imageinfo ...................")
 	imageReq := &api.ImageInfoRequest{}
 	err := req.ReadEntity(imageReq)
 	if err != nil {
@@ -36,7 +35,7 @@ func (h *Handler) imageInfo(req *restful.Request, resp *restful.Response) {
 		return
 	}
 	var am v1alpha1.AppImage
-	err = wait.PollImmediate(time.Second, 30*time.Second, func() (done bool, err error) {
+	err = wait.PollImmediate(time.Second, 2*time.Minute, func() (done bool, err error) {
 		klog.Infof("imageReq name: %v", imageReq.Name)
 		err = h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: imageReq.Name}, &am)
 		if err != nil && !apierrors.IsNotFound(err) {

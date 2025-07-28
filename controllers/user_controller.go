@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strconv"
 	"time"
 
@@ -87,8 +88,14 @@ func (r *UserController) SetupWithManager(mgr ctrl.Manager) error {
 				return true
 			},
 			UpdateFunc: func(e event.UpdateEvent) bool {
-				// Only reconcile if spec changes
-				return true
+				oldObj, _ := e.ObjectOld.(*iamv1alpha2.User)
+				newObj, _ := e.ObjectNew.(*iamv1alpha2.User)
+
+				isDeletionUpdate := newObj.DeletionTimestamp != nil
+				specChanged := !reflect.DeepEqual(oldObj.Spec, newObj.Spec)
+
+				shouldReconcile := isDeletionUpdate || specChanged
+				return shouldReconcile
 			},
 			DeleteFunc: func(e event.DeleteEvent) bool {
 				return true
@@ -402,6 +409,10 @@ func (r *UserController) createUserResources(ctx context.Context, user *iamv1alp
 	}
 
 	err = r.createUserApps(ctx, user)
+	if err != nil {
+		klog.Errorf("failed to create user apps %v", err)
+		return err
+	}
 
 	return nil
 }

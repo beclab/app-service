@@ -156,7 +156,7 @@ func (imc *ImageManagerClient) PollDownloadProgress(ctx context.Context, am *app
 						imageSize := maxImageSize
 						info := findImageSize(imageList, ref.Name)
 						if info != nil {
-							klog.Infof("get image:%s size:%d", ref.Name, info.Size)
+							//klog.Infof("get image:%s size:%d", ref.Name, info.Size)
 							imageSize = info.Size
 						}
 						t = strconv.FormatInt(imageSize, 10)

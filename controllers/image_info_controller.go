@@ -190,6 +190,7 @@ func (r *AppImageInfoController) updateStatus(ctx context.Context, am *appv1alph
 		amCopy.Status.State = state
 		amCopy.Status.StatueTime = &now
 		amCopy.Status.Images = append(amCopy.Status.Images, imageInfos...)
+		amCopy.Status.Message = message
 		node := os.Getenv("NODE_NAME")
 		amCopy.Status.Conditions = append(amCopy.Status.Conditions, appv1alpha1.Condition{
 			Node:      node,
