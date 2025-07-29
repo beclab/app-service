@@ -78,6 +78,8 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	validAppObjects := make(map[string]client.Object)
+	deletingObjects := make(map[string]client.Object)
+
 	reqAppNames := strings.Split(req.Name, ",")
 	for _, name := range reqAppNames {
 		// init requested app object
@@ -110,7 +112,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 						if d.GetDeletionTimestamp() == nil {
 							validAppObjects[name] = d
 						} else {
-							validAppObjects[name] = nil
+							deletingObjects[name] = d
 						} // end if deployment is deleted
 
 					}
@@ -147,6 +149,12 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	err = findAppObject(&statefulsets)
 	if err != nil {
 		return ctrl.Result{}, err
+	}
+
+	for name, deletingObject := range deletingObjects {
+		if _, ok := validAppObjects[name]; !ok {
+			validAppObjects[name] = nil
+		}
 	}
 
 	for name, validAppObject := range validAppObjects {
