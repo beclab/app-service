@@ -19,7 +19,6 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/utils"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
-	"github.com/thoas/go-funk"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/storage/driver"
 	appsv1 "k8s.io/api/apps/v1"
@@ -78,7 +77,13 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, nil
 	}
 
-	var validAppObject client.Object
+	validAppObjects := make(map[string]client.Object)
+	reqAppNames := strings.Split(req.Name, ",")
+	for _, name := range reqAppNames {
+		// init requested app object
+		validAppObjects[name] = nil
+	}
+
 	// get deployments installed by app installer
 	findAppObject := func(list client.ObjectList) error {
 		if err := r.List(ctx, list, client.InNamespace(req.Namespace)); err == nil {
@@ -87,42 +92,41 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				ctrl.Log.Error(err, "extract list error", "name label", req.Name, "namespace", req.Namespace)
 				return err
 			}
+
 			for _, o := range listObjects {
 				d := o.(client.Object)
+				// for multi-app in one deployment/statefulset, we can not find only one object via
+				// namespace and label filter, so have to filter in object list
+				apps := getAppName(d)
+				if len(apps) == 0 {
+					continue
+				}
+				klog.Infof("apps: %v", apps)
+				for _, name := range apps {
+					klog.Errorf("appsname: %s", name)
 
-				if d.GetDeletionTimestamp() == nil {
-					// for multi-app in one deployment/statefulset, we can not find only one object via
-					// namespace and label filter, so have to filter in object list
-					apps := getAppName(d)
-					if len(apps) == 0 {
-						continue
+					if owner, ok := d.GetLabels()[constants.ApplicationOwnerLabel]; ok && owner != "" {
+						// found a valid app object
+						if d.GetDeletionTimestamp() == nil {
+							validAppObjects[name] = d
+						} else {
+							validAppObjects[name] = nil
+						} // end if deployment is deleted
+
 					}
-					klog.Infof("apps: %v", apps)
-					isValid := false
-					for _, name := range strings.Split(req.Name, ",") {
-						klog.Errorf("appsname: %s", name)
-						if funk.Contains(apps, name) {
-							isValid = true
-							break
-						}
-					}
-					if !isValid {
-						continue
-					}
-					owner, ok := d.GetLabels()[constants.ApplicationOwnerLabel]
-					if validAppObject != nil || !ok || owner == "" {
-						// duplicate or ownerless deployment is invalid
-						ctrl.Log.Info("delete invalid deployment or statefulset", "name", d.GetName(), "namespace", d.GetNamespace())
-						err = r.Delete(ctx, d)
-						if err != nil {
-							ctrl.Log.Error(err, "delete invalid deployment or statefulset error", "name", d.GetName(), "namespace", d.GetNamespace())
-						}
-					} else {
-						klog.Infof("dname: %s", d.GetName())
-						validAppObject = d
-						break
-					}
-				} // end if deployment is deleted
+					// if validAppObject != nil || !ok || owner == "" {
+					// 	// duplicate or ownerless deployment is invalid
+					// 	ctrl.Log.Info("delete invalid deployment or statefulset", "name", d.GetName(), "namespace", d.GetNamespace())
+					// 	err = r.Delete(ctx, d)
+					// 	if err != nil {
+					// 		ctrl.Log.Error(err, "delete invalid deployment or statefulset error", "name", d.GetName(), "namespace", d.GetNamespace())
+					// 	}
+					// } else {
+
+					// 	break
+					// }
+				}
+
 			} // end loop deployment.Items
 		} else {
 			ctrl.Log.Error(err, "list deployments or statefulset error", "name label", req.Name, "namespace", req.Namespace)
@@ -139,17 +143,13 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// try to get statefulset
-	if validAppObject == nil {
-		var statefulsets appsv1.StatefulSetList
-		err := findAppObject(&statefulsets)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
+	var statefulsets appsv1.StatefulSetList
+	err = findAppObject(&statefulsets)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
-	appNames := strings.Split(req.Name, ",")
-
-	for _, name := range appNames {
+	for name, validAppObject := range validAppObjects {
 		app, err := r.AppClientset.AppV1alpha1().Applications().Get(ctx, fmtAppName(name, req.Namespace), metav1.GetOptions{})
 		klog.Infof("get app err=%v, validateAPpis nil %v,app=%v", err, validAppObject == nil, fmtAppName(name, req.Namespace))
 		if validAppObject != nil {
