@@ -151,7 +151,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
-	for name, deletingObject := range deletingObjects {
+	for name := range deletingObjects {
 		if _, ok := validAppObjects[name]; !ok {
 			validAppObjects[name] = nil
 		}
