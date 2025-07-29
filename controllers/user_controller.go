@@ -82,7 +82,7 @@ func (r *UserController) SetupWithManager(mgr ctrl.Manager) error {
 		predicate.Funcs{
 			CreateFunc: func(e event.CreateEvent) bool {
 				obj, _ := e.Object.(*iamv1alpha2.User)
-				if obj.Status.State == "Created" || obj.Status.State == "Failed" {
+				if obj.Status.State == "Failed" {
 					return false
 				}
 				return true
@@ -96,6 +96,7 @@ func (r *UserController) SetupWithManager(mgr ctrl.Manager) error {
 
 				shouldReconcile := isDeletionUpdate || specChanged
 				return shouldReconcile
+				//return true
 			},
 			DeleteFunc: func(e event.DeleteEvent) bool {
 				return true
