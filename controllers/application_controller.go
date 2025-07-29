@@ -97,6 +97,10 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 			for _, o := range listObjects {
 				d := o.(client.Object)
+				if owner, ok := d.GetLabels()[constants.ApplicationOwnerLabel]; ok && owner != "" {
+					// ignore ownerless deployments
+					continue
+				}
 				// for multi-app in one deployment/statefulset, we can not find only one object via
 				// namespace and label filter, so have to filter in object list
 				apps := getAppName(d)
@@ -105,17 +109,15 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				}
 				klog.Infof("apps: %v", apps)
 				for _, name := range apps {
-					klog.Errorf("appsname: %s", name)
+					// found a valid app object
+					if d.GetDeletionTimestamp() == nil {
+						validAppObjects[name] = d
+						klog.Errorf("valid app name: %s", name)
+					} else {
+						deletingObjects[name] = d
+						klog.Errorf("deleting app name: %s", name)
+					} // end if deployment is deleted
 
-					if owner, ok := d.GetLabels()[constants.ApplicationOwnerLabel]; ok && owner != "" {
-						// found a valid app object
-						if d.GetDeletionTimestamp() == nil {
-							validAppObjects[name] = d
-						} else {
-							deletingObjects[name] = d
-						} // end if deployment is deleted
-
-					}
 					// if validAppObject != nil || !ok || owner == "" {
 					// 	// duplicate or ownerless deployment is invalid
 					// 	ctrl.Log.Info("delete invalid deployment or statefulset", "name", d.GetName(), "namespace", d.GetNamespace())
