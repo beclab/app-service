@@ -94,10 +94,15 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 					// for multi-app in one deployment/statefulset, we can not find only one object via
 					// namespace and label filter, so have to filter in object list
 					apps := getAppName(d)
-					isValid := true
+					if len(apps) == 0 {
+						continue
+					}
+					klog.Infof("apps: %v", apps)
+					isValid := false
 					for _, name := range strings.Split(req.Name, ",") {
-						if !funk.Contains(apps, name) {
-							isValid = false
+						klog.Errorf("appsname: %s", name)
+						if funk.Contains(apps, name) {
+							isValid = true
 							break
 						}
 					}
@@ -113,6 +118,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 							ctrl.Log.Error(err, "delete invalid deployment or statefulset error", "name", d.GetName(), "namespace", d.GetNamespace())
 						}
 					} else {
+						klog.Infof("dname: %s", d.GetName())
 						validAppObject = d
 						break
 					}
@@ -145,6 +151,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	for _, name := range appNames {
 		app, err := r.AppClientset.AppV1alpha1().Applications().Get(ctx, fmtAppName(name, req.Namespace), metav1.GetOptions{})
+		klog.Infof("get app err=%v, validateAPpis nil %v,app=%v", err, validAppObject == nil, fmtAppName(name, req.Namespace))
 		if validAppObject != nil {
 			// create or update application
 			if err != nil {
@@ -373,11 +380,15 @@ func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.
 	entranceStatues := make([]appv1alpha1.EntranceStatus, 0, len(app.Spec.Entrances))
 
 	for _, e := range app.Spec.Entrances {
+		state := appv1alpha1.EntranceNotReady
+		if userspace.IsSysApp(app.Spec.Name) {
+			state = appv1alpha1.EntranceRunning
+		}
 		entranceStatues = append(entranceStatues, appv1alpha1.EntranceStatus{
 			Name:       e.Name,
-			State:      appv1alpha1.EntranceNotReady,
+			State:      state,
 			StatusTime: &now,
-			Reason:     appv1alpha1.EntranceNotReady.String(),
+			Reason:     state.String(),
 		})
 	}
 	app.Status.EntranceStatuses = entranceStatues
