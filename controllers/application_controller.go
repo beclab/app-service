@@ -97,7 +97,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 			for _, o := range listObjects {
 				d := o.(client.Object)
-				if owner, ok := d.GetLabels()[constants.ApplicationOwnerLabel]; ok && owner != "" {
+				if owner, ok := d.GetLabels()[constants.ApplicationOwnerLabel]; !ok || owner == "" {
 					// ignore ownerless deployments
 					continue
 				}
@@ -740,6 +740,9 @@ func (r *ApplicationReconciler) getAppPorts(ctx context.Context, deployment clie
 func (r *ApplicationReconciler) getAppTailScale(deployment client.Object) (*appv1alpha1.TailScale, error) {
 	tailScale := appv1alpha1.TailScale{}
 	tailScaleString := deployment.GetAnnotations()[constants.ApplicationTailScaleKey]
+	if len(tailScaleString) == 0 {
+		return nil, nil
+	}
 	err := json.Unmarshal([]byte(tailScaleString), &tailScale)
 	if err != nil {
 		return nil, err
@@ -866,13 +869,26 @@ func getAppName(deployment client.Object) []string {
 	isMultiApp := deployment.GetLabels()[constants.ApplicationAppGroupLabel] == "true"
 	if isMultiApp {
 		apps := make(map[string]interface{})
-		_ = json.Unmarshal([]byte(deployment.GetAnnotations()[constants.ApplicationEntrancesKey]), &apps)
+		keys := deployment.GetAnnotations()[constants.ApplicationEntrancesKey]
+		if keys == "" {
+			klog.Infof("Application entrances label is empty")
+			return nil
+		}
+		// multi-app in one deployment/statefulset, get all app names
+		err := json.Unmarshal([]byte(keys), &apps)
+		if err != nil {
+			klog.Infof("Failed to unmarshal application entrances label err=%v", err)
+			return nil
+		}
 		for k := range apps {
 			names = append(names, k)
 		}
 		return names
 	}
 	name := deployment.GetLabels()[constants.ApplicationNameLabel]
+	if name == "" {
+		return nil
+	}
 	return []string{name}
 }
 
