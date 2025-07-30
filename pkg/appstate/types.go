@@ -79,6 +79,16 @@ func (b *baseStatefulApp) updateStatus(ctx context.Context, am *appsv1.Applicati
 
 func (p *baseStatefulApp) forceDeleteApp(ctx context.Context) error {
 	token := p.manager.Annotations[api.AppTokenKey]
+	if p.manager.Spec.Config == "" && p.manager.Spec.Source == "system" {
+		klog.Infof("app %s config is empty, source is system", p.manager.Name)
+		err := p.updateStatus(ctx, p.manager, appsv1.Uninstalled, nil, appsv1.Uninstalled.String())
+		if err != nil {
+			klog.Errorf("update app manager %s to state %s failed", p.manager.Name, appsv1.Uninstalled)
+			return err
+		}
+
+		return nil
+	}
 
 	var appCfg *appcfg.ApplicationConfig
 	err := json.Unmarshal([]byte(p.manager.Spec.Config), &appCfg)

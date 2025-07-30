@@ -115,17 +115,19 @@ func (r *TailScaleACLController) SetUpWithManager(mgr ctrl.Manager) error {
 func (r *TailScaleACLController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = log.FromContext(ctx)
 	klog.Infof("reconcile tailscale acls subroutes request name=%v, owner=%v", req.Name, req.Namespace)
+	owner := req.Namespace
 
 	// for this request req.Namespace is owner
 	// list all apps by owner and generate acls by owner
 	var apps v1alpha1.ApplicationList
 	err := r.List(ctx, &apps)
 	if err != nil {
+		klog.Errorf("list applications failed: %v", err)
 		return ctrl.Result{}, err
 	}
 	filteredApps := make([]v1alpha1.Application, 0)
 	for _, app := range apps.Items {
-		if app.Spec.Owner != req.Namespace {
+		if app.Spec.Owner != owner {
 			continue
 		}
 		filteredApps = append(filteredApps, app)
@@ -136,7 +138,7 @@ func (r *TailScaleACLController) Reconcile(ctx context.Context, req ctrl.Request
 	})
 
 	tailScaleACLConfig := "tailscale-acl"
-	headScaleNamespace := fmt.Sprintf("user-space-%s", req.Namespace)
+	headScaleNamespace := fmt.Sprintf("user-space-%s", owner)
 
 	// calculate acls
 	acls := make([]v1alpha1.ACL, 0)
@@ -160,6 +162,7 @@ func (r *TailScaleACLController) Reconcile(ctx context.Context, req ctrl.Request
 	tailScaleDeploy := &appsv1.Deployment{}
 	err = r.Get(ctx, types.NamespacedName{Name: tailScaleDeployOrContainerName, Namespace: headScaleNamespace}, tailScaleDeploy)
 	if err != nil {
+		klog.Errorf("get tailscale deploy failed: %v", err)
 		return ctrl.Result{}, err
 	}
 	tailScaleRouteEnv := ""
