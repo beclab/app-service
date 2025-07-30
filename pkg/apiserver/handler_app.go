@@ -715,6 +715,10 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 			continue
 		}
 
+		if am.Spec.Config == "" {
+			continue
+		}
+
 		var appconfig appcfg.ApplicationConfig
 		err = json.Unmarshal([]byte(am.Spec.Config), &appconfig)
 		if err != nil {
