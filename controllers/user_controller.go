@@ -226,6 +226,7 @@ func (r *UserController) handleUserCreation(ctx context.Context, user *iamv1alph
 	if user.Status.State != "Creating" {
 		err := r.updateUserStatus(ctx, user, "Creating", "Starting user creation process")
 		if err != nil {
+			klog.Errorf("failed to update user status to Creating %v", err)
 			return ctrl.Result{}, err
 		}
 	}
@@ -236,10 +237,16 @@ func (r *UserController) handleUserCreation(ctx context.Context, user *iamv1alph
 		message := fmt.Sprintf("failed to check cluster capacity %v", err)
 		klog.Error(message)
 		updateErr := r.updateUserStatus(ctx, user, "Failed", message)
+		if updateErr != nil {
+			klog.Errorf("failed to update user status to Failed %v", updateErr)
+		}
 		return ctrl.Result{}, updateErr
 	}
 	if !isSatisfied {
 		updateErr := r.updateUserStatus(ctx, user, "Failed", "Insufficient pods can allocate in the cluster")
+		if updateErr != nil {
+			klog.Errorf("failed to update user status to Failed %v", updateErr)
+		}
 		return ctrl.Result{}, updateErr
 	}
 
@@ -257,6 +264,9 @@ func (r *UserController) handleUserCreation(ctx context.Context, user *iamv1alph
 	err = r.checkResource(user)
 	if err != nil {
 		updateErr := r.updateUserStatus(ctx, user, "Failed", err.Error())
+		if updateErr != nil {
+			klog.Errorf("failed to update user status to Failed %v", updateErr)
+		}
 		return ctrl.Result{}, updateErr
 	}
 
@@ -270,6 +280,10 @@ func (r *UserController) handleUserCreation(ctx context.Context, user *iamv1alph
 		return ctrl.Result{}, updateErr
 	}
 	updateErr := r.updateUserStatus(ctx, user, "Created", "Created user success")
+	if updateErr != nil {
+		klog.Errorf("failed to update user status to Created %v", updateErr)
+	}
+
 	return ctrl.Result{}, updateErr
 }
 

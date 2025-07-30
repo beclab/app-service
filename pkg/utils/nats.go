@@ -77,8 +77,9 @@ func PublishAsync(owner, name, opType, opID, state, progress string, entranceSta
 	go func() {
 		if err := publish(subject, data); err != nil {
 			klog.Errorf("async publish subject %s,data %v, failed %v", subject, data, err)
+		} else {
+			klog.Infof("publish event success data: %#v", data)
 		}
-		klog.Infof("publish event success data: %#v", data)
 	}()
 }
 

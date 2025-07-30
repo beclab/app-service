@@ -316,12 +316,21 @@ func (c *Creator) installSysApps(ctx context.Context, bflPod *corev1.Pod) error 
 	}
 	for _, appname := range sysApps {
 		name := helm.ReleaseName(appname, c.user)
-		err = helm.InstallCharts(ctx, c.helmCfg.ActionCfg, c.helmCfg.Settings,
-			name, constants.UserChartsPath+"/apps/"+appname, "", bflPod.Namespace, vals)
-		if err != nil && !errors.Is(err, driver.ErrReleaseExists) {
-			klog.Errorf("failed to install sys app:%s, %v", name, err)
-			return err
+		_, err = c.helmCfg.ActionCfg.Releases.Last(name)
+		if err != nil {
+			if errors.Is(err, driver.ErrReleaseNotFound) {
+				installErr := helm.InstallCharts(ctx, c.helmCfg.ActionCfg, c.helmCfg.Settings,
+					name, constants.UserChartsPath+"/apps/"+appname, "", bflPod.Namespace, vals)
+				if installErr != nil && !errors.Is(installErr, driver.ErrReleaseExists) {
+					klog.Errorf("failed to install sys app:%s, %v", name, installErr)
+					return installErr
+				}
+			} else {
+				klog.Errorf("failed to get last release for %s", name)
+				return err
+			}
 		}
+
 	}
 	return nil
 }
@@ -341,10 +350,18 @@ func (c *Creator) installLauncher(ctx context.Context, userspace string) (string
 	}
 	vals["rootPath"] = rootPath
 	name := helm.ReleaseName("launcher", c.user)
-	err := helm.InstallCharts(ctx, c.helmCfg.ActionCfg, c.helmCfg.Settings, name, constants.UserChartsPath+"/launcher", "", userspace, vals)
+	_, err := c.helmCfg.ActionCfg.Releases.Last(name)
 	if err != nil {
-		klog.Errorf("failed to install launcher %v", err)
-		return "", err
+		if errors.Is(err, driver.ErrReleaseNotFound) {
+			installErr := helm.InstallCharts(ctx, c.helmCfg.ActionCfg, c.helmCfg.Settings, name, constants.UserChartsPath+"/launcher", "", userspace, vals)
+			if installErr != nil && !errors.Is(installErr, driver.ErrReleaseExists) {
+				klog.Errorf("failed to install launcher %v", err)
+				return "", installErr
+			}
+		} else {
+			klog.Errorf("failed to get last release for %s", name)
+			return "", err
+		}
 	}
 
 	return name, nil
