@@ -187,7 +187,7 @@ func (p *UpgradingApp) exec(ctx context.Context) error {
 		return err
 	}
 	values := map[string]interface{}{
-		"admin": admin,
+		// "admin": admin,  // reuse the value
 		"bfl": map[string]string{
 			"username": p.manager.Spec.AppOwner,
 		},

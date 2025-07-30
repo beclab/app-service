@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
@@ -190,17 +191,40 @@ func (h *HelmOps) SetValues() (values map[string]interface{}, err error) {
 	sharedLibPath := os.Getenv("SHARED_LIB_PATH")
 	values["sharedlib"] = sharedLibPath
 
-	admin, err := kubesphere.GetAdminUsername(context.TODO(), h.kubeConfig)
-	if err != nil {
-		return values, err
-	}
-	values["admin"] = admin
-
-	isAdmin, err := kubesphere.IsAdmin(context.TODO(), h.kubeConfig, h.app.OwnerName)
+	ctx := context.TODO()
+	isAdmin, err := kubesphere.IsAdmin(ctx, h.kubeConfig, h.app.OwnerName)
 	if err != nil {
 		return values, err
 	}
 	values["isAdmin"] = isAdmin
+
+	var admin string
+	appInstalled, installedApps, err := h.getInstalledApps(ctx)
+	if err != nil {
+		klog.Errorf("Failed to get installed app err=%v", err)
+		return values, err
+	}
+
+	if appInstalled {
+		for _, a := range installedApps {
+			if a.IsClusterScoped() {
+				admin = a.Spec.Owner
+				break
+			}
+		}
+	}
+
+	if admin == "" {
+		if isAdmin {
+			admin = h.app.OwnerName
+		} else {
+			admin, err = kubesphere.GetAdminUsername(ctx, h.kubeConfig)
+			if err != nil {
+				return values, err
+			}
+		}
+	}
+	values["admin"] = admin
 
 	rootPath := userspacev1.DefaultRootPath
 	if os.Getenv(userspacev1.OlaresRootPath) != "" {
@@ -226,4 +250,22 @@ func (h *HelmOps) TaprApply(values map[string]interface{}, namespace string) err
 	}
 
 	return nil
+}
+
+func (h *HelmOps) getInstalledApps(ctx context.Context) (installed bool, app []*v1alpha1.Application, err error) {
+	var apps *v1alpha1.ApplicationList
+	apps, err = h.client.AppClient.AppV1alpha1().Applications().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		klog.Errorf("Failed to list applications err=%v", err)
+		return
+	}
+
+	for _, a := range apps.Items {
+		if a.Spec.Name == h.app.AppName {
+			installed = true
+			app = append(app, &a)
+		}
+	}
+
+	return
 }
