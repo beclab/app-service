@@ -218,6 +218,8 @@ func (h *HelmOps) SetValues() (values map[string]interface{}, err error) {
 		if isAdmin {
 			admin = h.app.OwnerName
 		} else {
+			// should never happen, but just in case
+			klog.Warningf("No admin found for app %s, using the first admin", h.app.AppName)
 			admin, err = kubesphere.GetAdminUsername(ctx, h.kubeConfig)
 			if err != nil {
 				return values, err
