@@ -55,6 +55,10 @@ func (h *HelmOpsV2) Install() error {
 		klog.Errorf("set values err %v", err)
 		return err
 	}
+	if values["isAdmin"].(bool) {
+		// force set the admin is owner
+		values["admin"] = h.App().OwnerName
+	}
 
 	// in v2, if app is multi-charts and has a cluster shared chart,
 	//  middleware namespace is always os-platform
