@@ -275,8 +275,9 @@ func (h *Handler) userStatus(req *restful.Request, resp *restful.Response) {
 	resp.WriteAsJson(map[string]interface{}{
 		"code": 200,
 		"data": map[string]interface{}{
-			"name":   username,
-			"status": user.Status.State,
+			"name":    username,
+			"status":  user.Status.State,
+			"message": user.Status.Reason,
 			"address": map[string]string{
 				"wizard": address,
 			},
