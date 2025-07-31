@@ -63,21 +63,50 @@ func NewPendingApp(ctx context.Context, c client.Client,
 }
 
 func (p *PendingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
-	if appFactory.countInProgressApp(appsv1.Downloading.String()) >= 1 {
+	if success, err := appFactory.addLimitedStatefulApp(ctx,
+		// limit
+		func() (bool, error) {
+
+			var apps appsv1.ApplicationManagerList
+			err := p.client.List(ctx, &apps)
+			if err != nil {
+				klog.Errorf("list application managers error: %v", err)
+				return false, err
+			}
+
+			count := 0
+			for _, app := range apps.Items {
+				if app.Status.State == appsv1.Downloading {
+					count++
+				}
+			}
+
+			return count < 2, nil
+		},
+
+		// add
+		func() error {
+			p.manager.Status.State = appsv1.Downloading
+			now := metav1.Now()
+			p.manager.Status.StatusTime = &now
+			p.manager.Status.UpdateTime = &now
+			p.manager.Status.OpGeneration += 1
+			err := p.client.Update(ctx, p.manager)
+			if err != nil {
+				klog.Error("update app manager status error, ", err, ", ", p.manager.Name)
+				return err
+			}
+			utils.PublishAsync(p.manager.Spec.AppOwner, p.manager.Spec.AppName, string(p.manager.Spec.OpType), p.manager.Status.OpID, appsv1.Downloading.String(), "", nil)
+
+			return nil
+		},
+	); err != nil {
+		klog.Errorf("add pending app %s to in progress map failed: %v", p.manager.Spec.AppName, err)
+		return nil, err
+	} else if !success {
+		klog.Info("2 downloading apps are in progress, waiting for the next round")
 		return nil, NewWaitingInLine(2)
 	}
-
-	p.manager.Status.State = appsv1.Downloading
-	now := metav1.Now()
-	p.manager.Status.StatusTime = &now
-	p.manager.Status.UpdateTime = &now
-	p.manager.Status.OpGeneration += 1
-	err := p.client.Update(ctx, p.manager)
-	if err != nil {
-		klog.Error("update app manager status error, ", err, ", ", p.manager.Name)
-		return nil, err
-	}
-	utils.PublishAsync(p.manager.Spec.AppOwner, p.manager.Spec.AppName, string(p.manager.Spec.OpType), p.manager.Status.OpID, appsv1.Downloading.String(), "", nil)
 
 	return nil, nil
 }
