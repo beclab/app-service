@@ -117,7 +117,7 @@ func (imc *ImageManagerClient) UpdateStatus(ctx context.Context, name, state, me
 func (imc *ImageManagerClient) PollDownloadProgress(ctx context.Context, am *appv1alpha1.ApplicationManager) error {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
-	var lastProgress float64
+	var lastProgress float64 = -1
 	imageList := make([]Image, 0)
 	err := json.Unmarshal([]byte(am.Annotations[constants.ApplicationImageLabel]), &imageList)
 	if err != nil {
