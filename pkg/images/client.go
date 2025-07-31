@@ -210,10 +210,11 @@ func (imc *ImageManagerClient) updateProgress(ctx context.Context, am *appv1alph
 	}
 
 	progressStr := strconv.FormatFloat(progress, 'f', 2, 64)
-	*lastProgress = progress
+	if *lastProgress != progress {
+		*lastProgress = progress
 
-	utils.PublishAsync(am.Spec.AppOwner, am.Spec.AppName, string(am.Status.OpType), am.Status.OpID, appv1alpha1.Downloading.String(), progressStr, nil)
-
+		utils.PublishAsync(am.Spec.AppOwner, am.Spec.AppName, string(am.Status.OpType), am.Status.OpID, appv1alpha1.Downloading.String(), progressStr, nil)
+	}
 	klog.Infof("app %s download progress.... %v", am.Spec.AppName, progressStr)
 	if progressStr == "100.00" {
 		return nil

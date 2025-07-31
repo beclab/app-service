@@ -157,6 +157,10 @@ func removeUnknownApplication(client client.Client, name string) func(ctx contex
 				return err
 			}
 			actionConfig, _, err := helm.InitConfig(kubeConfig, app.Spec.Namespace)
+			if err != nil {
+				klog.Errorf("helm init config failed %v", err)
+				return err
+			}
 
 			err = helm.UninstallCharts(actionConfig, app.Spec.Name)
 			if err != nil {
