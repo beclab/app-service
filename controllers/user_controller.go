@@ -85,11 +85,13 @@ func (r *UserController) SetupWithManager(mgr ctrl.Manager) error {
 				if obj.Status.State == "Failed" {
 					return false
 				}
+				klog.Infof("create enque name: %s, state: %s", obj.Name, obj.Status.State)
 				return true
 			},
 			UpdateFunc: func(e event.UpdateEvent) bool {
 				oldObj, _ := e.ObjectOld.(*iamv1alpha2.User)
 				newObj, _ := e.ObjectNew.(*iamv1alpha2.User)
+				oldObj.Spec.InitialPassword = newObj.Spec.InitialPassword
 
 				isDeletionUpdate := newObj.DeletionTimestamp != nil
 				specChanged := !reflect.DeepEqual(oldObj.Spec, newObj.Spec)
@@ -163,6 +165,7 @@ func (r *UserController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 			}
 			utils.PublishUserEventAsync("Delete", user.Name, user.Annotations[users.AnnotationUserDeleter])
 		}
+		return ctrl.Result{}, nil
 	}
 	if r.LLdapClient == nil {
 		lldapClient, err := r.getLLdapClient()
@@ -183,8 +186,10 @@ func (r *UserController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	if user.Status.State == "" || user.Status.State == "Creating" {
 		ret, err := r.handleUserCreation(ctx, user)
 		if err == nil {
+			klog.Infof("publish user creation event.....")
 			utils.PublishUserEventAsync("Create", user.Name, user.Annotations[users.AnnotationUserCreator])
 		}
+		time.Sleep(time.Second)
 		return ret, err
 	}
 	klog.Infof("finish reconcile user %s", req.Name)
@@ -201,18 +206,21 @@ func (r *UserController) deleteRoleBindings(ctx context.Context, user *iamv1alph
 	clusterRoleBinding := &rbacv1.ClusterRoleBinding{}
 	err := r.Client.DeleteAllOf(ctx, clusterRoleBinding, client.MatchingLabels{iamv1alpha2.UserReferenceLabel: user.Name})
 	if err != nil {
+		klog.Errorf("failed to delete all of clusterrolebinding %v", err)
 		return err
 	}
 
 	roleBindingList := &rbacv1.RoleBindingList{}
 	err = r.Client.List(ctx, roleBindingList, client.MatchingLabels{iamv1alpha2.UserReferenceLabel: user.Name})
 	if err != nil {
+		klog.Errorf("failed to get rolebindinglist %v", err)
 		return err
 	}
 
 	for _, roleBinding := range roleBindingList.Items {
 		err = r.Client.Delete(ctx, &roleBinding)
 		if err != nil {
+			klog.Errorf("failed to delete rolebinding %v", err)
 			return err
 		}
 	}
@@ -226,27 +234,38 @@ func (r *UserController) handleUserCreation(ctx context.Context, user *iamv1alph
 	if user.Status.State != "Creating" {
 		err := r.updateUserStatus(ctx, user, "Creating", "Starting user creation process")
 		if err != nil {
+			klog.Errorf("failed to update user status to Created %v", err)
 			return ctrl.Result{}, err
 		}
 	}
 
 	// Check cluster pod capacity
+	klog.Infof("start check cluster pod capacity.....")
 	isSatisfied, err := r.checkClusterPodCapacity(ctx)
 	if err != nil {
 		message := fmt.Sprintf("failed to check cluster capacity %v", err)
 		klog.Error(message)
 		updateErr := r.updateUserStatus(ctx, user, "Failed", message)
+		if updateErr != nil {
+			klog.Errorf("failed to update user status to Created %v", updateErr)
+		}
 		return ctrl.Result{}, updateErr
 	}
 	if !isSatisfied {
 		updateErr := r.updateUserStatus(ctx, user, "Failed", "Insufficient pods can allocate in the cluster")
+		if updateErr != nil {
+			klog.Errorf("failed to update user status to Failed %v", updateErr)
+		}
 		return ctrl.Result{}, updateErr
 	}
 
 	// Validate resource limits
+	klog.Infof("start to validate resource limits.....")
+
 	err = r.validateResourceLimits(user)
 	// invalid resource limit, no need to requeue
 	if err != nil {
+		klog.Errorf("failed to validate resource limits %v", err)
 		updateErr := r.updateUserStatus(ctx, user, "Failed", err.Error())
 		if updateErr != nil {
 			klog.Errorf("failed to update user status: %v", updateErr)
@@ -254,22 +273,33 @@ func (r *UserController) handleUserCreation(ctx context.Context, user *iamv1alph
 		return ctrl.Result{}, updateErr
 	}
 
+	klog.Infof("start to checkResource.....")
+
 	err = r.checkResource(user)
 	if err != nil {
+		klog.Errorf("failed to checkResource %v", err)
 		updateErr := r.updateUserStatus(ctx, user, "Failed", err.Error())
+		if updateErr != nil {
+			klog.Errorf("failed to update user status to Failed %v", updateErr)
+		}
 		return ctrl.Result{}, updateErr
 	}
 
 	// Create user resources
 	err = r.createUserResources(ctx, user)
 	if err != nil {
+		klog.Errorf("failed to create user resource %v", err)
 		updateErr := r.updateUserStatus(ctx, user, "Failed", fmt.Sprintf("Failed to create user resources: %v", err))
 		if updateErr != nil {
 			klog.Errorf("failed to update user status: %v", updateErr)
 		}
 		return ctrl.Result{}, updateErr
 	}
+	klog.Infof("create user resource success: %s", user.Name)
 	updateErr := r.updateUserStatus(ctx, user, "Created", "Created user success")
+	if updateErr != nil {
+		klog.Errorf("failed to update user status to Created %v", updateErr)
+	}
 	return ctrl.Result{}, updateErr
 }
 
@@ -490,17 +520,20 @@ func (r *UserController) checkClusterPodCapacity(ctx context.Context) (bool, err
 }
 
 func (r *UserController) updateUserStatus(ctx context.Context, user *iamv1alpha2.User, state, reason string) error {
-	// Get the latest version of the user
-	latestUser := &iamv1alpha2.User{}
-	err := r.Get(ctx, types.NamespacedName{Name: user.Name}, latestUser)
-	if err != nil {
-		return err
-	}
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		// Get the latest version of the user
+		latestUser := &iamv1alpha2.User{}
+		err := r.Get(ctx, types.NamespacedName{Name: user.Name}, latestUser)
+		if err != nil {
+			return err
+		}
 
-	latestUser.Status.State = iamv1alpha2.UserState(state)
-	latestUser.Status.Reason = reason
+		latestUser.Status.State = iamv1alpha2.UserState(state)
+		latestUser.Status.Reason = reason
 
-	return r.Update(ctx, latestUser)
+		return r.Update(ctx, latestUser)
+	})
+
 }
 
 func (r *UserController) getCredentialVal(ctx context.Context, key string) (string, error) {
