@@ -931,3 +931,24 @@ func UpdateAppMgrState(ctx context.Context, name string, state v1alpha1.Applicat
 	})
 	return err
 }
+
+func formatCacheDir(s string) string {
+	if s == "" {
+		return s
+	}
+	if !strings.HasPrefix(s, "/") {
+		s = "/" + s
+	}
+	if !strings.HasSuffix(s, "/") {
+		s = s + "/"
+	}
+	return s
+}
+
+func FormatCacheDirs(dirs []string) []string {
+	ret := make([]string, 0, len(dirs))
+	for _, dir := range dirs {
+		ret = append(ret, formatCacheDir(dir))
+	}
+	return ret
+}
