@@ -11,7 +11,6 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/helm"
 	"bytetrade.io/web3os/app-service/pkg/tapr"
-	"bytetrade.io/web3os/app-service/pkg/utils"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 	"github.com/emicklei/go-restful/v3"
 	"github.com/go-resty/resty/v2"
@@ -88,32 +87,30 @@ func (h *HelmOps) Uninstall_(client kubernetes.Interface, actionConfig *action.C
 func (h *HelmOps) ClearCache(client kubernetes.Interface, appCacheDirs []string) error {
 	if len(appCacheDirs) > 0 {
 		klog.Infof("clear app cache dirs: %v", appCacheDirs)
-		terminusNonce, e := utils.GenTerminusNonce()
-		if e != nil {
-			klog.Errorf("Failed to generate terminus nonce err=%v", e)
-		} else {
-			c := resty.New().SetTimeout(2*time.Second).
-				SetHeader(constants.AuthorizationTokenKey, h.token).
-				SetHeader("Terminus-Nonce", terminusNonce)
-			nodes, e := client.CoreV1().Nodes().List(h.ctx, metav1.ListOptions{})
-			if e == nil {
-				for _, dir := range appCacheDirs {
-					for _, n := range nodes.Items {
-						URL := fmt.Sprintf(constants.AppDataDirURL, h.app.OwnerName, dir)
-						c.SetHeader("X-Terminus-Node", n.Name)
-						c.SetHeader("x-bfl-user", h.app.OwnerName)
-						res, e := c.R().Delete(URL)
-						if e != nil {
-							klog.Errorf("Failed to delete dir err=%v", e)
-						}
-						if res.StatusCode() != http.StatusOK {
-							klog.Infof("delete app cache failed with: %v", res.String())
-						}
-					}
+
+		c := resty.New().SetTimeout(2*time.Second).
+			SetHeader(constants.AuthorizationTokenKey, h.token)
+		nodes, e := client.CoreV1().Nodes().List(h.ctx, metav1.ListOptions{})
+
+		if e == nil {
+			formattedAppCacheDirs := apputils.FormatCacheDirs(appCacheDirs)
+
+			for _, n := range nodes.Items {
+				URL := fmt.Sprintf(constants.AppDataDirURL, n.Name)
+				c.SetHeader("X-Terminus-Node", n.Name)
+				c.SetHeader("X-Bfl-User", h.app.OwnerName)
+				res, e := c.R().SetBody(map[string]interface{}{
+					"dirents": formattedAppCacheDirs,
+				}).Delete(URL)
+				if e != nil {
+					klog.Errorf("Failed to delete dir err=%v", e)
 				}
-			} else {
-				klog.Errorf("Failed to get nodes err=%v", e)
+				if res.StatusCode() != http.StatusOK {
+					klog.Infof("delete app cache failed with: %v", res.String())
+				}
 			}
+		} else {
+			klog.Errorf("Failed to get nodes err=%v", e)
 		}
 	}
 	return nil
