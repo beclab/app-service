@@ -164,3 +164,22 @@ func (f *statefulAppFactory) countInProgressApp(state string) int {
 
 	return count
 }
+
+func (f *statefulAppFactory) addLimitedStatefulApp(ctx context.Context, limited func() (bool, error), add func() error) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if ok, err := limited(); err != nil {
+		klog.Error("check limited stateful app error, ", err)
+		return false, err
+	} else if !ok {
+		return false, nil
+	} else {
+		if err := add(); err != nil {
+			klog.Error("add limited stateful app error, ", err)
+			return false, err
+		}
+	}
+
+	return true, nil
+}
