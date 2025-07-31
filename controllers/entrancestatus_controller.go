@@ -194,13 +194,14 @@ func (r *EntranceStatusManagerController) updateEntranceStatus(ctx context.Conte
 			}
 		}
 	}
-
+	appEntranceMap := make(map[string][]string)
 	for _, a := range filteredApp {
-		//if a.startedTime.IsZero() {
-		//	continue
-		//}
+		appEntranceMap[a.name] = append(appEntranceMap[a.name], a.entranceName)
+	}
+
+	for appName, entranceNames := range appEntranceMap {
 		var selectedApp v1alpha1.Application
-		err = r.Get(ctx, types.NamespacedName{Name: a.name}, &selectedApp)
+		err = r.Get(ctx, types.NamespacedName{Name: appName}, &selectedApp)
 		if err != nil {
 			return err
 		}
@@ -210,18 +211,18 @@ func (r *EntranceStatusManagerController) updateEntranceStatus(ctx context.Conte
 			klog.Errorf("failed to cal entrance state %v", err)
 			return err
 		}
+		for _, entranceName := range entranceNames {
+			for i := len(appCopy.Status.EntranceStatuses) - 1; i >= 0; i-- {
+				if appCopy.Status.EntranceStatuses[i].Name == entranceName {
 
-		for i := len(appCopy.Status.EntranceStatuses) - 1; i >= 0; i-- {
-			if appCopy.Status.EntranceStatuses[i].Name == a.entranceName {
-
-				appCopy.Status.EntranceStatuses[i].State = entranceState
-				appCopy.Status.EntranceStatuses[i].Reason = rm.Reason
-				appCopy.Status.EntranceStatuses[i].Message = rm.Message
-				now := metav1.Now()
-				appCopy.Status.EntranceStatuses[i].StatusTime = &now
+					appCopy.Status.EntranceStatuses[i].State = entranceState
+					appCopy.Status.EntranceStatuses[i].Reason = rm.Reason
+					appCopy.Status.EntranceStatuses[i].Message = rm.Message
+					now := metav1.Now()
+					appCopy.Status.EntranceStatuses[i].StatusTime = &now
+				}
 			}
 		}
-
 		patchApp := client.MergeFrom(&selectedApp)
 		err = r.Status().Patch(ctx, appCopy, patchApp)
 		klog.Infof("updateEntrances ...:name: %v", appCopy.Name)
