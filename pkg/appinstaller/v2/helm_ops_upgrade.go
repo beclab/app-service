@@ -169,10 +169,9 @@ func (h *HelmOpsV2) upgrade(values map[string]interface{}) error {
 				klog.Errorf("Failed to upgrade chart name=%s err=%v", chart.Name, err)
 				return err
 			}
-
+		} else {
+			return fmt.Errorf("chart %s is not deployed, cannot upgrade", chart.Name)
 		}
-
-		return fmt.Errorf("chart %s is not deployed, cannot upgrade", chart.Name)
 	}
 
 	return nil

@@ -239,12 +239,13 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		klog.Info("Using install handler helper for V2")
 		h := &upgradeHandlerHelperV2{
 			upgradeHandlerHelper: &upgradeHandlerHelper{
-				h:     h,
-				req:   req,
-				resp:  resp,
-				app:   app,
-				owner: owner,
-				token: token,
+				h:       h,
+				req:     req,
+				resp:    resp,
+				request: request,
+				app:     app,
+				owner:   owner,
+				token:   token,
 			},
 		}
 
