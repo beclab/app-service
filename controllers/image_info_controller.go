@@ -95,6 +95,7 @@ func (r *AppImageInfoController) SetupWithManager(mgr ctrl.Manager) error {
 func (r *AppImageInfoController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = log.FromContext(ctx)
 	ctrl.Log.Info("reconcile app image request", "name", req.Name)
+	klog.Infof("reconcile appimage request app: %s, time: %v", req.Name, time.Now())
 
 	var am appv1alpha1.AppImage
 	err := r.Get(ctx, req.NamespacedName, &am)
@@ -137,12 +138,14 @@ func (r *AppImageInfoController) reconcile(ctx context.Context, instance *appv1a
 	}
 
 	state, message := "completed", "completed"
+	klog.Infof("start to get image and layer info app: %s, time: %v", instance.Name, time.Now())
 	imageInfos, err := r.GetImageInfo(ctx, cur.Spec.Refs)
 	if err != nil {
 		state = "failed"
 		message = err.Error()
 		klog.Errorf("get image info failed %v", err)
 	}
+	klog.Infof("finished to get image and layer info app: %s, time: %v", instance.Name, time.Now())
 
 	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		err = r.Get(ctx, types.NamespacedName{Name: instance.Name}, &cur)

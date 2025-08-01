@@ -29,6 +29,7 @@ func (h *Handler) imageInfo(req *restful.Request, resp *restful.Response) {
 		api.HandleBadRequest(resp, req, errors.New("empty name or images"))
 		return
 	}
+	klog.Infof("get appimage request app: %s, time: %v", imageReq.Name, time.Now())
 	err = createAppImage(req.Request.Context(), h.ctrlClient, imageReq)
 	if err != nil {
 		api.HandleError(resp, req, err)
