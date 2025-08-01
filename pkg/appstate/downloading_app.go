@@ -137,6 +137,14 @@ func (p *DownloadingApp) exec(ctx context.Context) error {
 		klog.Errorf("get admin username failed %v", admin)
 		return err
 	}
+	isAdmin, err := kubesphere.IsAdmin(ctx, kubeConfig, p.manager.Spec.AppOwner)
+	if err != nil {
+		klog.Errorf("failed to check owner is admin %v", err)
+		return err
+	}
+	if isAdmin {
+		admin = p.manager.Spec.AppOwner
+	}
 	values := map[string]interface{}{
 		"admin": admin,
 		"bfl": map[string]string{

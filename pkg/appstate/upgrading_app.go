@@ -134,7 +134,7 @@ func (p *UpgradingApp) exec(ctx context.Context) error {
 	repoURL := annotations[api.AppRepoURLKey]
 	token := annotations[api.AppTokenKey]
 	marketSource := annotations[api.AppMarketSourceKey]
-	var chartPath string
+	//var chartPath string
 	admin, err := kubesphere.GetAdminUsername(ctx, kubeConfig)
 	if err != nil {
 		klog.Errorf("get admin username failed %v", err)
@@ -146,7 +146,7 @@ func (p *UpgradingApp) exec(ctx context.Context) error {
 		return err
 	}
 	if !userspace.IsSysApp(p.manager.Spec.AppName) {
-		appConfig, chartPath, err = apputils.GetAppConfig(ctx, &apputils.ConfigOptions{
+		appConfig, _, err = apputils.GetAppConfig(ctx, &apputils.ConfigOptions{
 			App:          p.manager.Spec.AppName,
 			Owner:        p.manager.Spec.AppOwner,
 			RepoURL:      repoURL,
@@ -162,7 +162,7 @@ func (p *UpgradingApp) exec(ctx context.Context) error {
 			return err
 		}
 	} else {
-		chartPath, err = apputils.GetIndexAndDownloadChart(ctx, &apputils.ConfigOptions{
+		_, err = apputils.GetIndexAndDownloadChart(ctx, &apputils.ConfigOptions{
 			App:          p.manager.Spec.AppName,
 			RepoURL:      repoURL,
 			Version:      version,
@@ -186,13 +186,17 @@ func (p *UpgradingApp) exec(ctx context.Context) error {
 		klog.Errorf("make helmop failed %v", err)
 		return err
 	}
+	if isAdmin {
+		admin = p.manager.Spec.AppOwner
+	}
 	values := map[string]interface{}{
-		// "admin": admin,  // reuse the value
+		"admin": admin,
 		"bfl": map[string]string{
 			"username": p.manager.Spec.AppOwner,
 		},
 	}
-	refs, err := utils.GetRefFromResourceList(chartPath, values)
+
+	refs, err := p.getRefsForImageManager(appConfig, values)
 	if err != nil {
 		klog.Errorf("get image refs from resources failed %v", err)
 		return err
@@ -234,4 +238,24 @@ type upgradingInProgressApp struct {
 // override to avoid duplicate exec
 func (p *upgradingInProgressApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
 	return nil, nil
+}
+
+func (p *UpgradingApp) getRefsForImageManager(appConfig *appcfg.ApplicationConfig, values map[string]interface{}) (refs []appsv1.Ref, err error) {
+	switch {
+	case appConfig.APIVersion == appcfg.V2 && appConfig.IsMultiCharts():
+		// For V2 multi-charts, we need to get refs from each chart
+		var chartRefs []appsv1.Ref
+		for _, chart := range appConfig.SubCharts {
+			chartRefs, err = utils.GetRefFromResourceList(chart.ChartPath(appConfig.AppName), values)
+			if err != nil {
+				klog.Errorf("get refs from chart %s failed %v", chart.Name, err)
+				return
+			}
+
+			refs = append(refs, chartRefs...)
+		}
+	default:
+		refs, err = utils.GetRefFromResourceList(appConfig.ChartsName, values)
+	}
+	return
 }

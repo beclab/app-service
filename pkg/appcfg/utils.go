@@ -67,6 +67,9 @@ func getAppConfigFromConfigurationFile(app, chart, owner string) (*ApplicationCo
 	if err != nil {
 		return nil, err
 	}
+	if isAdmin {
+		admin = owner
+	}
 	data, err := utils.RenderManifest(filepath.Join(chart, "OlaresManifest.yaml"), owner, admin, isAdmin)
 	if err != nil {
 		return nil, err
