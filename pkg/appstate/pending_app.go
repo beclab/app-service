@@ -81,7 +81,7 @@ func (p *PendingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
 				}
 			}
 
-			return count < 2, nil
+			return count < 1, nil
 		},
 
 		// add
