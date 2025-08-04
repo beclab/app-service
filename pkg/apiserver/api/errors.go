@@ -9,4 +9,5 @@ var (
 	ErrStartUpFailed       = errors.New("app started up failed")
 	ErrLaunchFailed        = errors.New("app launched failed")
 	ErrNotSupportOperation = errors.New("not support operation")
+	ErrUserAnnoKeyNotFound = errors.New("user annotation key not found")
 )

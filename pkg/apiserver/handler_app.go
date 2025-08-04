@@ -3,6 +3,7 @@ package apiserver
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -18,6 +19,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/upgrade"
+	"bytetrade.io/web3os/app-service/pkg/users"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
@@ -663,7 +665,11 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 	//	return
 	//}
 	genEntranceURL := func(entrances []v1alpha1.Entrance, owner, appName string) ([]v1alpha1.Entrance, error) {
-		zone, _ := kubesphere.GetUserZone(req.Request.Context(), owner)
+		zone, err := findUserZone(req.Request.Context(), owner)
+		if err != nil {
+			klog.Errorf("failed to get user %s zone", owner)
+			return nil, err
+		}
 
 		if len(zone) > 0 {
 			appid := apputils.GetAppID(appName)
@@ -964,4 +970,24 @@ func (h *Handler) oamValues(req *restful.Request, resp *restful.Response) {
 		"refs":     map[string]interface{}{},
 	}
 	resp.WriteAsJson(values)
+}
+
+func findUserZone(ctx context.Context, username string) (string, error) {
+	zone, err := kubesphere.GetUserZone(ctx, username)
+	if err != nil {
+		// find zone from creator
+		if errors.Is(err, api.ErrUserAnnoKeyNotFound) {
+			creator, err := kubesphere.GetUserAnnotation(ctx, username, users.AnnotationUserCreator)
+			if err != nil {
+				return "", err
+			}
+			creatorZone, err := kubesphere.GetUserZone(ctx, creator)
+			if err != nil {
+				return "", err
+			}
+			return strings.Replace(creatorZone, creator, username, 1), nil
+		}
+		return "", err
+	}
+	return zone, nil
 }

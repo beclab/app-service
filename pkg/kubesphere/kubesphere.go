@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	v1alpha1client "bytetrade.io/web3os/app-service/pkg/client/clientset/v1alpha1"
 
 	"github.com/dgrijalva/jwt-go"
@@ -143,7 +144,7 @@ func GetUserAnnotation(ctx context.Context, username, annotation string) (string
 
 	a, ok := data.GetAnnotations()[annotation]
 	if !ok {
-		return "", fmt.Errorf("user annotation %s not found", annotation)
+		return "", api.ErrUserAnnoKeyNotFound
 	}
 
 	return a, nil
