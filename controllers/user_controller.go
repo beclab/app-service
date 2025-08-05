@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -608,20 +609,32 @@ func (r *UserController) waitForSyncToLLDAP(user *iamv1alpha2.User) error {
 				userIndex = userRes.CreateUser.UserIndex
 
 				for _, groupName := range user.Spec.Groups {
+					var gid int
 					g, err := r.LLdapClient.Groups().GetByName(context.TODO(), groupName)
+					if err != nil && !lapierrors.IsNotFound(err) {
+						return false, err
+					}
+
 					if err == nil {
 						// group already exist in lldap
-						continue
+						gid = g.Id
 					}
 
 					// group does not exist in lldap, so create it
 					if lapierrors.IsNotFound(err) {
-						_, err = r.LLdapClient.Groups().Create(context.TODO(), groupName)
+						newGroup, err := r.LLdapClient.Groups().Create(context.TODO(), groupName)
 						if err != nil && !lapierrors.IsAlreadyExists(err) {
 							return false, err
 						}
+
+						if err == nil {
+							gid = newGroup.Id
+						}
 					}
-					err = r.LLdapClient.Groups().AddUser(context.TODO(), user.Name, g.Id)
+					if gid == 0 {
+						return false, errors.New("invalid group id")
+					}
+					err = r.LLdapClient.Groups().AddUser(context.TODO(), user.Name, gid)
 					if err != nil && !lapierrors.IsAlreadyExists(err) {
 						return false, err
 					}
