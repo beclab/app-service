@@ -67,6 +67,12 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 	marketSource := req.HeaderParameter(constants.MarketSource)
 	klog.Infof("install: user: %v, source: %v", owner, marketSource)
 
+	if !h.opLockManager.TryLock(lockKey(app, owner)) {
+		api.HandleBadRequest(resp, req, errors.New("please try again later"))
+		return
+	}
+	defer h.opLockManager.Unlock(lockKey(app, owner))
+
 	insReq := &api.InstallRequest{}
 	err := req.ReadEntity(insReq)
 	if err != nil {
@@ -427,6 +433,10 @@ func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opI
 			return
 		}
 	} else {
+		if !appstate.IsOperationAllowed(a.Status.State, v1alpha1.InstallOp) {
+			api.HandleBadRequest(h.resp, h.req, fmt.Errorf("%s operation is not allowed for %s state", v1alpha1.InstallOp, a.Status.State))
+			return
+		}
 		// update Spec.Config
 		patchData := map[string]interface{}{
 			"metadata": map[string]interface{}{
@@ -456,10 +466,7 @@ func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opI
 			api.HandleError(h.resp, h.req, err)
 			return
 		}
-		if !appstate.IsOperationAllowed(a.Status.State, v1alpha1.InstallOp) {
-			api.HandleBadRequest(h.resp, h.req, fmt.Errorf("%s operation is not allowed for %s state", v1alpha1.InstallOp, a.Status.State))
-			return
-		}
+
 	}
 	opID = strconv.FormatInt(time.Now().Unix(), 10)
 

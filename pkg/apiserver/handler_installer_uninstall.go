@@ -23,6 +23,13 @@ func (h *Handler) uninstall(req *restful.Request, resp *restful.Response) {
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 	token := req.HeaderParameter(constants.AuthorizationTokenKey)
 
+	if !h.opLockManager.TryLock(lockKey(app, owner)) {
+		api.HandleBadRequest(resp, req, errors.New("please try again later"))
+		return
+	}
+
+	defer h.opLockManager.Unlock(lockKey(app, owner))
+
 	request := &api.UninstallRequest{}
 	if req.Request.ContentLength > 0 {
 		err := req.ReadEntity(request)

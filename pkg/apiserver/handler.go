@@ -30,6 +30,7 @@ type Handler struct {
 	appmgrLister     lister_v1alpha1.ApplicationManagerLister
 	appSynced        cache.InformerSynced
 	appmgrSynced     cache.InformerSynced
+	opLockManager    *OpLockManager
 }
 
 type handlerBuilder struct {
@@ -135,6 +136,7 @@ func (b *handlerBuilder) Build() (*Handler, error) {
 		appmgrLister:     b.informer.App().V1alpha1().ApplicationManagers().Lister(),
 		appSynced:        b.informer.App().V1alpha1().Applications().Informer().HasSynced,
 		appmgrSynced:     b.informer.App().V1alpha1().ApplicationManagers().Informer().HasSynced,
+		opLockManager:    NewLocker(),
 	}, err
 
 }

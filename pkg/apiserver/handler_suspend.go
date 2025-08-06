@@ -22,6 +22,13 @@ import (
 func (h *Handler) suspend(req *restful.Request, resp *restful.Response) {
 	app := req.PathParameter(ParamAppName)
 	owner := req.Attribute(constants.UserContextAttribute).(string)
+
+	if !h.opLockManager.TryLock(lockKey(app, owner)) {
+		api.HandleBadRequest(resp, req, errors.New("please try again later"))
+		return
+	}
+	defer h.opLockManager.Unlock(lockKey(app, owner))
+
 	if userspace.IsSysApp(app) {
 		api.HandleBadRequest(resp, req, errors.New("sys app can not be suspend"))
 		return
@@ -74,6 +81,12 @@ func (h *Handler) suspend(req *restful.Request, resp *restful.Response) {
 func (h *Handler) resume(req *restful.Request, resp *restful.Response) {
 	app := req.PathParameter(ParamAppName)
 	owner := req.Attribute(constants.UserContextAttribute).(string)
+
+	if !h.opLockManager.TryLock(lockKey(app, owner)) {
+		api.HandleBadRequest(resp, req, errors.New("please try again later"))
+		return
+	}
+	defer h.opLockManager.Unlock(lockKey(app, owner))
 
 	name, err := apputils.FmtAppMgrName(app, owner, "")
 	if err != nil {

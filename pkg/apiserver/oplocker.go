@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"fmt"
 	"sync"
 )
 
@@ -34,6 +35,8 @@ func (olm *OpLockManager) TryLock(name string) bool {
 	if !ok {
 		l = &lock{counter: 1}
 		olm.locksKey[name] = l
+		l.mu.Lock()
+
 		return true
 	}
 	if l.mu.TryLock() {
@@ -62,4 +65,8 @@ func NewLocker() *OpLockManager {
 	return &OpLockManager{
 		locksKey: make(map[string]*lock),
 	}
+}
+
+func lockKey(app, owner string) string {
+	return fmt.Sprintf("%s-%s", app, owner)
 }
