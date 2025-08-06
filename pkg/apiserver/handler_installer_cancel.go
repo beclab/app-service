@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -19,6 +20,13 @@ import (
 func (h *Handler) cancel(req *restful.Request, resp *restful.Response) {
 	app := req.PathParameter(ParamAppName)
 	owner := req.Attribute(constants.UserContextAttribute).(string)
+
+	if !h.opLockManager.TryLock(lockKey(app, owner)) {
+		api.HandleBadRequest(resp, req, errors.New("please try again later"))
+		return
+	}
+	defer h.opLockManager.Unlock(lockKey(app, owner))
+
 	// type = timeout | operate
 	cancelType := req.QueryParameter("type")
 	if cancelType == "" {

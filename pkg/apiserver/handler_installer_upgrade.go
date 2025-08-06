@@ -2,6 +2,7 @@ package apiserver
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -171,6 +172,12 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 	app := req.PathParameter(ParamAppName)
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 	marketSource := req.HeaderParameter(constants.MarketSource)
+
+	if !h.opLockManager.TryLock(lockKey(app, owner)) {
+		api.HandleBadRequest(resp, req, errors.New("please try again later"))
+		return
+	}
+	defer h.opLockManager.Unlock(lockKey(app, owner))
 
 	request := &api.UpgradeRequest{}
 	err := req.ReadEntity(request)
