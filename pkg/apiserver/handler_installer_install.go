@@ -428,7 +428,8 @@ func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opI
 		}
 	} else {
 		if !appstate.IsOperationAllowed(a.Status.State, v1alpha1.InstallOp) {
-			api.HandleBadRequest(h.resp, h.req, fmt.Errorf("%s operation is not allowed for %s state", v1alpha1.InstallOp, a.Status.State))
+			err = fmt.Errorf("%s operation is not allowed for %s state", v1alpha1.InstallOp, a.Status.State)
+			api.HandleBadRequest(h.resp, h.req, err)
 			return
 		}
 		// update Spec.Config
