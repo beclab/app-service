@@ -294,35 +294,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get ", &ResultResponse{}))
 
-	// handler_upgrade
-	ws.Route(ws.GET("/upgrade/newversion").
-		To(handler.newVersion).
-		Doc("get there is a new version can be upgrade or not").
-		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
-		Returns(http.StatusOK, "Success to get the new version", &ResultResponse{}))
-
-	ws.Route(ws.GET("/upgrade/state").
-		To(handler.upgradeState).
-		Doc("get the running upgrade state").
-		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
-		Returns(http.StatusOK, "Success to get state", &ResultResponse{}))
-
-	ws.Route(ws.POST("/upgrade").
-		To(tryAppInstall(requireAdmin(handler, handler.upgrade))).
-		Doc("upgrade system").
-		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
-		Returns(http.StatusOK, "Success to start upgrading", &ResultResponse{}))
-
-	ws.Route(ws.POST("/upgrade/cancel").
-		To(requireAdmin(handler, handler.upgradeCancel)).
-		Doc("cancel the running upgrading").
-		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
-		Returns(http.StatusOK, "Success to cancel", &ResultResponse{}))
-
 	// handler_webhook
 	ws.Route(ws.POST("/sandbox/inject").
 		To(handler.sandboxInject).
