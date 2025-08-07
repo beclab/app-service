@@ -3,7 +3,6 @@ package apiserver
 import (
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"errors"
-
 	"github.com/emicklei/go-restful/v3"
 	"go.uber.org/atomic"
 )
@@ -17,7 +16,13 @@ func init() {
 func lockAppInstaller()   { appinstallerLock.Store(true) }
 func unlockAppInstaller() { appinstallerLock.Store(false) }
 func tryAppInstall(next func(req *restful.Request, resp *restful.Response)) func(req *restful.Request, resp *restful.Response) {
+	// 入队？
 	return func(req *restful.Request, resp *restful.Response) {
+		// 入队
+		// if len(queue) > 0 {
+		//		next(req, resp)
+		// }
+
 		if !appinstallerLock.Load() {
 			next(req, resp)
 		} else {
@@ -25,3 +30,13 @@ func tryAppInstall(next func(req *restful.Request, resp *restful.Response)) func
 		}
 	}
 }
+
+//func queued(next func(req *restful.Request, resp *restful.Response)) func(req *restful.Request, resp *restful.Response) {
+//	return func(req *restful.Request, resp *restful.Response) {
+//		// 入队
+//		// if len(queue) > 0 {
+//		//		next(req, resp)
+//		// }
+//		WQ.Add(func() { next(req, resp) })
+//	}
+//}

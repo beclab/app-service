@@ -427,6 +427,10 @@ func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opI
 			return
 		}
 	} else {
+		if !appstate.IsOperationAllowed(a.Status.State, v1alpha1.InstallOp) {
+			api.HandleBadRequest(h.resp, h.req, fmt.Errorf("%s operation is not allowed for %s state", v1alpha1.InstallOp, a.Status.State))
+			return
+		}
 		// update Spec.Config
 		patchData := map[string]interface{}{
 			"metadata": map[string]interface{}{
@@ -456,10 +460,7 @@ func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opI
 			api.HandleError(h.resp, h.req, err)
 			return
 		}
-		if !appstate.IsOperationAllowed(a.Status.State, v1alpha1.InstallOp) {
-			api.HandleBadRequest(h.resp, h.req, fmt.Errorf("%s operation is not allowed for %s state", v1alpha1.InstallOp, a.Status.State))
-			return
-		}
+
 	}
 	opID = strconv.FormatInt(time.Now().Unix(), 10)
 

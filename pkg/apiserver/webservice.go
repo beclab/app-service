@@ -395,7 +395,7 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 
 	// app operate
 	ws.Route(ws.POST("/apps/{"+ParamAppName+"}/install").
-		To(tryAppInstall(handler.install)).
+		To(handler.queued(handler.install)).
 		Doc("Install the application").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
