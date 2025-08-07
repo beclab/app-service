@@ -403,7 +403,7 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Returns(http.StatusOK, "Success to begin a installation of the application", &api.InstallationResponse{}))
 
 	ws.Route(ws.POST("/apps/{"+ParamAppName+"}/uninstall").
-		To(handler.uninstall).
+		To(handler.queued(handler.uninstall)).
 		Doc("Uninstall the application").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
@@ -411,7 +411,7 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Returns(http.StatusOK, "Success to begin a uninstallation of the application", &api.InstallationResponse{}))
 
 	ws.Route(ws.POST("/apps/{"+ParamAppName+"}/suspend").
-		To(handler.suspend).
+		To(handler.queued(handler.suspend)).
 		Doc("suspend the application").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
@@ -419,7 +419,7 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Returns(http.StatusOK, "Success to suspend of the application", &api.InstallationResponseData{}))
 
 	ws.Route(ws.POST("/apps/{"+ParamAppName+"}/resume").
-		To(handler.resume).
+		To(handler.queued(handler.resume)).
 		Doc("resume the application").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
@@ -427,7 +427,7 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Returns(http.StatusOK, "Success to begin to resume the application", &api.InstallationResponseData{}))
 
 	ws.Route(ws.POST("/apps/{"+ParamAppName+"}/upgrade").
-		To(handler.appUpgrade).
+		To(handler.queued(handler.appUpgrade)).
 		Reads(api.UpgradeRequest{}).
 		Doc("Upgrade the application").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
@@ -436,7 +436,7 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Returns(http.StatusOK, "Success to begin upgrade of the application", &api.ReleaseUpgradeResponse{}))
 
 	ws.Route(ws.POST("/apps/{"+ParamAppName+"}/cancel").
-		To(handler.cancel).
+		To(handler.queued(handler.cancel)).
 		Doc("cancel pending or installing app").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamInstallationID, "the id of a installation or uninstallation")).
