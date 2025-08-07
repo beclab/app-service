@@ -73,6 +73,8 @@ func (s *APIServer) PrepareRun(ksHost string, kubeConfig *rest.Config, client cl
 	if err != nil {
 		return err
 	}
+	go apiHandler.opController.run()
+
 	err = apiHandler.Run(stopCh)
 	if err != nil {
 		klog.Infof("wait for cache sync failed %v", err)

@@ -96,7 +96,7 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 
 	// handler_user
 	ws.Route(ws.POST("/users").
-		To(tryAppInstall(handler.createUser)).
+		To(handler.createUser).
 		Doc("create new user's launcher and apps").
 		Param(ws.PathParameter(ParamAppName, "the name of the user")).
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
@@ -212,7 +212,7 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 
 	// handler_settings
 	ws.Route(ws.POST("/applications/{"+ParamAppName+"}/setup").
-		To(tryAppInstall(handler.setupApp)).
+		To(handler.setupApp).
 		Doc("update the application settings").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
@@ -229,7 +229,7 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Returns(http.StatusOK, "Success to get the application settings", nil))
 
 	ws.Route(ws.POST("/applications/{"+ParamAppName+"}/{"+ParamEntranceName+"}/setup").
-		To(tryAppInstall(handler.setupAppEntranceDomain)).
+		To(handler.setupAppEntranceDomain).
 		Doc("update the application settings of custom domain").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
@@ -256,7 +256,7 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Returns(http.StatusOK, "Success to get the application entrances", nil))
 
 	ws.Route(ws.POST("/applications/{"+ParamAppName+"}/{"+ParamEntranceName+"}/auth-level").
-		To(tryAppInstall(handler.setupAppAuthLevel)).
+		To(handler.setupAppAuthLevel).
 		Doc("set the entrance auth level").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
@@ -265,7 +265,7 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Returns(http.StatusOK, "Success to set the application entrance auth level", nil))
 
 	ws.Route(ws.POST("/applications/{"+ParamAppName+"}/{"+ParamEntranceName+"}/policy").
-		To(tryAppInstall(handler.setupAppEntrancePolicy)).
+		To(handler.setupAppEntrancePolicy).
 		Doc("set the entrance policy").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
@@ -310,7 +310,7 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Returns(http.StatusOK, "Success to get state", &ResultResponse{}))
 
 	ws.Route(ws.POST("/upgrade").
-		To(tryAppInstall(requireAdmin(handler, handler.upgrade))).
+		To(requireAdmin(handler, handler.upgrade)).
 		Doc("upgrade system").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
@@ -395,7 +395,7 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 
 	// app operate
 	ws.Route(ws.POST("/apps/{"+ParamAppName+"}/install").
-		To(tryAppInstall(handler.install)).
+		To(handler.queued(handler.install)).
 		Doc("Install the application").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
@@ -403,7 +403,7 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Returns(http.StatusOK, "Success to begin a installation of the application", &api.InstallationResponse{}))
 
 	ws.Route(ws.POST("/apps/{"+ParamAppName+"}/uninstall").
-		To(tryAppInstall(handler.uninstall)).
+		To(handler.queued(handler.uninstall)).
 		Doc("Uninstall the application").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
@@ -411,7 +411,7 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Returns(http.StatusOK, "Success to begin a uninstallation of the application", &api.InstallationResponse{}))
 
 	ws.Route(ws.POST("/apps/{"+ParamAppName+"}/suspend").
-		To(tryAppInstall(handler.suspend)).
+		To(handler.queued(handler.suspend)).
 		Doc("suspend the application").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
@@ -419,7 +419,7 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Returns(http.StatusOK, "Success to suspend of the application", &api.InstallationResponseData{}))
 
 	ws.Route(ws.POST("/apps/{"+ParamAppName+"}/resume").
-		To(tryAppInstall(handler.resume)).
+		To(handler.queued(handler.resume)).
 		Doc("resume the application").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
@@ -427,7 +427,7 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Returns(http.StatusOK, "Success to begin to resume the application", &api.InstallationResponseData{}))
 
 	ws.Route(ws.POST("/apps/{"+ParamAppName+"}/upgrade").
-		To(tryAppInstall(handler.appUpgrade)).
+		To(handler.queued(handler.appUpgrade)).
 		Reads(api.UpgradeRequest{}).
 		Doc("Upgrade the application").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
@@ -436,7 +436,7 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Returns(http.StatusOK, "Success to begin upgrade of the application", &api.ReleaseUpgradeResponse{}))
 
 	ws.Route(ws.POST("/apps/{"+ParamAppName+"}/cancel").
-		To(handler.cancel).
+		To(handler.queued(handler.cancel)).
 		Doc("cancel pending or installing app").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamInstallationID, "the id of a installation or uninstallation")).
