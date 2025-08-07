@@ -24,12 +24,15 @@ func (h *Handler) queued(next func(req *restful.Request, resp *restful.Response)
 	return func(req *restful.Request, resp *restful.Response) {
 		app := req.PathParameter(ParamAppName)
 		klog.Infof("enqueue queue %s .........", app)
+		done := make(chan struct{})
 		t := &Task{
 			exec: func() {
 				next(req, resp)
+				close(done)
 			},
 		}
 		h.opController.enqueue(t)
+		<-done
 	}
 }
 
