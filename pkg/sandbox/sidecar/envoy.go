@@ -161,10 +161,6 @@ func getEnvoyContainerPorts() []corev1.ContainerPort {
 }
 
 func getEnvoyConfig(appcfg *appcfg.ApplicationConfig, injectPolicy, injectWs, injectUpload bool, appDomains []string, pod *corev1.Pod, perms []appcfg.SysDataPermission) string {
-	setCookieInlineCode, err := genEnvoySetCookieScript(appDomains)
-	if err != nil {
-		klog.Errorf("Failed to get setCookieInlineCode err=%v", err)
-	}
 	opts := options{
 		timeout: func() *int64 {
 			defaultTimeout := int64(15)
@@ -174,7 +170,7 @@ func getEnvoyConfig(appcfg *appcfg.ApplicationConfig, injectPolicy, injectWs, in
 			return appcfg.ApiTimeout
 		}()}
 
-	ec := New(appcfg.OwnerName, setCookieInlineCode, getHTTProbePath(pod), opts)
+	ec := New(appcfg.OwnerName, getHTTProbePath(pod), opts)
 	if injectPolicy {
 		ec.WithPolicy()
 	}
@@ -185,7 +181,7 @@ func getEnvoyConfig(appcfg *appcfg.ApplicationConfig, injectPolicy, injectWs, in
 		ec.WithUpload()
 	}
 
-	_, err = ec.WithProxyOutBound(appcfg, perms)
+	_, err := ec.WithProxyOutBound(appcfg, perms)
 	if err != nil {
 		klog.Errorf("Failed to make proxyoutbound err=%v", err)
 	}
@@ -475,7 +471,7 @@ var httpM *http_connection_manager.HttpConnectionManager
 var routeConfig *routev3.RouteConfiguration
 
 // New build a new envoy config.
-func New(username string, inlineCode []byte, probesPath []string, opts options) *envoyConfig {
+func New(username string, probesPath []string, opts options) *envoyConfig {
 	ec := &envoyConfig{
 		username: username,
 		opts:     opts,
@@ -487,18 +483,6 @@ func New(username string, inlineCode []byte, probesPath []string, opts options) 
 				TypedConfig: utils.MessageToAny(&envoy_router.Router{}),
 			},
 		},
-	}
-	if len(inlineCode) != 0 {
-		httpFilters = append([]*http_connection_manager.HttpFilter{
-			{
-				Name: "envoy.filters.http.lua",
-				ConfigType: &http_connection_manager.HttpFilter_TypedConfig{
-					TypedConfig: utils.MessageToAny(&envoy_lua.Lua{
-						InlineCode: string(inlineCode),
-					}),
-				},
-			},
-		}, httpFilters...)
 	}
 	routeConfig = &routev3.RouteConfiguration{
 		Name: "local_route",
