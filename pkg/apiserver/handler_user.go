@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/prometheus"
 	"bytetrade.io/web3os/app-service/pkg/upgrade"
 	"bytetrade.io/web3os/app-service/pkg/users"
-	"strings"
+	"bytetrade.io/web3os/app-service/pkg/utils"
 
 	iamv1alpha2 "github.com/beclab/api/iam/v1alpha2"
 	"github.com/emicklei/go-restful/v3"
@@ -292,42 +293,16 @@ func (h *Handler) getUserDomainType(user *iamv1alpha2.User) (bool, string, error
 	if zone != "" {
 		return false, zone, nil
 	}
-	creator := user.Annotations[users.AnnotationUserCreator]
-	if creator != "" {
-		if creator == "cli" {
-			u, err := h.findOwnerUser()
-			if err != nil {
-				return false, "", err
-			}
-			if v := u.Annotations[users.UserAnnotationZoneKey]; v != "" {
-				return true, v, nil
-			}
-		} else {
-			var creatorUser iamv1alpha2.User
-			err := h.ctrlClient.Get(context.TODO(), types.NamespacedName{Name: creator}, &creatorUser)
-			if err != nil {
-				return false, "", err
-			}
-			if v := creatorUser.Annotations[users.UserAnnotationZoneKey]; v != "" {
-				return true, v, nil
-			}
-		}
-	}
-	return false, "", nil
-}
-
-func (h *Handler) findOwnerUser() (*iamv1alpha2.User, error) {
-	var userList iamv1alpha2.UserList
-	err := h.ctrlClient.List(context.TODO(), &userList)
+	creatorUser, err := utils.FindOwnerUser(h.ctrlClient, user)
 	if err != nil {
-		return nil, err
+		klog.Error(err)
+		return false, "", err
 	}
-	for _, u := range userList.Items {
-		if u.Annotations[users.UserAnnotationOwnerRole] == "owner" {
-			return &u, nil
-		}
+	if v := creatorUser.Annotations[users.UserAnnotationZoneKey]; v != "" {
+		return true, v, nil
 	}
-	return nil, errors.New("owner user not found")
+
+	return false, "", nil
 }
 
 type UserResourceLimit struct {

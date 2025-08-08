@@ -10,12 +10,16 @@ import (
 
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
+	"bytetrade.io/web3os/app-service/pkg/users"
+	iamv1alpha2 "github.com/beclab/api/iam/v1alpha2"
 
 	srvconfig "github.com/containerd/containerd/services/server/config"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // CalicoTunnelAddrAnnotation annotation key for calico tunnel address.
@@ -176,3 +180,28 @@ func ReplacedImageRef(mirrorsEndpoint []string, oldImageRef string, checkConnect
 }
 
 func hasPort(s string) bool { return strings.LastIndex(s, ":") > strings.LastIndex(s, "]") }
+
+func FindOwnerUser(ctrlClient client.Client, user *iamv1alpha2.User) (*iamv1alpha2.User, error) {
+	creator := user.Annotations[users.AnnotationUserCreator]
+	if creator != "cli" {
+		var creatorUser iamv1alpha2.User
+		err := ctrlClient.Get(context.TODO(), types.NamespacedName{Name: creator}, &creatorUser)
+		if err != nil {
+			return nil, err
+		}
+		return &creatorUser, nil
+	}
+
+	var userList iamv1alpha2.UserList
+	err := ctrlClient.List(context.TODO(), &userList)
+	if err != nil {
+		klog.Errorf("failed to list user %v", err)
+		return nil, err
+	}
+	for _, u := range userList.Items {
+		if u.Annotations[users.UserAnnotationOwnerRole] == "owner" {
+			return &u, nil
+		}
+	}
+	return nil, errors.New("user with owner role not found")
+}
