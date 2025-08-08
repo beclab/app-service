@@ -866,13 +866,16 @@ func (h *Handler) validateUser(ctx context.Context, req *admissionv1.AdmissionRe
 
 	creator := user.Annotations[users.AnnotationUserCreator]
 	isValidCreator := false
-	for _, existingUser := range existingUsers.Items {
-		//existingUserRole := existingUser.Annotations[users.UserAnnotationOwnerRole]
-
-		if existingUser.Name == creator {
-			isValidCreator = true
+	if creator == "cli" {
+		isValidCreator = true
+	} else {
+		for _, existingUser := range existingUsers.Items {
+			if existingUser.Name == creator {
+				isValidCreator = true
+			}
 		}
 	}
+
 	if !isValidCreator {
 		resp.Allowed = false
 		resp.Result = &metav1.Status{

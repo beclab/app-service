@@ -288,22 +288,46 @@ func (h *Handler) userStatus(req *restful.Request, resp *restful.Response) {
 }
 
 func (h *Handler) getUserDomainType(user *iamv1alpha2.User) (bool, string, error) {
-	zone := user.Annotations["bytetrade.io/zone"]
+	zone := user.Annotations[users.UserAnnotationZoneKey]
 	if zone != "" {
 		return false, zone, nil
 	}
-	creator := user.Annotations["bytetrade.io/creator"]
+	creator := user.Annotations[users.AnnotationUserCreator]
 	if creator != "" {
-		var creatorUser iamv1alpha2.User
-		err := h.ctrlClient.Get(context.TODO(), types.NamespacedName{Name: creator}, &creatorUser)
-		if err != nil {
-			return false, "", err
-		}
-		if v := creatorUser.Annotations["bytetrade.io/zone"]; v != "" {
-			return true, v, nil
+		if creator == "cli" {
+			u, err := h.findOwnerUser()
+			if err != nil {
+				return false, "", err
+			}
+			if v := u.Annotations[users.UserAnnotationZoneKey]; v != "" {
+				return true, v, nil
+			}
+		} else {
+			var creatorUser iamv1alpha2.User
+			err := h.ctrlClient.Get(context.TODO(), types.NamespacedName{Name: creator}, &creatorUser)
+			if err != nil {
+				return false, "", err
+			}
+			if v := creatorUser.Annotations[users.UserAnnotationZoneKey]; v != "" {
+				return true, v, nil
+			}
 		}
 	}
 	return false, "", nil
+}
+
+func (h *Handler) findOwnerUser() (*iamv1alpha2.User, error) {
+	var userList iamv1alpha2.UserList
+	err := h.ctrlClient.List(context.TODO(), &userList)
+	if err != nil {
+		return nil, err
+	}
+	for _, u := range userList.Items {
+		if u.Annotations[users.UserAnnotationOwnerRole] == "owner" {
+			return &u, nil
+		}
+	}
+	return nil, errors.New("owner user not found")
 }
 
 type UserResourceLimit struct {

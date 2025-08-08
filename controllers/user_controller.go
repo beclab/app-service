@@ -425,7 +425,16 @@ func (r *UserController) createUserResources(ctx context.Context, user *iamv1alp
 
 	// copy ssl configmap to new userspace
 	var applyCm *applyCorev1.ConfigMapApplyConfiguration
-	ownerUserspace := fmt.Sprintf("user-space-%s", user.Annotations[creator])
+	creatorUser := user.Annotations[creator]
+	if creatorUser == "cli" {
+		u, err := r.findOwnerUser(ctx)
+		if err != nil {
+			klog.Errorf("failed to find owner user %v", err)
+			return err
+		}
+		creatorUser = u.Name
+	}
+	ownerUserspace := fmt.Sprintf("user-space-%s", creatorUser)
 	nsName := fmt.Sprintf("user-space-%s", user.Name)
 	sslConfig, err := ksClient.CoreV1().ConfigMaps(ownerUserspace).Get(ctx, "zone-ssl-config", metav1.GetOptions{})
 	if err == nil && sslConfig != nil {
@@ -449,26 +458,33 @@ func (r *UserController) createUserResources(ctx context.Context, user *iamv1alp
 	return nil
 }
 
-func (c *UserController) createNamespace(ctx context.Context, user *iamv1alpha2.User) error {
+func (r *UserController) createNamespace(ctx context.Context, user *iamv1alpha2.User) error {
 
 	// create namespace user-space-<user>
 	userspaceNs := fmt.Sprintf("user-space-%s", user.Name)
 	userSystemNs := fmt.Sprintf("user-system-%s", user.Name)
+	creatorUser := user.Annotations[creator]
+	if creatorUser == "cli" {
+		u, err := r.findOwnerUser(ctx)
+		if err != nil {
+			return err
+		}
+		creatorUser = u.Name
+	}
 
 	// create user-space namespace
 	ns := corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: userspaceNs,
-			// TODO:hys
 			Annotations: map[string]string{
-				creator: user.Annotations[creator],
+				creator: creatorUser,
 			},
 			Finalizers: []string{
 				namespaceFinalizer,
 			},
 		},
 	}
-	err := c.Create(ctx, &ns)
+	err := r.Create(ctx, &ns)
 	if err != nil && !apierrors.IsAlreadyExists(err) {
 		klog.Errorf("failed to create user-space namespace %v", err)
 		return err
@@ -486,7 +502,7 @@ func (c *UserController) createNamespace(ctx context.Context, user *iamv1alpha2.
 			},
 		},
 	}
-	err = c.Create(ctx, &userSystemNamespace)
+	err = r.Create(ctx, &userSystemNamespace)
 	if err != nil && !apierrors.IsAlreadyExists(err) {
 		klog.Errorf("failed to create user-system namespace %v", err)
 		return err
@@ -716,6 +732,20 @@ func (r *UserController) waitForSyncToLLDAP(user *iamv1alpha2.User) error {
 	})
 	klog.V(0).Infof("poll result %v", err)
 	return err
+}
+
+func (r *UserController) findOwnerUser(ctx context.Context) (*iamv1alpha2.User, error) {
+	var userList iamv1alpha2.UserList
+	err := r.List(context.TODO(), &userList)
+	if err != nil {
+		return nil, err
+	}
+	for _, u := range userList.Items {
+		if u.Annotations[users.UserAnnotationOwnerRole] == "owner" {
+			return &u, nil
+		}
+	}
+	return nil, errors.New("owner user not found")
 }
 
 // UserCreateOption represents the options for creating a user
