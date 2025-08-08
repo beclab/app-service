@@ -425,7 +425,13 @@ func (r *UserController) createUserResources(ctx context.Context, user *iamv1alp
 
 	// copy ssl configmap to new userspace
 	var applyCm *applyCorev1.ConfigMapApplyConfiguration
-	ownerUserspace := fmt.Sprintf("user-space-%s", user.Annotations[creator])
+	creatorUser, err := utils.FindOwnerUser(r.Client, user)
+	if err != nil {
+		klog.Errorf("failed to find user with owner role %v", err)
+		return err
+	}
+
+	ownerUserspace := fmt.Sprintf("user-space-%s", creatorUser.Name)
 	nsName := fmt.Sprintf("user-space-%s", user.Name)
 	sslConfig, err := ksClient.CoreV1().ConfigMaps(ownerUserspace).Get(ctx, "zone-ssl-config", metav1.GetOptions{})
 	if err == nil && sslConfig != nil {
@@ -449,26 +455,30 @@ func (r *UserController) createUserResources(ctx context.Context, user *iamv1alp
 	return nil
 }
 
-func (c *UserController) createNamespace(ctx context.Context, user *iamv1alpha2.User) error {
+func (r *UserController) createNamespace(ctx context.Context, user *iamv1alpha2.User) error {
 
 	// create namespace user-space-<user>
 	userspaceNs := fmt.Sprintf("user-space-%s", user.Name)
 	userSystemNs := fmt.Sprintf("user-system-%s", user.Name)
+	creatorUser, err := utils.FindOwnerUser(r.Client, user)
+	if err != nil {
+		klog.Error(err)
+		return err
+	}
 
 	// create user-space namespace
 	ns := corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: userspaceNs,
-			// TODO:hys
 			Annotations: map[string]string{
-				creator: user.Annotations[creator],
+				creator: creatorUser.Name,
 			},
 			Finalizers: []string{
 				namespaceFinalizer,
 			},
 		},
 	}
-	err := c.Create(ctx, &ns)
+	err = r.Create(ctx, &ns)
 	if err != nil && !apierrors.IsAlreadyExists(err) {
 		klog.Errorf("failed to create user-space namespace %v", err)
 		return err
@@ -486,7 +496,7 @@ func (c *UserController) createNamespace(ctx context.Context, user *iamv1alpha2.
 			},
 		},
 	}
-	err = c.Create(ctx, &userSystemNamespace)
+	err = r.Create(ctx, &userSystemNamespace)
 	if err != nil && !apierrors.IsAlreadyExists(err) {
 		klog.Errorf("failed to create user-system namespace %v", err)
 		return err

@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/prometheus"
 	"bytetrade.io/web3os/app-service/pkg/upgrade"
 	"bytetrade.io/web3os/app-service/pkg/users"
-	"strings"
+	"bytetrade.io/web3os/app-service/pkg/utils"
 
 	iamv1alpha2 "github.com/beclab/api/iam/v1alpha2"
 	"github.com/emicklei/go-restful/v3"
@@ -288,21 +289,19 @@ func (h *Handler) userStatus(req *restful.Request, resp *restful.Response) {
 }
 
 func (h *Handler) getUserDomainType(user *iamv1alpha2.User) (bool, string, error) {
-	zone := user.Annotations["bytetrade.io/zone"]
+	zone := user.Annotations[users.UserAnnotationZoneKey]
 	if zone != "" {
 		return false, zone, nil
 	}
-	creator := user.Annotations["bytetrade.io/creator"]
-	if creator != "" {
-		var creatorUser iamv1alpha2.User
-		err := h.ctrlClient.Get(context.TODO(), types.NamespacedName{Name: creator}, &creatorUser)
-		if err != nil {
-			return false, "", err
-		}
-		if v := creatorUser.Annotations["bytetrade.io/zone"]; v != "" {
-			return true, v, nil
-		}
+	creatorUser, err := utils.FindOwnerUser(h.ctrlClient, user)
+	if err != nil {
+		klog.Error(err)
+		return false, "", err
 	}
+	if v := creatorUser.Annotations[users.UserAnnotationZoneKey]; v != "" {
+		return true, v, nil
+	}
+
 	return false, "", nil
 }
 
