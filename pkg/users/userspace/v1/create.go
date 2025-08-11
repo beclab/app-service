@@ -26,7 +26,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 )
@@ -271,18 +270,6 @@ func (c *Creator) installSysApps(ctx context.Context, bflPod *corev1.Pod) error 
 	}
 	vals["cluster"] = map[string]interface{}{
 		"arch": arch,
-	}
-
-	clientSet, err := kubernetes.NewForConfig(c.k8sConfig)
-	if err != nil {
-		return err
-	}
-	redisSecret, err := clientSet.CoreV1().Secrets("kubesphere-system").Get(ctx, "redis-secret", metav1.GetOptions{})
-	if err != nil {
-		return err
-	}
-	vals["kubesphere"] = map[string]interface{}{
-		"redis_password": string(redisSecret.Data["auth"]),
 	}
 
 	gpuType, err := utils.FindGpuTypeFromNodes(&nodes)
