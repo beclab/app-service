@@ -1,27 +1,31 @@
 package controllers
 
 import (
-	"bytetrade.io/web3os/app-service/pkg/utils/registry"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-
 	"os"
+	"runtime"
+	"sync"
 	"time"
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/utils"
-	imagetypes "github.com/containers/image/v5/types"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/retry"
+	"bytetrade.io/web3os/app-service/pkg/utils/registry"
 
 	"github.com/containerd/containerd"
 	"github.com/containerd/containerd/errdefs"
 	refdocker "github.com/containerd/containerd/reference/docker"
 	"github.com/containers/image/v5/image"
 	"github.com/containers/image/v5/transports/alltransports"
+	imagetypes "github.com/containers/image/v5/types"
+	"github.com/opencontainers/go-digest"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -136,8 +140,11 @@ func (r *AppImageInfoController) reconcile(ctx context.Context, instance *appv1a
 		return nil
 	}
 
+	start := time.Now()
+	klog.Infof("get image app %s request start", instance.Name)
+
 	state, message := "completed", "completed"
-	imageInfos, err := r.GetImageInfo(ctx, cur.Spec.Refs)
+	imageInfos, err := r.GetImageInfo(ctx, &cur)
 	if err != nil {
 		state = "failed"
 		message = err.Error()
@@ -159,8 +166,7 @@ func (r *AppImageInfoController) reconcile(ctx context.Context, instance *appv1a
 		klog.Infof("update app image status failed %v", err)
 		return err
 	}
-
-	klog.Infof("get app %s image info success", cur.Name)
+	klog.Infof("get app %s image: %v info success, time elapsed: %v", instance.Name, instance.Spec.Refs, time.Since(start))
 	return nil
 }
 
@@ -233,11 +239,153 @@ func parseImageSource(ctx context.Context, name string) (imagetypes.ImageSource,
 	return ref.NewImageSource(ctx, sys)
 }
 
-func (r *AppImageInfoController) GetManifest(ctx context.Context, imageName string) (*imagetypes.ImageInspectInfo, error) {
+func (r *AppImageInfoController) GetManifest(ctx context.Context, instance *appv1alpha1.AppImage, imageName string) (*imagetypes.ImageInspectInfo, error) {
+	if instance.Annotations == nil || instance.Annotations[api.AppImagesKey] == "" {
+		return r.getManifestViaNetwork(ctx, imageName)
+	}
+	imageInfoReqData := instance.Annotations[api.AppImagesKey]
+	var imageInfoReq api.ImageInfoRequest
+	err := json.Unmarshal([]byte(imageInfoReqData), &imageInfoReq)
+	if err != nil {
+		klog.Infof("failed to unmarshal image info %v", err)
+		return r.getManifestViaNetwork(ctx, imageName)
+	}
+	var archManifest *api.ImageManifest
+	imageRef, _ := refdocker.ParseDockerRef(imageName)
+	for _, imageInfo := range imageInfoReq.Images {
+		name, _ := refdocker.ParseDockerRef(imageInfo.ImageName)
+		if name.String() == imageRef.String() && imageInfo.ArchManifest != nil {
+			archManifest = imageInfo.ArchManifest[fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH)]
+			break
+		}
+	}
+	if archManifest == nil || len(archManifest.Layers) == 0 {
+		return r.getManifestViaNetwork(ctx, imageName)
+	}
+	klog.Infof("get app %s image manifest from annotations", imageName)
+	return r.buildImageInspectFromManifest(archManifest), nil
+}
+
+func newSystemContext() *imagetypes.SystemContext {
+	return &imagetypes.SystemContext{}
+}
+
+type imageInfoResult struct {
+	info appv1alpha1.ImageInfo
+	err  error
+}
+
+func (r *AppImageInfoController) GetImageInfo(ctx context.Context, instance *appv1alpha1.AppImage) ([]appv1alpha1.ImageInfo, error) {
+	nodeName := os.Getenv("NODE_NAME")
+
+	var wg sync.WaitGroup
+	results := make(chan imageInfoResult, len(instance.Spec.Refs))
+	tokens := make(chan struct{}, 5)
+	klog.Infof("refs: %d", len(instance.Spec.Refs))
+	for _, originRef := range instance.Spec.Refs {
+		wg.Add(1)
+		go func(originRef string) {
+			defer wg.Done()
+			tokens <- struct{}{}
+			defer func() { <-tokens }()
+			name, _ := refdocker.ParseDockerRef(originRef)
+			manifest, err := r.GetManifest(ctx, instance, originRef)
+			if err != nil {
+				klog.Infof("get image %s manifest failed %v", name.String(), err)
+				results <- imageInfoResult{err: err}
+				return
+			}
+
+			imageInfo := appv1alpha1.ImageInfo{
+				Node:         nodeName,
+				Name:         originRef,
+				Architecture: manifest.Architecture,
+				Variant:      manifest.Variant,
+				Os:           manifest.Os,
+			}
+			imageLayers := make([]appv1alpha1.ImageLayer, 0)
+			for _, layer := range manifest.LayersData {
+				imageLayer := appv1alpha1.ImageLayer{
+					MediaType:   layer.MIMEType,
+					Digest:      layer.Digest.String(),
+					Size:        layer.Size,
+					Annotations: layer.Annotations,
+				}
+				_, err = r.imageClient.ContentStore().Info(ctx, layer.Digest)
+				if err == nil {
+					imageLayer.Offset = layer.Size
+					imageLayers = append(imageLayers, imageLayer)
+					// go next layer
+					continue
+				}
+				if errors.Is(err, errdefs.ErrNotFound) {
+					statuses, err := r.imageClient.ContentStore().ListStatuses(ctx)
+					if err != nil {
+						klog.Errorf("list statuses failed %v", err)
+						results <- imageInfoResult{err: err}
+						return
+					}
+					for _, status := range statuses {
+						s := "layer-" + layer.Digest.String()
+						if s == status.Ref {
+							imageLayer.Offset = status.Offset
+							break
+						}
+					}
+				} else {
+					klog.Infof("get content info failed %v", err)
+					results <- imageInfoResult{err: err}
+					return
+				}
+				imageLayers = append(imageLayers, imageLayer)
+			}
+			imageInfo.LayersData = imageLayers
+			results <- imageInfoResult{info: imageInfo}
+		}(originRef)
+	}
+
+	wg.Wait()
+	close(results)
+	imageInfos := make([]appv1alpha1.ImageInfo, 0, len(instance.Spec.Refs))
+	var firstErr error
+	for result := range results {
+		if result.err != nil {
+			if firstErr == nil {
+				firstErr = result.err
+			}
+		} else {
+			imageInfos = append(imageInfos, result.info)
+		}
+	}
+	return imageInfos, firstErr
+}
+
+func (r *AppImageInfoController) buildImageInspectFromManifest(manifest *api.ImageManifest) *imagetypes.ImageInspectInfo {
+	layersData := make([]imagetypes.ImageInspectLayer, 0, len(manifest.Layers))
+	for _, layer := range manifest.Layers {
+		layersData = append(layersData, imagetypes.ImageInspectLayer{
+			MIMEType: layer.MediaType,
+			Digest:   digest.Digest(layer.Digest),
+			Size:     layer.Size,
+		})
+	}
+	klog.Infof("buildImageInspectFromManifest: os: %s, arch: %s", runtime.GOOS, runtime.GOARCH)
+	return &imagetypes.ImageInspectInfo{
+		Os:           runtime.GOOS,
+		Architecture: runtime.GOARCH,
+		LayersData:   layersData,
+	}
+}
+
+func (r *AppImageInfoController) getManifestViaNetwork(ctx context.Context, originRef string) (*imagetypes.ImageInspectInfo, error) {
+
+	name, _ := refdocker.ParseDockerRef(originRef)
+	replacedRef, _ := utils.ReplacedImageRef(registry.GetMirrors(), name.String(), false)
+
 	var src imagetypes.ImageSource
-	srcImageName := "docker://" + imageName
+	srcImageName := "docker://" + replacedRef
 	sysCtx := newSystemContext()
-	fmt.Printf("imageName: %s\n", imageName)
+	fmt.Printf("imageName: %s\n", replacedRef)
 	src, err := parseImageSource(ctx, srcImageName)
 	if err != nil {
 		klog.Infof("parse Image Source: %v", err)
@@ -258,75 +406,10 @@ func (r *AppImageInfoController) GetManifest(ctx context.Context, imageName stri
 	}
 	imgInspect, err := img.Inspect(ctx)
 	if err != nil {
-		klog.Infof("inspect image: %v", err)
+		klog.Infof("inspect image failed: %v", err)
 
 		return nil, err
 	}
 
 	return imgInspect, err
-}
-
-func newSystemContext() *imagetypes.SystemContext {
-	return &imagetypes.SystemContext{}
-}
-
-func (r *AppImageInfoController) GetImageInfo(ctx context.Context, refs []string) ([]appv1alpha1.ImageInfo, error) {
-	nodeName := os.Getenv("NODE_NAME")
-	imageInfos := make([]appv1alpha1.ImageInfo, 0)
-	for _, originRef := range refs {
-		name, _ := refdocker.ParseDockerRef(originRef)
-		replacedRef, _ := utils.ReplacedImageRef(registry.GetMirrors(), name.String(), false)
-
-		manifest, err := r.GetManifest(ctx, replacedRef)
-		if err != nil {
-			klog.Infof("get image %s manifest failed %v", name.String(), err)
-			return imageInfos, err
-		}
-
-		imageInfo := appv1alpha1.ImageInfo{
-			Node:         nodeName,
-			Name:         originRef,
-			Architecture: manifest.Architecture,
-			Variant:      manifest.Architecture,
-			Os:           manifest.Architecture,
-		}
-		imageLayers := make([]appv1alpha1.ImageLayer, 0)
-		for _, layer := range manifest.LayersData {
-			imageLayer := appv1alpha1.ImageLayer{
-				MediaType:   layer.MIMEType,
-				Digest:      layer.Digest.String(),
-				Size:        layer.Size,
-				Annotations: layer.Annotations,
-			}
-			_, err = r.imageClient.ContentStore().Info(ctx, layer.Digest)
-			if err == nil {
-				imageLayer.Offset = layer.Size
-				imageLayers = append(imageLayers, imageLayer)
-				// go next layer
-				continue
-			}
-			if errors.Is(err, errdefs.ErrNotFound) {
-				statuses, err := r.imageClient.ContentStore().ListStatuses(ctx)
-				if err != nil {
-					klog.Errorf("list statuses failed %v", err)
-					return imageInfos, err
-				}
-				for _, status := range statuses {
-					s := "layer-" + layer.Digest.String()
-					if s == status.Ref {
-						imageLayer.Offset = status.Offset
-						break
-					}
-				}
-			} else {
-				klog.Infof("get content info failed %v", err)
-				return imageInfos, err
-			}
-			imageLayers = append(imageLayers, imageLayer)
-		}
-		imageInfo.LayersData = imageLayers
-		imageInfos = append(imageInfos, imageInfo)
-
-	}
-	return imageInfos, nil
 }

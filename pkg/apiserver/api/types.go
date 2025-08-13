@@ -7,6 +7,7 @@ const (
 	AppMarketSourceKey  = "bytetrade.io/market-source"
 	AppInstallSourceKey = "bytetrade.io/install-source"
 	AppUninstallAllKey  = "bytetrade.io/uninstall-all"
+	AppImagesKey        = "bytetrade.io/images"
 )
 
 // Response represents the code for response.
@@ -166,6 +167,49 @@ type ResponseWithMsg struct {
 }
 
 type ImageInfoRequest struct {
-	Name   string   `json:"name"`
-	Images []string `json:"images"`
+	AppName string      `json:"name"`
+	Images  []ImageInfo `json:"images"`
+}
+type ImageInfo struct {
+	ImageName    string                    `json:"name"`
+	ManifestList ManifestList              `json:"manifest_list"`
+	ArchManifest map[string]*ImageManifest `json:"arch_manifest"`
+}
+
+type Config struct {
+	MediaType string `json:"mediaType"`
+	Size      int64  `json:"size"`
+	Digest    string `json:"digest"`
+}
+
+type Layer struct {
+	MediaType string `json:"mediaType"`
+	Size      int64  `json:"size"`
+	Digest    string `json:"digest"`
+}
+
+type Platform struct {
+	Architecture string `json:"architecture"`
+	OS           string `json:"os"`
+	Variant      string `json:"variant,omitempty"`
+}
+
+type ManifestItem struct {
+	MediaType string   `json:"mediaType"`
+	Size      int64    `json:"size"`
+	Digest    string   `json:"digest"`
+	Platform  Platform `json:"platform"`
+}
+
+type ImageManifest struct {
+	SchemaVersion int     `json:"schemaVersion"`
+	MediaType     string  `json:"mediaType"`
+	Config        Config  `json:"config"`
+	Layers        []Layer `json:"layers"`
+}
+
+type ManifestList struct {
+	SchemaVersion int            `json:"schemaVersion"`
+	MediaType     string         `json:"mediaType"`
+	Manifests     []ManifestItem `json:"manifests"`
 }

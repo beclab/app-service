@@ -2,6 +2,7 @@ package apiserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -25,10 +26,13 @@ func (h *Handler) imageInfo(req *restful.Request, resp *restful.Response) {
 		api.HandleBadRequest(resp, req, err)
 		return
 	}
-	if imageReq.Name == "" || len(imageReq.Images) == 0 {
+	if imageReq.AppName == "" || len(imageReq.Images) == 0 {
 		api.HandleBadRequest(resp, req, errors.New("empty name or images"))
 		return
 	}
+	start := time.Now()
+	klog.Infof("received app %s fetch image info request", imageReq.AppName)
+
 	err = createAppImage(req.Request.Context(), h.ctrlClient, imageReq)
 	if err != nil {
 		api.HandleError(resp, req, err)
@@ -36,8 +40,7 @@ func (h *Handler) imageInfo(req *restful.Request, resp *restful.Response) {
 	}
 	var am v1alpha1.AppImage
 	err = wait.PollImmediate(time.Second, 2*time.Minute, func() (done bool, err error) {
-		klog.Infof("imageReq name: %v", imageReq.Name)
-		err = h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: imageReq.Name}, &am)
+		err = h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: imageReq.AppName}, &am)
 		if err != nil && !apierrors.IsNotFound(err) {
 			return false, err
 		}
@@ -47,21 +50,23 @@ func (h *Handler) imageInfo(req *restful.Request, resp *restful.Response) {
 		if am.Status.State == "failed" {
 			return false, errors.New(am.Status.Message)
 		}
-		klog.Infof("poll appimage......................: %v", am.Status.State)
+		klog.Infof("poll app %s image info response", imageReq.AppName)
 		return false, nil
 	})
 	if err != nil {
-		klog.Errorf("poll failed %v", err)
+		klog.Errorf("poll app %s image info failed %v", imageReq.AppName, err)
 		api.HandleError(resp, req, err)
 		return
 	}
-	err = h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: imageReq.Name}, &am)
+	err = h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: imageReq.AppName}, &am)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
+	klog.Infof("finished app %s fetch image info request, time elapsed: %v", imageReq.AppName, time.Since(start))
+
 	resp.WriteAsJson(map[string]interface{}{
-		"name":   imageReq.Name,
+		"name":   imageReq.AppName,
 		"images": am.Status.Images,
 	})
 }
@@ -83,7 +88,7 @@ func createAppImage(ctx context.Context, ctrlClient client.Client, request *api.
 		return errors.New("cluster has no suitable node to schedule")
 	}
 	var am v1alpha1.AppImage
-	err = ctrlClient.Get(ctx, types.NamespacedName{Name: request.Name}, &am)
+	err = ctrlClient.Get(ctx, types.NamespacedName{Name: request.AppName}, &am)
 	if err == nil {
 		if am.Status.State != "completed" && am.Status.State != "failed" {
 			return nil
@@ -94,13 +99,25 @@ func createAppImage(ctx context.Context, ctrlClient client.Client, request *api.
 			return err
 		}
 	}
+	imageList := make([]string, 0, len(request.Images))
+	for _, image := range request.Images {
+		imageList = append(imageList, image.ImageName)
+	}
+	imagesString, err := json.Marshal(request)
+	if err != nil {
+		klog.Errorf("marshal appimage request failed %v", err)
+		return err
+	}
 	m := v1alpha1.AppImage{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: request.Name,
+			Name: request.AppName,
+			Annotations: map[string]string{
+				api.AppImagesKey: string(imagesString),
+			},
 		},
 		Spec: v1alpha1.ImageSpec{
-			AppName: request.Name,
-			Refs:    request.Images,
+			AppName: request.AppName,
+			Refs:    imageList,
 			Nodes:   nodeList,
 		},
 	}
