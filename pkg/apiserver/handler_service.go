@@ -245,7 +245,10 @@ func (h *Handler) listBackend(req *restful.Request, resp *restful.Response) {
 
 	// sort by create time desc
 	sort.Slice(filteredApps, func(i, j int) bool {
-		return filteredApps[i].CreationTimestamp.Before(&filteredApps[j].CreationTimestamp)
+		if !filteredApps[i].CreationTimestamp.Equal(&filteredApps[j].CreationTimestamp) {
+			return filteredApps[i].CreationTimestamp.Before(&filteredApps[j].CreationTimestamp)
+		}
+		return filteredApps[i].Spec.Name < filteredApps[j].Spec.Name
 	})
 
 	resp.WriteAsJson(filteredApps)

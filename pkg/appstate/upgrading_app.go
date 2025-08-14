@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/pkg/errors"
 	"helm.sh/helm/v3/pkg/action"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -194,6 +196,21 @@ func (p *UpgradingApp) exec(ctx context.Context) error {
 		"bfl": map[string]string{
 			"username": p.manager.Spec.AppOwner,
 		},
+	}
+	var nodes corev1.NodeList
+	err = p.client.List(ctx, &nodes, &client.ListOptions{})
+	if err != nil {
+		klog.Errorf("list node failed %v", err)
+		return err
+	}
+	gpuType, err := utils.FindGpuTypeFromNodes(&nodes)
+	if err != nil {
+		klog.Errorf("get gpu type failed %v", gpuType)
+		return err
+	}
+	values["GPU"] = map[string]interface{}{
+		"Type": gpuType,
+		"Cuda": os.Getenv("CUDA_VERSION"),
 	}
 
 	refs, err := p.getRefsForImageManager(appConfig, values)
