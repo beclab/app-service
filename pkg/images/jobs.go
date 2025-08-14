@@ -286,7 +286,7 @@ func updateProgress(statuses []StatusInfo, ongoing *jobs, seen map[string]int64,
 		thisNode := os.Getenv("NODE_NAME")
 		p := im.Status.Conditions[thisNode][ongoing.originRef]["offset"]
 		oldOffset, _ := strconv.ParseInt(p, 10, 64)
-		if oldOffset >= offset {
+		if oldOffset >= offset && offset != imageSize {
 			return nil
 		}
 
