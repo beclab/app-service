@@ -3,7 +3,13 @@ package appcfg
 type PermissionRegister struct {
 	App   string              `json:"app"`
 	AppID string              `json:"appid"`
-	Perm  []SysDataPermission `json:"perm"`
+	Perm  []PermissionRequire `json:"perm"`
+}
+
+type PermissionRequire struct {
+	ProviderName      string  `json:"provider_name"`
+	ProviderNamespace string  `json:"provider_namespace"`
+	ServiceAccount    *string `json:"service_account,omitempty"`
 }
 
 type Header struct {
@@ -23,4 +29,15 @@ type RegisterRespData struct {
 
 type UnregisterResp struct {
 	Header
+}
+
+type ProviderRegisterRequest struct {
+	AppName      string         `json:"app_name"`
+	AppNamespace string         `json:"app_namespace"`
+	Providers    []*ProviderCfg `json:"providers"`
+}
+
+type ProviderCfg struct {
+	Provider `json:",inline"`
+	Domain   string `json:"domain"`
 }

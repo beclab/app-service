@@ -1,7 +1,6 @@
 package sidecar
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -13,7 +12,6 @@ import (
 
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/constants"
-	"bytetrade.io/web3os/app-service/pkg/provider"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 
 	envoy_bootstrap "github.com/envoyproxy/go-control-plane/envoy/config/bootstrap/v3"
@@ -33,12 +31,8 @@ import (
 	"github.com/golang/protobuf/ptypes/any"
 	"github.com/golang/protobuf/ptypes/duration"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/pointer"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/yaml"
 )
 
@@ -63,16 +57,8 @@ func GetEnvoySidecarContainerSpec(clusterID string, envoyFilename string, appKey
 		Ports: getEnvoyContainerPorts(),
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      constants.SidecarConfigMapVolumeName,
-				ReadOnly:  true,
-				MountPath: constants.EnvoyConfigFilePath + "/" + constants.EnvoyConfigFileName,
-				SubPath:   constants.EnvoyConfigFileName,
-			},
-			{
-				Name:      constants.SidecarConfigMapVolumeName,
-				ReadOnly:  true,
-				MountPath: constants.EnvoyConfigFilePath + "/" + constants.EnvoyConfigOnlyOutBoundFileName,
-				SubPath:   constants.EnvoyConfigOnlyOutBoundFileName,
+				Name:      constants.EnvoyConfigWorkDirName,
+				MountPath: constants.EnvoyConfigFilePath,
 			},
 		},
 		Command: []string{"envoy"},
@@ -160,7 +146,7 @@ func getEnvoyContainerPorts() []corev1.ContainerPort {
 	return containerPorts
 }
 
-func getEnvoyConfig(appcfg *appcfg.ApplicationConfig, injectPolicy, injectWs, injectUpload bool, appDomains []string, pod *corev1.Pod, perms []appcfg.SysDataPermission) string {
+func getEnvoyConfig(appcfg *appcfg.ApplicationConfig, injectPolicy, injectWs, injectUpload bool, pod *corev1.Pod, perms []appcfg.SysDataPermission) string {
 	opts := options{
 		timeout: func() *int64 {
 			defaultTimeout := int64(15)
@@ -1111,91 +1097,71 @@ func (ec *envoyConfig) WithProxyOutBound(appcfg *appcfg.ApplicationConfig, perms
 		return ec, nil
 	}
 
-	config, err := ctrl.GetConfig()
-	if err != nil {
-		return ec, err
-	}
-	client, err := dynamic.NewForConfig(config)
-	if err != nil {
-		return ec, err
-	}
 	type route struct {
-		domain   string
-		dataType string
-		group    string
-		version  string
+		domain string
+		paths  []string
 	}
 	routesMap := make(map[string][]route)
 	for _, p := range perms {
-		svc := fmt.Sprintf("%s-svc", p.AppName)
+		svc := p.AppName
 		if p.Svc != "" {
 			svc = p.Svc
 		}
-		namespace := fmt.Sprintf("%s-%s", p.AppName, appcfg.OwnerName)
-		if p.Namespace != "" {
-			if p.Namespace == "user-space" || p.Namespace == "user-system" {
-				namespace = fmt.Sprintf("%s-%s", p.Namespace, appcfg.OwnerName)
-			} else {
-				namespace = p.Namespace
-			}
-		}
-		domain := fmt.Sprintf("%s.%s:%s", svc, namespace, p.Port)
-		routesMap[domain] = append(routesMap[domain], route{
-			domain:   domain,
-			dataType: p.DataType,
-			group:    p.Group,
-			version:  p.Version,
-		})
-	}
-	apClient := provider.NewApplicationPermissionRequest(client)
-	ap, err := apClient.Get(context.TODO(), "user-system-"+appcfg.OwnerName, appcfg.AppName, metav1.GetOptions{})
-	if err != nil {
-		return ec, err
-	}
-	var appKey string
-	if ap != nil {
-		appKey, _, _ = unstructured.NestedString(ap.Object, "spec", "key")
+		namespace := p.GetNamespace(appcfg.OwnerName)
+		svcDomain := fmt.Sprintf("%s.%s:%s", svc, namespace, p.Port)
+		routesMap[svcDomain] = append(routesMap[svcDomain], route{domain: p.Domain, paths: p.Ops})
 	}
 
 	virtualHosts := make([]*routev3.VirtualHost, 0, len(routesMap))
 	for vh, routes := range routesMap {
 		rs := make([]*routev3.Route, 0, len(routes)+1)
+		dmains := []string{vh}
 		for _, r := range routes {
-			rs = append(rs, &routev3.Route{
-				Match: &routev3.RouteMatch{
-					PathSpecifier: &routev3.RouteMatch_Prefix{
-						Prefix: "/",
-					},
-				},
-				Action: &routev3.Route_Route{
-					Route: &routev3.RouteAction{
-						ClusterSpecifier: &routev3.RouteAction_Cluster{
-							Cluster: "system-server",
-						},
-						PrefixRewrite: "/system-server/v2/" + r.dataType + "/" + r.group + "/" + r.version + "/",
-						Timeout: &duration.Duration{
-							Seconds: *ec.opts.timeout,
+			for _, p := range r.paths {
+				rs = append(rs, &routev3.Route{
+					Match: &routev3.RouteMatch{
+						PathSpecifier: &routev3.RouteMatch_Prefix{
+							Prefix: p,
 						},
 					},
-				},
-				RequestHeadersToAdd: []*corev3.HeaderValueOption{
-					{
-						Header: &corev3.HeaderValue{
-							Key:   "X-App-Key",
-							Value: appKey,
+					Action: &routev3.Route_Route{
+						Route: &routev3.RouteAction{
+							ClusterSpecifier: &routev3.RouteAction_Cluster{
+								Cluster: "system-server",
+							},
+							Timeout: &duration.Duration{
+								Seconds: *ec.opts.timeout,
+							},
 						},
 					},
-				},
-			})
-		}
+					RequestHeadersToAdd: []*corev3.HeaderValueOption{
+						{
+							Header: &corev3.HeaderValue{
+								Key:   "Temp-Authorization",
+								Value: "%REQ(Authorization)%",
+							},
+						},
+						{
+							Header: &corev3.HeaderValue{
+								Key:   "Authorization",
+								Value: "Bearer __SA_TOKEN__",
+							},
+							AppendAction: corev3.HeaderValueOption_OVERWRITE_IF_EXISTS_OR_ADD,
+						},
+					},
+				}) // end of routes append
+			} // end of paths loop
+
+			dmains = append(dmains, r.domain)
+		} // end of routes loop
 
 		virtualHosts = append(virtualHosts, &routev3.VirtualHost{
 			Name:    vh,
-			Domains: []string{vh},
+			Domains: dmains,
 			Routes:  rs,
 		})
 
-	}
+	} // end of routes map loop
 	virtualHosts = append(virtualHosts, &routev3.VirtualHost{
 		Name:    "origin_http",
 		Domains: []string{"*"},
@@ -1259,7 +1225,7 @@ func (ec *envoyConfig) WithProxyOutBound(appcfg *appcfg.ApplicationConfig, perms
 						{
 							HostIdentifier: &endpointv3.LbEndpoint_Endpoint{
 								Endpoint: &endpointv3.Endpoint{
-									Address: createSocketAddress("system-server.user-system-"+appcfg.OwnerName, 80),
+									Address: createSocketAddress("system-server.user-system-"+appcfg.OwnerName, 28080), // service proxy port
 								},
 							},
 						},
@@ -1277,14 +1243,6 @@ func (ec *envoyConfig) WithProxyOutBound(appcfg *appcfg.ApplicationConfig, perms
 					ConfigType: &envoy_listener.Filter_TypedConfig{
 						TypedConfig: utils.MessageToAny(&http_connection_manager.HttpConnectionManager{
 							HttpFilters: []*http_connection_manager.HttpFilter{
-								{
-									Name: "envoy.filters.http.lua",
-									ConfigType: &http_connection_manager.HttpFilter_TypedConfig{
-										TypedConfig: utils.MessageToAny(&envoy_lua.Lua{
-											InlineCode: string(getSignatureInlineCode()),
-										}),
-									},
-								},
 								{
 									Name: "envoy.filters.http.router",
 									ConfigType: &http_connection_manager.HttpFilter_TypedConfig{
@@ -1323,22 +1281,22 @@ func createSocketAddress(addr string, port uint32) *envoy_core.Address {
 	}
 }
 
-func getSignatureInlineCode() string {
-	code := `
-local sha = require("lib.sha2")
-function envoy_on_request(request_handle)
-	local app_key = os.getenv("APP_KEY")
-	local app_secret = os.getenv("APP_SECRET")
-	local current_time = os.time()
-	local minute_level_time = current_time - (current_time % 60)
-	local time_string = tostring(minute_level_time)
-	local s = app_key .. app_secret .. time_string
-	local hash = sha.sha256(s)
-	request_handle:headers():add("X-Auth-Signature",hash)
-end
-`
-	return code
-}
+// func getSignatureInlineCode() string {
+// 	code := `
+// local sha = require("lib.sha2")
+// function envoy_on_request(request_handle)
+// 	local app_key = os.getenv("APP_KEY")
+// 	local app_secret = os.getenv("APP_SECRET")
+// 	local current_time = os.time()
+// 	local minute_level_time = current_time - (current_time % 60)
+// 	local time_string = tostring(minute_level_time)
+// 	local s = app_key .. app_secret .. time_string
+// 	local hash = sha.sha256(s)
+// 	request_handle:headers():add("X-Auth-Signature",hash)
+// end
+// `
+// 	return code
+// }
 
 func GetInitContainerSpecForWaitFor(username string) corev1.Container {
 	return corev1.Container{
@@ -1348,6 +1306,40 @@ func GetInitContainerSpecForWaitFor(username string) corev1.Container {
 		Args: []string{
 			"-it",
 			"authelia-backend.user-system-" + username + ":9091",
+		},
+	}
+}
+
+func GetInitContainerSpecForRenderEnvoyConfig() corev1.Container {
+	return corev1.Container{
+		Name:            "render-envoy-config",
+		Image:           "busybox:1.28",
+		ImagePullPolicy: corev1.PullIfNotPresent,
+		Command: []string{
+			"while [ ! -f /var/run/secrets/kubernetes.io/serviceaccount/token ]; do sleep 0.2; done",
+			"TOKEN=\"$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)\"",
+			fmt.Sprintf("sed \"s|__SA_TOKEN__|${TOKEN}|g\" %s > /work/%s", constants.EnvoyConfigFilePath+"/"+constants.EnvoyConfigFileName, constants.EnvoyConfigFileName),
+			fmt.Sprintf("chmod 0400 /work/%s", constants.EnvoyConfigFileName),
+			fmt.Sprintf("sed \"s|__SA_TOKEN__|${TOKEN}|g\" %s > /work/%s", constants.EnvoyConfigFilePath+"/"+constants.EnvoyConfigFileName, constants.EnvoyConfigOnlyOutBoundFileName),
+			fmt.Sprintf("chmod 0400 /work/%s", constants.EnvoyConfigOnlyOutBoundFileName),
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      constants.EnvoyConfigWorkDirName,
+				MountPath: "/work",
+			},
+			{
+				Name:      constants.SidecarConfigMapVolumeName,
+				ReadOnly:  true,
+				MountPath: constants.EnvoyConfigFilePath + "/" + constants.EnvoyConfigFileName,
+				SubPath:   constants.EnvoyConfigFileName,
+			},
+			{
+				Name:      constants.SidecarConfigMapVolumeName,
+				ReadOnly:  true,
+				MountPath: constants.EnvoyConfigFilePath + "/" + constants.EnvoyConfigOnlyOutBoundFileName,
+				SubPath:   constants.EnvoyConfigOnlyOutBoundFileName,
+			},
 		},
 	}
 }

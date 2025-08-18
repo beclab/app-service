@@ -76,9 +76,23 @@ func (h *HelmOps) Uninstall_(client kubernetes.Interface, actionConfig *action.C
 		klog.Errorf("failed to uninstall app %s, err=%v", releaseName, err)
 		return err
 	}
-	err = h.unregisterAppPerm()
+
+	h.app.Permission = parseAppPermission(h.app.Permission)
+	var perm []appcfg.SysDataPermission
+	for _, p := range h.app.Permission {
+		if t, ok := p.([]appcfg.SysDataPermission); ok {
+			perm = append(perm, t...)
+		}
+	}
+
+	err = h.unregisterAppPerm(h.app.ServiceAccountName, h.app.OwnerName, perm)
 	if err != nil {
 		klog.Warningf("Failed to unregister app err=%v", err)
+	}
+
+	err = h.RegisterOrUnregisterAppProvider(false)
+	if err != nil {
+		klog.Warningf("Failed to unregister app provider err=%v", err)
 	}
 
 	return nil
@@ -139,13 +153,23 @@ func (h *HelmOps) DeleteNamespace(client kubernetes.Interface, namespace string)
 	return nil
 }
 
-func (h *HelmOps) unregisterAppPerm() error {
+func (h *HelmOps) unregisterAppPerm(sa *string, ownerName string, perm []appcfg.SysDataPermission) error {
+	requires := make([]appcfg.PermissionRequire, 0, len(perm))
+	for _, p := range perm {
+		requires = append(requires, appcfg.PermissionRequire{
+			ProviderName:      p.AppName,
+			ProviderNamespace: p.GetNamespace(ownerName),
+			ServiceAccount:    sa,
+		})
+	}
+
 	register := appcfg.PermissionRegister{
 		App:   h.app.AppName,
 		AppID: h.app.AppID,
+		Perm:  requires,
 	}
 
-	url := fmt.Sprintf("http://%s/permission/v1alpha1/unregister", h.systemServerHost())
+	url := fmt.Sprintf("http://%s/permission/v2alpha1/unregister", h.systemServerHost())
 	client := resty.New()
 
 	resp, err := client.SetTimeout(2*time.Second).R().
@@ -165,6 +189,10 @@ func (h *HelmOps) unregisterAppPerm() error {
 		return errors.New(string(resp.Body()))
 	}
 
+	return nil
+}
+
+func (h *HelmOps) registerProvider() error {
 	return nil
 }
 

@@ -257,14 +257,22 @@ func (h *HelmOps) userZone() (string, error) {
 	return kubesphere.GetUserZone(h.ctx, h.app.OwnerName)
 }
 
-func (h *HelmOps) registerAppPerm(perm []appcfg.SysDataPermission) (*appcfg.RegisterResp, error) {
+func (h *HelmOps) registerAppPerm(sa *string, ownerName string, perm []appcfg.SysDataPermission) (*appcfg.RegisterResp, error) {
+	requires := make([]appcfg.PermissionRequire, 0, len(perm))
+	for _, p := range perm {
+		requires = append(requires, appcfg.PermissionRequire{
+			ProviderName:      p.AppName,
+			ProviderNamespace: p.GetNamespace(ownerName),
+			ServiceAccount:    sa,
+		})
+	}
 	register := appcfg.PermissionRegister{
 		App:   h.app.AppName,
 		AppID: h.app.AppID,
-		Perm:  perm,
+		Perm:  requires,
 	}
 
-	url := fmt.Sprintf("http://%s/permission/v1alpha1/register", h.systemServerHost())
+	url := fmt.Sprintf("http://%s/permission/v2alpha1/register", h.systemServerHost())
 	client := resty.New()
 
 	body, err := json.Marshal(register)
@@ -702,6 +710,12 @@ func (h *HelmOps) Install() error {
 		}
 	}
 
+	if err = h.RegisterOrUnregisterAppProvider(true); err != nil {
+		klog.Errorf("Failed to register app provider err=%v", err)
+		h.Uninstall()
+		return err
+	}
+
 	ok, err := h.WaitForStartUp()
 	if err != nil && errors.Is(err, errcode.ErrPodPending) {
 		return err
@@ -776,4 +790,50 @@ func (h *HelmOps) Client() *clientset.ClientSet {
 
 func (h *HelmOps) Options() *Opt {
 	return &h.options
+}
+
+func (h *HelmOps) RegisterOrUnregisterAppProvider(isRegister bool) error {
+	userZone, err := h.userZone()
+	if err != nil {
+		klog.Errorf("Failed to get user zone for app %s: %v", h.app.AppName, err)
+		return err
+	}
+	domain := fmt.Sprintf("%s.%s", h.app.AppID, userZone)
+	register := appcfg.ProviderRegisterRequest{
+		AppName:      h.app.AppName,
+		AppNamespace: h.app.Namespace,
+		Providers: []*appcfg.ProviderCfg{
+			{
+				Provider: *h.app.Provider,
+				Domain:   domain,
+			},
+		},
+	}
+
+	var url string
+	if isRegister {
+		url = fmt.Sprintf("http://%s/provider/v2alpha1/register", h.systemServerHost())
+	} else {
+		url = fmt.Sprintf("http://%s/provider/v2alpha1/unregister", h.systemServerHost())
+	}
+	client := resty.New()
+
+	resp, err := client.SetTimeout(2*time.Second).R().
+		SetHeader(restful.HEADER_ContentType, restful.MIME_JSON).
+		SetHeader(constants.AuthorizationTokenKey, h.token).
+		SetBody(register).Post(url)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode() != 200 {
+		dump, e := httputil.DumpRequest(resp.Request.RawRequest, true)
+		if e == nil {
+			klog.Errorf("Failed to get response body=%s url=%s", string(dump), url)
+		}
+
+		return errors.New(string(resp.Body()))
+	}
+
+	return nil
 }

@@ -9,14 +9,14 @@ import (
 )
 
 // GetSidecarConfigMap returns a configmap that data is envoy.yaml.
-func GetSidecarConfigMap(configMapName, namespace string, appcfg *appcfg.ApplicationConfig, injectPolicy, injectWs, injectUpload bool, appDomains []string, pod *corev1.Pod, perms []appcfg.SysDataPermission) *corev1.ConfigMap {
+func GetSidecarConfigMap(configMapName, namespace string, appcfg *appcfg.ApplicationConfig, injectPolicy, injectWs, injectUpload bool, pod *corev1.Pod, perms []appcfg.SysDataPermission) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      configMapName,
 			Namespace: namespace,
 		},
 		Data: map[string]string{
-			constants.EnvoyConfigFileName:             getEnvoyConfig(appcfg, injectPolicy, injectWs, injectUpload, appDomains, pod, perms),
+			constants.EnvoyConfigFileName:             getEnvoyConfig(appcfg, injectPolicy, injectWs, injectUpload, pod, perms),
 			constants.EnvoyConfigOnlyOutBoundFileName: getEnvoyConfigOnlyForOutBound(appcfg, perms),
 		},
 	}
@@ -42,6 +42,15 @@ func GetSidecarVolumeSpec(configMapName string) corev1.Volume {
 					},
 				},
 			},
+		},
+	}
+}
+
+func GetEnvoyConfigWorkVolume() corev1.Volume {
+	return corev1.Volume{
+		Name: constants.EnvoyConfigWorkDirName,
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 	}
 }

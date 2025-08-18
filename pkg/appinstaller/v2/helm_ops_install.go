@@ -107,6 +107,12 @@ func (h *HelmOpsV2) Install() error {
 		return err
 	}
 
+	if err = h.RegisterOrUnregisterAppProvider(true); err != nil {
+		klog.Errorf("Failed to register app provider err=%v", err)
+		clear()
+		return err
+	}
+
 	ok, err := h.WaitForStartUp()
 	if err != nil && errors.Is(err, errcode.ErrPodPending) {
 		klog.Errorf("App %s is pending, err=%v", h.App().AppName, err)

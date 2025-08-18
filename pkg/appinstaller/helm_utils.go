@@ -85,7 +85,7 @@ func (h *HelmOps) SetValues() (values map[string]interface{}, err error) {
 			}
 
 		case []appcfg.SysDataPermission:
-			appReg, err := h.registerAppPerm(perm)
+			appReg, err := h.registerAppPerm(h.app.ServiceAccountName, h.app.OwnerName, perm)
 			if err != nil {
 				klog.Errorf("Failed to register err=%v", err)
 				return values, err

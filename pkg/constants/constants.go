@@ -60,7 +60,7 @@ const (
 	EnvoyOutboundListenerPortName         = "proxy-outbound"
 	EnvoyLivenessProbePort                = 15008
 	EnvoyConfigFileName                   = "envoy.yaml"
-	EnvoyConfigFilePath                   = "/etc/envoy"
+	EnvoyConfigFilePath                   = "/config"
 	EnvoyConfigOnlyOutBoundFileName       = "envoy2.yaml"
 	WsContainerName                       = "terminus-ws-sidecar"
 	WsContainerImage                      = "WS_CONTAINER_IMAGE"
@@ -70,6 +70,7 @@ const (
 
 	SidecarConfigMapVolumeName = "terminus-sidecar-config"
 	SidecarInitContainerName   = "terminus-sidecar-init"
+	EnvoyConfigWorkDirName     = "envoy-config"
 
 	ByteTradeAuthor         = "bytetrade.io"
 	NvshareGPU              = "nvshare.com/gpu"

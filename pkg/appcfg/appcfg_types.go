@@ -33,6 +33,7 @@ type AppConfiguration struct {
 	Permission    Permission             `yaml:"permission" json:"permission" description:"app permission request"`
 	Middleware    *tapr.Middleware       `yaml:"middleware" json:"middleware" description:"app middleware request"`
 	Options       Options                `yaml:"options" json:"options" description:"app options"`
+	Provider      *Provider              `yaml:"provider,omitempty" json:"provider,omitempty" description:"app provider information"`
 }
 
 type AppSpec struct {
@@ -65,10 +66,11 @@ type SupportClient struct {
 }
 
 type Permission struct {
-	AppData  bool         `yaml:"appData" json:"appData"  description:"app data permission for writing"`
-	AppCache bool         `yaml:"appCache" json:"appCache"`
-	UserData []string     `yaml:"userData" json:"userData"`
-	SysData  []SysDataCfg `yaml:"sysData" json:"sysData"  description:"system shared data permission for accessing"`
+	AppData        bool         `yaml:"appData" json:"appData"  description:"app data permission for writing"`
+	AppCache       bool         `yaml:"appCache" json:"appCache"`
+	UserData       []string     `yaml:"userData" json:"userData"`
+	SysData        []SysDataCfg `yaml:"sysData" json:"sysData"  description:"system shared data permission for accessing"`
+	ServiceAccount *string      `yaml:"serviceAccount,omitempty" json:"serviceAccount,omitempty" description:"service account for app permission"`
 }
 
 type SysDataCfg struct {
@@ -151,6 +153,12 @@ type OIDC struct {
 type Chart struct {
 	Name   string `yaml:"name" json:"name"`
 	Shared bool   `yaml:"shared" json:"shared"`
+}
+
+type Provider struct {
+	Service string   `yaml:"service" json:"service"`
+	Paths   []string `yaml:"paths" json:"paths"`
+	Verbs   []string `yaml:"verbs" json:"verbs"`
 }
 
 func (c *Chart) Namespace(owner string) string {

@@ -760,6 +760,8 @@ func toApplicationConfig(app, chart string, cfg *appcfg.AppConfiguration) (*appc
 		RequiredGPU:          cfg.Spec.RequiredGPU,
 		Internal:             cfg.Spec.RunAsInternal,
 		SubCharts:            cfg.Spec.SubCharts,
+		ServiceAccountName:   cfg.Permission.ServiceAccount,
+		Provider:             cfg.Provider,
 	}, chart, nil
 }
 

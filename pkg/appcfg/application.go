@@ -1,6 +1,7 @@
 package appcfg
 
 import (
+	"fmt"
 	"time"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
@@ -26,6 +27,7 @@ type SysDataPermission struct {
 	DataType  string   `yaml:"dataType" json:"dataType"`
 	Version   string   `yaml:"version" json:"version"`
 	Ops       []string `yaml:"ops" json:"ops"`
+	Domain    string   `yaml:"domain,omitempty" json:"domain,omitempty"`
 }
 
 type AppRequirement struct {
@@ -93,6 +95,8 @@ type ApplicationConfig struct {
 	ClusterRelease       []string
 	Internal             bool
 	SubCharts            []Chart
+	ServiceAccountName   *string
+	Provider             *Provider
 }
 
 func (c *ApplicationConfig) IsV2() bool {
@@ -110,4 +114,16 @@ func (c *ApplicationConfig) HasClusterSharedCharts() bool {
 		}
 	}
 	return false
+}
+
+func (p *SysDataPermission) GetNamespace(ownerName string) string {
+	if p.Namespace != "" {
+		if p.Namespace == "user-space" || p.Namespace == "user-system" {
+			return fmt.Sprintf("%s-%s", p.Namespace, ownerName)
+		} else {
+			return p.Namespace
+		}
+	}
+
+	return fmt.Sprintf("%s-%s", p.AppName, ownerName)
 }
