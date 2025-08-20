@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http/httputil"
 	"strconv"
+	"strings"
 	"time"
 
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
@@ -799,12 +800,24 @@ func (h *HelmOps) RegisterOrUnregisterAppProvider(isRegister bool) error {
 		return err
 	}
 	domain := fmt.Sprintf("%s.%s", h.app.AppID, userZone)
+	getProvider := func() *appcfg.Provider {
+		serviceToken := strings.Split(h.app.Provider.Service, ":")
+		if len(serviceToken) < 2 { // port not found
+			serviceToken = append(serviceToken, "80") // default port 80
+		}
+
+		return &appcfg.Provider{
+			Service: fmt.Sprintf("%s.%s:%s", serviceToken[0], h.app.Namespace, serviceToken[1]),
+			Paths:   h.app.Provider.Paths,
+			Verbs:   h.app.Provider.Verbs,
+		}
+	}
 	register := appcfg.ProviderRegisterRequest{
 		AppName:      h.app.AppName,
 		AppNamespace: h.app.Namespace,
 		Providers: []*appcfg.ProviderCfg{
 			{
-				Provider: *h.app.Provider,
+				Provider: *getProvider(),
 				Domain:   domain,
 			},
 		},
