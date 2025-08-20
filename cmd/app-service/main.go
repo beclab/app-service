@@ -168,6 +168,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = (&controllers.NodeAlertController{
+		Client:     mgr.GetClient(),
+		KubeConfig: config,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Unable to create controller", "controller", "NodeAlert")
+		os.Exit(1)
+	}
+
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

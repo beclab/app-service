@@ -82,6 +82,10 @@ func PublishAsync(owner, name, opType, opID, state, progress string, entranceSta
 	}()
 }
 
+func PublishToNats(subject string, data interface{}) error {
+	return publish(subject, data)
+}
+
 func publish(subject string, data interface{}) error {
 	natsHost := os.Getenv("NATS_HOST")
 	natsPort := os.Getenv("NATS_PORT")
