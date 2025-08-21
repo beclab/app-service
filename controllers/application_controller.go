@@ -571,6 +571,30 @@ func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, app
 	//	settings["clusterScoped"] = "true"
 	//}
 
+	if defaultDomainAnnotation, ok := deployment.GetAnnotations()[constants.ApplicationDefaultThirdLevelDomain]; ok {
+		var allDomainConfigs []appcfg.DefaultThirdLevelDomainConfig
+		err := json.Unmarshal([]byte(defaultDomainAnnotation), &allDomainConfigs)
+		if err != nil {
+			klog.Errorf("Failed to unmarshal default domain annotation err=%v", err)
+		} else {
+			var appDomainConfigs []appcfg.DefaultThirdLevelDomainConfig
+			for _, config := range allDomainConfigs {
+				if config.AppName == appName {
+					appDomainConfigs = append(appDomainConfigs, config)
+				}
+			}
+
+			if len(appDomainConfigs) > 0 {
+				domainConfigBytes, err := json.Marshal(appDomainConfigs)
+				if err != nil {
+					klog.Errorf("Failed to marshal domain configs err=%v", err)
+				} else {
+					settings["defaultThirdLevelDomainConfig"] = string(domainConfigBytes)
+				}
+			}
+		}
+	}
+
 	// not sys applications.
 	if !userspace.IsSysApp(appName) {
 		if appCfg, err := appcfg.GetAppInstallationConfig(appName, owner); err != nil {
