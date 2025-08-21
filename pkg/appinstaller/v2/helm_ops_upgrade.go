@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	v1 "bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/errcode"
 	"bytetrade.io/web3os/app-service/pkg/helm"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
@@ -80,7 +81,7 @@ func (h *HelmOpsV2) Upgrade() error {
 			return err
 		}
 
-		if err = h.RegisterOrUnregisterAppProvider(true); err != nil {
+		if err = h.RegisterOrUnregisterAppProvider(v1.Register); err != nil {
 			klog.Errorf("Failed to register app provider err=%v", err)
 			return err
 		}

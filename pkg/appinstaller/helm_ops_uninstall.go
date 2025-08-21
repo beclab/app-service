@@ -85,12 +85,18 @@ func (h *HelmOps) Uninstall_(client kubernetes.Interface, actionConfig *action.C
 		}
 	}
 
-	err = h.unregisterAppPerm(h.app.ServiceAccountName, h.app.OwnerName, perm)
+	permCfg, err := apputils.ProviderPermissionsConvertor(perm).ToPermissionCfg(h.ctx, h.app.OwnerName)
+	if err != nil {
+		klog.Errorf("Failed to convert app permissions for %s: %v", h.app.AppName, err)
+		return err
+	}
+
+	err = h.unregisterAppPerm(h.app.ServiceAccountName, h.app.OwnerName, permCfg)
 	if err != nil {
 		klog.Warningf("Failed to unregister app err=%v", err)
 	}
 
-	err = h.RegisterOrUnregisterAppProvider(false)
+	err = h.RegisterOrUnregisterAppProvider(Unregister)
 	if err != nil {
 		klog.Warningf("Failed to unregister app provider err=%v", err)
 	}
@@ -153,13 +159,15 @@ func (h *HelmOps) DeleteNamespace(client kubernetes.Interface, namespace string)
 	return nil
 }
 
-func (h *HelmOps) unregisterAppPerm(sa *string, ownerName string, perm []appcfg.SysDataPermission) error {
+func (h *HelmOps) unregisterAppPerm(sa *string, ownerName string, perm []appcfg.PermissionCfg) error {
 	requires := make([]appcfg.PermissionRequire, 0, len(perm))
 	for _, p := range perm {
 		requires = append(requires, appcfg.PermissionRequire{
-			ProviderName:      p.AppName,
+			ProviderName:      p.ProviderName,
 			ProviderNamespace: p.GetNamespace(ownerName),
 			ServiceAccount:    sa,
+			ProviderAppName:   p.AppName,
+			ProviderDomain:    p.Domain,
 		})
 	}
 
@@ -189,10 +197,6 @@ func (h *HelmOps) unregisterAppPerm(sa *string, ownerName string, perm []appcfg.
 		return errors.New(string(resp.Body()))
 	}
 
-	return nil
-}
-
-func (h *HelmOps) registerProvider() error {
 	return nil
 }
 

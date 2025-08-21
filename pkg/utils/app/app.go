@@ -644,16 +644,7 @@ func toApplicationConfig(app, chart string, cfg *appcfg.AppConfiguration) (*appc
 	if len(cfg.Permission.SysData) > 0 {
 		var perm []appcfg.SysDataPermission
 		for _, s := range cfg.Permission.SysData {
-			perm = append(perm, appcfg.SysDataPermission{
-				AppName:   s.AppName,
-				Svc:       s.Svc,
-				Namespace: s.Namespace,
-				Port:      s.Port,
-				Group:     s.Group,
-				DataType:  s.DataType,
-				Version:   s.Version,
-				Ops:       s.Ops,
-			})
+			perm = append(perm, appcfg.SysDataPermission(s))
 		}
 		permission = append(permission, perm)
 	}
@@ -794,6 +785,7 @@ func GetIndexAndDownloadChart(ctx context.Context, options *ConfigOptions) (stri
 	}
 	client := resty.New().SetTimeout(10*time.Second).
 		SetHeader(constants.AuthorizationTokenKey, options.Token).
+		SetAuthToken(options.Token).
 		SetHeader("Terminus-Nonce", terminusNonce).
 		SetHeader(constants.MarketUser, options.Owner).
 		SetHeader(constants.MarketSource, options.MarketSource)

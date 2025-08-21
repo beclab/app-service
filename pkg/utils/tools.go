@@ -130,3 +130,11 @@ func IsPortAvailable(protocol string, port int) bool {
 	}
 	return false
 }
+
+func ListToMap[K comparable, T any](list []T, keyFunc func(T) K) map[K]T {
+	m := make(map[K]T)
+	for _, item := range list {
+		m[keyFunc(item)] = item
+	}
+	return m
+}

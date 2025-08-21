@@ -1,0 +1,107 @@
+package app
+
+import (
+	"context"
+	"fmt"
+
+	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
+	"bytetrade.io/web3os/app-service/pkg/constants"
+	"bytetrade.io/web3os/app-service/pkg/utils"
+	"k8s.io/klog/v2"
+)
+
+type SysDataPermissionHelper appcfg.SysDataPermission
+type ProviderPermissionsConvertor []appcfg.SysDataPermission
+type ProviderHelper struct {
+	appcfg.Provider
+	appCfg *appcfg.ApplicationConfig
+}
+
+func (c ProviderPermissionsConvertor) ToPermissionCfg(ctx context.Context, owner string) (cfg []appcfg.PermissionCfg, err error) {
+	if len(c) == 0 {
+		return nil, nil
+	}
+
+	token, err := utils.GetServiceAccountToken()
+	if err != nil {
+		klog.Errorf("Failed to get service account token: %v", err)
+		return nil, err
+	}
+
+	appCfgMap := make(map[string]*appcfg.ApplicationConfig)
+
+	for _, p := range c {
+		appCfg, ok := appCfgMap[p.AppName]
+		if !ok {
+			o := ConfigOptions{
+				App:          p.AppName,
+				RepoURL:      constants.CHART_REPO_URL,
+				Owner:        owner,
+				Version:      "",
+				Token:        token,
+				Admin:        owner,
+				MarketSource: "app-service",
+				IsAdmin:      false,
+			}
+			appCfg, _, err = GetAppConfig(ctx, &o)
+			if err != nil {
+				klog.Errorf("Failed to get app config for %s: %v", p.AppName, err)
+				return nil, err
+			}
+
+			appCfgMap[p.AppName] = appCfg
+		}
+
+		pc, err := SysDataPermissionHelper(p).GetPermissionCfg(ctx, appCfg)
+		if err != nil {
+			klog.Errorf("Failed to get permission config for %s: %v", p.AppName, err)
+			return nil, err
+		}
+		cfg = append(cfg, *pc)
+	}
+
+	return cfg, nil
+}
+
+func (h SysDataPermissionHelper) GetPermissionCfg(ctx context.Context, appCfg *appcfg.ApplicationConfig) (*appcfg.PermissionCfg, error) {
+	for _, p := range appCfg.Provider {
+		if p.Name == h.ProviderName {
+			entrance, err := (&ProviderHelper{p, appCfg}).GetEntrance(ctx)
+			if err != nil {
+				klog.Errorf("Failed to get entrance for provider %s: %v", h.ProviderName, err)
+				return nil, err
+			}
+
+			return &appcfg.PermissionCfg{
+				SysDataPermission: (*appcfg.SysDataPermission)(&h),
+				Port:              int(entrance.Port),
+				Svc:               entrance.Host,
+				Domain:            entrance.URL,
+				Paths:             p.Paths,
+			}, nil
+
+		}
+	} // end of providers loop
+
+	return nil, fmt.Errorf("provider %s not found in app %s", h.ProviderName, appCfg.AppName)
+}
+
+func (p *ProviderHelper) GetEntrance(ctx context.Context) (*v1alpha1.Entrance, error) {
+	if p.appCfg == nil {
+		return nil, fmt.Errorf("application config is not set for provider %s", p.Name)
+	}
+
+	entrances, err := p.appCfg.GetEntrances(ctx)
+	if err != nil {
+		klog.Errorf("failed to get entrance map for app %s: %v", p.appCfg.AppName, err)
+		return nil, err
+	}
+
+	entrance, ok := entrances[p.Entrance]
+	if !ok {
+		return nil, fmt.Errorf("entrance %s not found for provider %s", p.Entrance, p.Name)
+	}
+
+	return &entrance, nil
+}

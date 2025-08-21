@@ -16,7 +16,6 @@ import (
 
 	envoy_bootstrap "github.com/envoyproxy/go-control-plane/envoy/config/bootstrap/v3"
 	clusterv3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
-	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	envoy_core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	endpointv3 "github.com/envoyproxy/go-control-plane/envoy/config/endpoint/v3"
 	envoy_listener "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
@@ -146,7 +145,7 @@ func getEnvoyContainerPorts() []corev1.ContainerPort {
 	return containerPorts
 }
 
-func getEnvoyConfig(appcfg *appcfg.ApplicationConfig, injectPolicy, injectWs, injectUpload bool, pod *corev1.Pod, perms []appcfg.SysDataPermission) string {
+func getEnvoyConfig(appcfg *appcfg.ApplicationConfig, injectPolicy, injectWs, injectUpload bool, pod *corev1.Pod, perms []appcfg.PermissionCfg) string {
 	opts := options{
 		timeout: func() *int64 {
 			defaultTimeout := int64(15)
@@ -187,7 +186,7 @@ func getEnvoyConfig(appcfg *appcfg.ApplicationConfig, injectPolicy, injectWs, in
 	return string(bootstrap)
 }
 
-func getEnvoyConfigOnlyForOutBound(appcfg *appcfg.ApplicationConfig, perms []appcfg.SysDataPermission) string {
+func getEnvoyConfigOnlyForOutBound(appcfg *appcfg.ApplicationConfig, perms []appcfg.PermissionCfg) string {
 	ec := &envoyConfig{
 		username: appcfg.OwnerName,
 		opts: options{
@@ -553,7 +552,7 @@ func New(username string, probesPath []string, opts options) *envoyConfig {
 			RouteConfig: routeConfig,
 		},
 		HttpFilters: httpFilters,
-		HttpProtocolOptions: &corev3.Http1ProtocolOptions{
+		HttpProtocolOptions: &envoy_core.Http1ProtocolOptions{
 			AcceptHttp_10: true,
 		},
 	}
@@ -641,7 +640,7 @@ func New(username string, probesPath []string, opts options) *envoyConfig {
 													},
 												},
 											},
-											HttpProtocolOptions: &corev3.Http1ProtocolOptions{
+											HttpProtocolOptions: &envoy_core.Http1ProtocolOptions{
 												AcceptHttp_10: true,
 											},
 										}),
@@ -713,9 +712,9 @@ func (ec *envoyConfig) WithPolicy() *envoyConfig {
 				Services: &envoy_authz.ExtAuthz_HttpService{
 					HttpService: &envoy_authz.HttpService{
 						PathPrefix: "/api/verify/",
-						ServerUri: &corev3.HttpUri{
+						ServerUri: &envoy_core.HttpUri{
 							Uri: "authelia-backend.user-system-" + ec.username + ":9091",
-							HttpUpstreamType: &corev3.HttpUri_Cluster{
+							HttpUpstreamType: &envoy_core.HttpUri_Cluster{
 								Cluster: "authelia",
 							},
 							Timeout: &duration.Duration{
@@ -767,7 +766,7 @@ func (ec *envoyConfig) WithPolicy() *envoyConfig {
 									},
 								},
 							},
-							HeadersToAdd: []*corev3.HeaderValue{
+							HeadersToAdd: []*envoy_core.HeaderValue{
 								{
 									Key:   "X-Forwarded-Method",
 									Value: "%REQ(:METHOD)%",
@@ -906,7 +905,7 @@ func (ec *envoyConfig) WithWebSocket() *envoyConfig {
 					RouteConfig: routeConfig,
 				},
 				HttpFilters: httpFilters,
-				HttpProtocolOptions: &corev3.Http1ProtocolOptions{
+				HttpProtocolOptions: &envoy_core.Http1ProtocolOptions{
 					AcceptHttp_10: true,
 				},
 			}),
@@ -981,7 +980,7 @@ func (ec *envoyConfig) WithUpload() *envoyConfig {
 					RouteConfig: routeConfig,
 				},
 				HttpFilters: httpFilters,
-				HttpProtocolOptions: &corev3.Http1ProtocolOptions{
+				HttpProtocolOptions: &envoy_core.Http1ProtocolOptions{
 					AcceptHttp_10: true,
 				},
 			}),
@@ -1021,7 +1020,7 @@ func (ec *envoyConfig) WithUpload() *envoyConfig {
 	return ec
 }
 
-func (ec *envoyConfig) WithProxyOutBound(appcfg *appcfg.ApplicationConfig, perms []appcfg.SysDataPermission) (*envoyConfig, error) {
+func (ec *envoyConfig) WithProxyOutBound(appcfg *appcfg.ApplicationConfig, perms []appcfg.PermissionCfg) (*envoyConfig, error) {
 	if len(perms) == 0 {
 		ec.bs.StaticResources.Listeners = append(ec.bs.StaticResources.Listeners, &envoy_listener.Listener{
 			Name:    "listener_outbound",
@@ -1098,24 +1097,32 @@ func (ec *envoyConfig) WithProxyOutBound(appcfg *appcfg.ApplicationConfig, perms
 	}
 
 	type route struct {
-		domain string
-		paths  []string
+		domain            string
+		providerName      string
+		providerNamespace string
+		paths             []string
 	}
 	routesMap := make(map[string][]route)
 	for _, p := range perms {
-		svc := p.AppName
+		svc := p.ProviderName
 		if p.Svc != "" {
 			svc = p.Svc
 		}
 		namespace := p.GetNamespace(appcfg.OwnerName)
-		svcDomain := fmt.Sprintf("%s.%s:%s", svc, namespace, p.Port)
-		routesMap[svcDomain] = append(routesMap[svcDomain], route{domain: p.Domain, paths: p.Ops})
+		svcDomain := fmt.Sprintf("%s.%s:%d", svc, namespace, p.Port)
+		routesMap[svcDomain] = append(routesMap[svcDomain],
+			route{
+				domain:            p.Domain,
+				paths:             p.Paths,
+				providerName:      p.ProviderName,
+				providerNamespace: namespace,
+			})
 	}
 
 	virtualHosts := make([]*routev3.VirtualHost, 0, len(routesMap))
 	for vh, routes := range routesMap {
 		rs := make([]*routev3.Route, 0, len(routes)+1)
-		dmains := []string{vh}
+		domains := []string{vh}
 		for _, r := range routes {
 			for _, p := range r.paths {
 				rs = append(rs, &routev3.Route{
@@ -1134,30 +1141,30 @@ func (ec *envoyConfig) WithProxyOutBound(appcfg *appcfg.ApplicationConfig, perms
 							},
 						},
 					},
-					RequestHeadersToAdd: []*corev3.HeaderValueOption{
+					RequestHeadersToAdd: []*envoy_core.HeaderValueOption{
 						{
-							Header: &corev3.HeaderValue{
+							Header: &envoy_core.HeaderValue{
 								Key:   "Temp-Authorization",
 								Value: "%REQ(Authorization)%",
 							},
 						},
 						{
-							Header: &corev3.HeaderValue{
+							Header: &envoy_core.HeaderValue{
 								Key:   "Authorization",
 								Value: "Bearer __SA_TOKEN__",
 							},
-							AppendAction: corev3.HeaderValueOption_OVERWRITE_IF_EXISTS_OR_ADD,
+							AppendAction: envoy_core.HeaderValueOption_OVERWRITE_IF_EXISTS_OR_ADD,
 						},
 					},
 				}) // end of routes append
 			} // end of paths loop
 
-			dmains = append(dmains, r.domain)
+			domains = append(domains, r.domain, fmt.Sprintf("%s.%s", r.providerName, r.providerNamespace))
 		} // end of routes loop
 
 		virtualHosts = append(virtualHosts, &routev3.VirtualHost{
 			Name:    vh,
-			Domains: dmains,
+			Domains: domains,
 			Routes:  rs,
 		})
 

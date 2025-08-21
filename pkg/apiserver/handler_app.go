@@ -3,7 +3,6 @@ package apiserver
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"sort"
 	"strconv"
@@ -55,7 +54,7 @@ func (h *Handler) status(req *restful.Request, resp *restful.Response) {
 	now := metav1.Now()
 	sts := appinstaller.Status{
 		Name:              am.Spec.AppName,
-		AppID:             apputils.GetAppID(am.Spec.AppName),
+		AppID:             v1alpha1.AppName(am.Spec.AppName).GetAppID(),
 		Namespace:         am.Spec.AppNamespace,
 		CreationTimestamp: now,
 		Source:            am.Spec.Source,
@@ -109,7 +108,7 @@ func (h *Handler) appsStatus(req *restful.Request, resp *restful.Response) {
 			now := metav1.Now()
 			status := appinstaller.Status{
 				Name:              am.Spec.AppName,
-				AppID:             apputils.GetAppID(am.Spec.AppName),
+				AppID:             v1alpha1.AppName(am.Spec.AppName).GetAppID(),
 				Namespace:         am.Spec.AppNamespace,
 				CreationTimestamp: now,
 				Source:            am.Spec.Source,
@@ -408,8 +407,8 @@ func (h *Handler) apps(req *restful.Request, resp *restful.Response) {
 			},
 			Spec: v1alpha1.ApplicationSpec{
 				Name:      am.Spec.AppName,
-				Appid:     apputils.GetAppID(am.Spec.AppName),
-				IsSysApp:  userspace.IsSysApp(am.Spec.AppName),
+				Appid:     v1alpha1.AppName(am.Spec.AppName).GetAppID(),
+				IsSysApp:  v1alpha1.AppName(am.Spec.AppName).IsSysApp(),
 				Namespace: am.Spec.AppNamespace,
 				Owner:     owner,
 				Entrances: appconfig.Entrances,
@@ -662,21 +661,6 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 	//	api.HandleError(resp, req, err)
 	//	return
 	//}
-	genEntranceURL := func(entrances []v1alpha1.Entrance, owner, appName string) ([]v1alpha1.Entrance, error) {
-		zone, _ := kubesphere.GetUserZone(req.Request.Context(), owner)
-
-		if len(zone) > 0 {
-			appid := apputils.GetAppID(appName)
-			for i := range entrances {
-				if len(entrances) == 1 {
-					entrances[i].URL = fmt.Sprintf("%s.%s", appid, zone)
-				} else {
-					entrances[i].URL = fmt.Sprintf("%s%d.%s", appid, i, zone)
-				}
-			}
-		}
-		return entrances, nil
-	}
 
 	ss := make([]string, 0)
 	if state != "" {
@@ -735,8 +719,8 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 			},
 			Spec: v1alpha1.ApplicationSpec{
 				Name:      am.Spec.AppName,
-				Appid:     apputils.GetAppID(am.Spec.AppName),
-				IsSysApp:  userspace.IsSysApp(am.Spec.AppName),
+				Appid:     v1alpha1.AppName(am.Spec.AppName).GetAppID(),
+				IsSysApp:  v1alpha1.AppName(am.Spec.AppName).IsSysApp(),
 				Namespace: am.Spec.AppNamespace,
 				Owner:     am.Spec.AppOwner,
 				Entrances: appconfig.Entrances,
@@ -777,7 +761,7 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 	}
 
 	for _, app := range appsMap {
-		entrances, err := genEntranceURL(app.Spec.Entrances, app.Spec.Owner, app.Spec.Name)
+		entrances, err := app.GenEntranceURL(req.Request.Context())
 		if err != nil {
 			api.HandleError(resp, req, err)
 			return

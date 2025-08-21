@@ -1,13 +1,16 @@
 package appcfg
 
 import (
+	"context"
 	"fmt"
 	"time"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/tapr"
+	"bytetrade.io/web3os/app-service/pkg/utils"
 
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/klog/v2"
 )
 
 type AppPermission interface{}
@@ -19,15 +22,13 @@ type UserDataPermission string
 type Middleware interface{}
 
 type SysDataPermission struct {
-	AppName   string   `yaml:"appName" json:"appName"`
-	Port      string   `yaml:"port" json:"port"`
-	Svc       string   `yaml:"svc,omitempty" json:"svc,omitempty"`
-	Namespace string   `yaml:"namespace,omitempty" json:"namespace,omitempty"`
-	Group     string   `yaml:"group" json:"group"`
-	DataType  string   `yaml:"dataType" json:"dataType"`
-	Version   string   `yaml:"version" json:"version"`
-	Ops       []string `yaml:"ops" json:"ops"`
-	Domain    string   `yaml:"domain,omitempty" json:"domain,omitempty"`
+	AppName   string `yaml:"appName" json:"appName"`
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+	// Group     string   `yaml:"group" json:"group"`
+	// DataType  string   `yaml:"dataType" json:"dataType"`
+	// Version   string   `yaml:"version" json:"version"`
+	// Ops       []string `yaml:"ops" json:"ops"`
+	ProviderName string `yaml:"providerName" json:"providerName"`
 }
 
 type AppRequirement struct {
@@ -96,7 +97,7 @@ type ApplicationConfig struct {
 	Internal             bool
 	SubCharts            []Chart
 	ServiceAccountName   *string
-	Provider             *Provider
+	Provider             []Provider
 }
 
 func (c *ApplicationConfig) IsV2() bool {
@@ -114,6 +115,30 @@ func (c *ApplicationConfig) HasClusterSharedCharts() bool {
 		}
 	}
 	return false
+}
+
+func (c *ApplicationConfig) GenEntranceURL(ctx context.Context) ([]v1alpha1.Entrance, error) {
+	app := &v1alpha1.Application{
+		Spec: v1alpha1.ApplicationSpec{
+			Owner:     c.OwnerName,
+			Name:      c.AppName,
+			Entrances: c.Entrances,
+		},
+	}
+
+	return app.GenEntranceURL(ctx)
+}
+
+func (c *ApplicationConfig) GetEntrances(ctx context.Context) (map[string]v1alpha1.Entrance, error) {
+	entrances, err := c.GenEntranceURL(ctx)
+	if err != nil {
+		klog.Errorf("failed to generate entrance URL: %v", err)
+		return nil, err
+	}
+
+	return utils.ListToMap(entrances, func(e v1alpha1.Entrance) string {
+		return e.Name
+	}), nil
 }
 
 func (p *SysDataPermission) GetNamespace(ownerName string) string {

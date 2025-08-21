@@ -16,13 +16,12 @@ import (
 	appcfg_mod "bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
-	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/provider"
 	"bytetrade.io/web3os/app-service/pkg/sandbox/sidecar"
 	"bytetrade.io/web3os/app-service/pkg/security"
 	"bytetrade.io/web3os/app-service/pkg/utils"
-	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 	"github.com/emicklei/go-restful/v3"
 	"github.com/google/uuid"
 	"github.com/thoas/go-funk"
@@ -239,11 +238,6 @@ func (wh *Webhook) MustInject(ctx context.Context, pod *corev1.Pod, namespace st
 		klog.Infof("Unknown namespace=%s, do not inject", namespace)
 		return false, false, false, perms, nil
 	}
-	zone, err := kubesphere.GetUserZone(ctx, appcfg.OwnerName)
-	if err != nil {
-		klog.Errorf("Failed to get user zone for user=%s err=%v", appcfg.OwnerName, err)
-		return false, false, false, perms, nil
-	}
 
 	var injectWs, injectUpload bool
 	if appcfg.WsConfig.URL != "" && appcfg.WsConfig.Port > 0 {
@@ -256,29 +250,16 @@ func (wh *Webhook) MustInject(ctx context.Context, pod *corev1.Pod, namespace st
 		if sysDataP, ok := p.([]interface{}); ok {
 			for _, v := range sysDataP {
 				sysData := v.(map[string]interface{})
-				ops := make([]string, 0)
-				for _, o := range sysData["ops"].([]interface{}) {
-					ops = append(ops, o.(string))
-				}
-				dataType := sysData["dataType"].(string)
-				var svc, ns string
-				if val, ok := sysData["svc"].(string); ok {
-					svc = val
-				}
+				var ns string
 				if val, ok := sysData["namespace"].(string); ok {
 					ns = val
 				}
 				providerAppName := sysData["appName"].(string)
+				providerName := sysData["providerName"].(string)
 				perms = append(perms, appcfg_mod.SysDataPermission{
-					AppName:   providerAppName,
-					Svc:       svc,
-					Namespace: ns,
-					Port:      sysData["port"].(string),
-					Group:     sysData["group"].(string),
-					DataType:  dataType,
-					Version:   sysData["version"].(string),
-					Ops:       ops,
-					Domain:    fmt.Sprintf("%s.%s", apputils.GetAppID(providerAppName), zone),
+					AppName:      providerAppName,
+					Namespace:    ns,
+					ProviderName: providerName,
 				})
 
 			}
@@ -338,7 +319,14 @@ func (wh *Webhook) createSidecarConfigMap(
 		klog.Errorf("Failed to get app config err=%v", err)
 		return "", err
 	}
-	newConfigMap := sidecar.GetSidecarConfigMap(configMapName, namespace, appcfg, injectPolicy, injectWs, injectUpload, pod, perms)
+
+	permCfg, err := apputils.ProviderPermissionsConvertor(perms).ToPermissionCfg(ctx, appcfg.OwnerName)
+	if err != nil {
+		klog.Errorf("Failed to convert permissions for app %s: %v", appcfg.AppName, err)
+		return "", err
+	}
+
+	newConfigMap := sidecar.GetSidecarConfigMap(configMapName, namespace, appcfg, injectPolicy, injectWs, injectUpload, pod, permCfg)
 	if e == nil {
 		// configmap found
 		cm.Data = newConfigMap.Data

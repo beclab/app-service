@@ -28,6 +28,7 @@ func GetIndexAndDownloadChart(ctx context.Context, app, repoURL, version, token,
 	}
 	client := resty.New().SetTimeout(10*time.Second).
 		SetHeader(constants.AuthorizationTokenKey, token).
+		SetAuthToken(token).
 		SetHeader("Terminus-Nonce", terminusNonce).
 		SetHeader(constants.MarketUser, owner).
 		SetHeader(constants.MarketSource, marketSource)

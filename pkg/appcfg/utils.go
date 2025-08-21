@@ -94,14 +94,9 @@ func getAppConfigFromConfigurationFile(app, chart, owner string) (*ApplicationCo
 		var perm []SysDataPermission
 		for _, s := range cfg.Permission.SysData {
 			perm = append(perm, SysDataPermission{
-				AppName:   s.AppName,
-				Svc:       s.Svc,
-				Namespace: s.Namespace,
-				Port:      s.Port,
-				Group:     s.Group,
-				DataType:  s.DataType,
-				Version:   s.Version,
-				Ops:       s.Ops,
+				AppName:      s.AppName,
+				Namespace:    s.Namespace,
+				ProviderName: s.ProviderName,
 			})
 		}
 		permission = append(permission, perm)

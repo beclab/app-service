@@ -7,9 +7,11 @@ type PermissionRegister struct {
 }
 
 type PermissionRequire struct {
+	ProviderAppName   string  `json:"provider_app_name"`
 	ProviderName      string  `json:"provider_name"`
 	ProviderNamespace string  `json:"provider_namespace"`
 	ServiceAccount    *string `json:"service_account,omitempty"`
+	ProviderDomain    string  `json:"provider_domain,omitempty"`
 }
 
 type Header struct {
@@ -40,4 +42,13 @@ type ProviderRegisterRequest struct {
 type ProviderCfg struct {
 	Provider `json:",inline"`
 	Domain   string `json:"domain"`
+	Service  string `json:"service"`
+}
+
+type PermissionCfg struct {
+	*SysDataPermission
+	Port   int    // not in yaml, cannot be set in OlaresManifest
+	Svc    string // not in yaml, cannot be set in OlaresManifest
+	Domain string // not in yaml, cannot be set in OlaresManifest
+	Paths  []string
 }

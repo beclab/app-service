@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http/httputil"
 	"strconv"
-	"strings"
 	"time"
 
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
@@ -258,13 +257,15 @@ func (h *HelmOps) userZone() (string, error) {
 	return kubesphere.GetUserZone(h.ctx, h.app.OwnerName)
 }
 
-func (h *HelmOps) registerAppPerm(sa *string, ownerName string, perm []appcfg.SysDataPermission) (*appcfg.RegisterResp, error) {
+func (h *HelmOps) registerAppPerm(sa *string, ownerName string, perm []appcfg.PermissionCfg) (*appcfg.RegisterResp, error) {
 	requires := make([]appcfg.PermissionRequire, 0, len(perm))
 	for _, p := range perm {
 		requires = append(requires, appcfg.PermissionRequire{
-			ProviderName:      p.AppName,
+			ProviderAppName:   p.AppName,
 			ProviderNamespace: p.GetNamespace(ownerName),
 			ServiceAccount:    sa,
+			ProviderName:      p.ProviderName,
+			ProviderDomain:    p.Domain,
 		})
 	}
 	register := appcfg.PermissionRegister{
@@ -619,33 +620,36 @@ func parseAppPermission(data []appcfg.AppPermission) []appcfg.AppPermission {
 					if appName, ok := m["appName"].(string); ok {
 						sp.AppName = appName
 					}
-					if port, ok := m["port"].(string); ok {
-						sp.Port = port
+					if providerName, ok := m["providerName"].(string); ok {
+						sp.ProviderName = providerName
 					}
-					if svc, ok := m["svc"].(string); ok {
-						sp.Svc = svc
-					}
+					// if port, ok := m["port"].(string); ok {
+					// 	sp.Port = port
+					// }
+					// if svc, ok := m["svc"].(string); ok {
+					// 	sp.Svc = svc
+					// }
 					if ns, ok := m["namespace"].(string); ok {
 						sp.Namespace = ns
 					}
-					if group, ok := m["group"].(string); ok {
-						sp.Group = group
-					}
-					if dataType, ok := m["dataType"].(string); ok {
-						sp.DataType = dataType
-					}
-					if version, ok := m["version"].(string); ok {
-						sp.Version = version
-					}
+					// if group, ok := m["group"].(string); ok {
+					// 	sp.Group = group
+					// }
+					// if dataType, ok := m["dataType"].(string); ok {
+					// 	sp.DataType = dataType
+					// }
+					// if version, ok := m["version"].(string); ok {
+					// 	sp.Version = version
+					// }
 
-					if ops, okk := m["ops"].([]interface{}); okk {
-						sp.Ops = make([]string, len(ops))
-						for i, op := range ops {
-							sp.Ops[i] = op.(string)
-						}
-					} else {
-						sp.Ops = []string{}
-					}
+					// if ops, okk := m["ops"].([]interface{}); okk {
+					// 	sp.Ops = make([]string, len(ops))
+					// 	for i, op := range ops {
+					// 		sp.Ops[i] = op.(string)
+					// 	}
+					// } else {
+					// 	sp.Ops = []string{}
+					// }
 					sps = append(sps, sp)
 				}
 			}
@@ -711,7 +715,7 @@ func (h *HelmOps) Install() error {
 		}
 	}
 
-	if err = h.RegisterOrUnregisterAppProvider(true); err != nil {
+	if err = h.RegisterOrUnregisterAppProvider(Register); err != nil {
 		klog.Errorf("Failed to register app provider err=%v", err)
 		h.Uninstall()
 		return err
@@ -793,42 +797,38 @@ func (h *HelmOps) Options() *Opt {
 	return &h.options
 }
 
-func (h *HelmOps) RegisterOrUnregisterAppProvider(isRegister bool) error {
-	userZone, err := h.userZone()
+func (h *HelmOps) RegisterOrUnregisterAppProvider(operation ProviderOperation) error {
+	var providers []*appcfg.ProviderCfg
+	appEntrances, err := h.app.GetEntrances(h.ctx)
 	if err != nil {
-		klog.Errorf("Failed to get user zone for app %s: %v", h.app.AppName, err)
+		klog.Errorf("Failed to get app entrances for app %s: %v", h.app.AppName, err)
 		return err
 	}
-	domain := fmt.Sprintf("%s.%s", h.app.AppID, userZone)
-	getProvider := func() *appcfg.Provider {
-		serviceToken := strings.Split(h.app.Provider.Service, ":")
-		if len(serviceToken) < 2 { // port not found
-			serviceToken = append(serviceToken, "80") // default port 80
+	for _, provider := range h.app.Provider {
+		providerEntrance, ok := appEntrances[provider.Entrance]
+		if !ok {
+			err = fmt.Errorf("entrance %s not found for the provider of app %s", provider.Entrance, h.app.AppName)
+			klog.Error(err)
+			return err
 		}
 
-		return &appcfg.Provider{
-			Service: fmt.Sprintf("%s.%s:%s", serviceToken[0], h.app.Namespace, serviceToken[1]),
-			Paths:   h.app.Provider.Paths,
-			Verbs:   h.app.Provider.Verbs,
-		}
+		domain := providerEntrance.URL
+		service := fmt.Sprintf("%s.%s:%d", providerEntrance.Host, h.app.Namespace, providerEntrance.Port)
+
+		providers = append(providers, &appcfg.ProviderCfg{
+			Service:  service,
+			Domain:   domain,
+			Provider: provider,
+		})
 	}
 	register := appcfg.ProviderRegisterRequest{
 		AppName:      h.app.AppName,
 		AppNamespace: h.app.Namespace,
-		Providers: []*appcfg.ProviderCfg{
-			{
-				Provider: *getProvider(),
-				Domain:   domain,
-			},
-		},
+		Providers:    providers,
 	}
 
 	var url string
-	if isRegister {
-		url = fmt.Sprintf("http://%s/provider/v2alpha1/register", h.systemServerHost())
-	} else {
-		url = fmt.Sprintf("http://%s/provider/v2alpha1/unregister", h.systemServerHost())
-	}
+	url = fmt.Sprintf("http://%s/provider/v2alpha1/%s", h.systemServerHost(), operation)
 	client := resty.New()
 
 	resp, err := client.SetTimeout(2*time.Second).R().

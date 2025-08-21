@@ -2,6 +2,7 @@ package constants
 
 import (
 	"flag"
+	"os"
 
 	"k8s.io/apimachinery/pkg/util/sets"
 )
@@ -111,6 +112,8 @@ var (
 	WebhookServerListenAddress = ":8433"
 	// KubeSphereAPIHost kubesphere api host.
 	KubeSphereAPIHost string
+
+	CHART_REPO_URL string = "http://chart-repo-service.os-framework:82/"
 )
 
 func init() {
@@ -120,4 +123,9 @@ func init() {
 		"webhook listening address")
 	flag.StringVar(&KubeSphereAPIHost, "ks-apiserver", "ks-apiserver.kubesphere-system",
 		"kubesphere api server")
+
+	url := os.Getenv("CHART_REPO_URL")
+	if url != "" {
+		CHART_REPO_URL = url
+	}
 }

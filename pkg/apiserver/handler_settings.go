@@ -266,8 +266,7 @@ func (h *Handler) getAppSettings(req *restful.Request, resp *restful.Response) {
 }
 
 func getRepoURL() string {
-	repoURL := "http://chart-repo-service.os-framework:82/"
-	return repoURL
+	return constants.CHART_REPO_URL
 }
 
 func (h *Handler) setupAppAuthLevel(req *restful.Request, resp *restful.Response) {

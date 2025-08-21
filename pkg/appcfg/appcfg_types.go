@@ -33,7 +33,7 @@ type AppConfiguration struct {
 	Permission    Permission             `yaml:"permission" json:"permission" description:"app permission request"`
 	Middleware    *tapr.Middleware       `yaml:"middleware" json:"middleware" description:"app middleware request"`
 	Options       Options                `yaml:"options" json:"options" description:"app options"`
-	Provider      *Provider              `yaml:"provider,omitempty" json:"provider,omitempty" description:"app provider information"`
+	Provider      []Provider             `yaml:"provider,omitempty" json:"provider,omitempty" description:"app provider information"`
 }
 
 type AppSpec struct {
@@ -74,14 +74,15 @@ type Permission struct {
 }
 
 type SysDataCfg struct {
-	AppName   string   `yaml:"appName" json:"appName"`
-	Svc       string   `yaml:"svc,omitempty" json:"svc,omitempty"`
-	Namespace string   `yaml:"namespace,omitempty" json:"namespace,omitempty"`
-	Port      string   `yaml:"port" json:"port"`
-	Group     string   `yaml:"group" json:"group"`
-	DataType  string   `yaml:"dataType" json:"dataType"`
-	Version   string   `yaml:"version" json:"version"`
-	Ops       []string `yaml:"ops" json:"ops"`
+	AppName   string `yaml:"appName" json:"appName"`
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+	// Svc          string   `yaml:"svc,omitempty" json:"svc,omitempty"`
+	// Port         string   `yaml:"port" json:"port"`
+	// Group        string   `yaml:"group" json:"group"`
+	// DataType     string   `yaml:"dataType" json:"dataType"`
+	// Version      string   `yaml:"version" json:"version"`
+	// Ops          []string `yaml:"ops" json:"ops"`
+	ProviderName string `yaml:"providerName" json:"providerName"`
 }
 
 type Policy struct {
@@ -156,9 +157,10 @@ type Chart struct {
 }
 
 type Provider struct {
-	Service string   `yaml:"service" json:"service"`
-	Paths   []string `yaml:"paths" json:"paths"`
-	Verbs   []string `yaml:"verbs" json:"verbs"`
+	Name     string   `yaml:"name" json:"name"`
+	Entrance string   `yaml:"entrance" json:"entrance"`
+	Paths    []string `yaml:"paths" json:"paths"`
+	Verbs    []string `yaml:"verbs" json:"verbs"`
 }
 
 func (c *Chart) Namespace(owner string) string {

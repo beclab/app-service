@@ -220,3 +220,21 @@ func GetDeploymentName(pod *corev1.Pod) string {
 	replicaSetSuffix := fmt.Sprintf("%s-", replicaSetHash)
 	return strings.TrimSuffix(pod.Name, replicaSetSuffix)
 }
+
+var serviceAccountToken string
+
+func GetServiceAccountToken() (string, error) {
+	if serviceAccountToken != "" {
+		return serviceAccountToken, nil
+	}
+
+	config, err := ctrl.GetConfig()
+	if err != nil {
+		klog.Errorf("Failed to get config: %v", err)
+		return "", err
+	}
+
+	serviceAccountToken = config.BearerToken
+
+	return serviceAccountToken, nil
+}
