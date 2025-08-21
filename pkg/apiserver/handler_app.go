@@ -672,6 +672,9 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 					entrances[i].URL = fmt.Sprintf("%s.%s", appid, zone)
 				} else {
 					entrances[i].URL = fmt.Sprintf("%s%d.%s", appid, i, zone)
+					if appid == "ui" {
+						entrances[i].URL = fmt.Sprintf("%s.%s", entrances[i].Name, zone)
+					}
 				}
 			}
 		}
