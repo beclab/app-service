@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
@@ -129,13 +130,21 @@ func (h *Handler) installMiddleware(req *restful.Request, resp *restful.Response
 		Status:    v1alpha1.Running,
 		StateTime: &now,
 	}
+	opID := strconv.FormatInt(time.Now().Unix(), 10)
+
 	defer func() {
 		if err != nil {
-			opRecord.Status = "failed"
+			opRecord.Status = v1alpha1.InstallFailed
 			opRecord.Message = fmt.Sprintf(constants.OperationFailedTpl, a.Status.OpType, err.Error())
 			e := apputils.UpdateStatus(a, opRecord.Status, &opRecord, opRecord.Message)
 			if e != nil {
 				klog.Errorf("Failed to update applicationmanager status name=%s err=%v", a.Name, e)
+			} else {
+				err = middlewareinstaller.Uninstall(context.TODO(), h.kubeConfig, middlewareConfig)
+				if err != nil {
+					klog.Errorf("Failed to uninstall middleware err=%v", err)
+				}
+				utils.PublishMiddlewareEventAsync(owner, app, string(v1alpha1.InstallOp), opID, v1alpha1.InstallFailed.String(), "", nil)
 			}
 		}
 	}()
@@ -143,6 +152,7 @@ func (h *Handler) installMiddleware(req *restful.Request, resp *restful.Response
 	middlewareStatus := v1alpha1.ApplicationManagerStatus{
 		OpType:  v1alpha1.InstallOp,
 		State:   v1alpha1.Installing,
+		OpID:    opID,
 		Message: "installing middleware",
 		Payload: map[string]string{
 			"version":      middlewareConfig.Cfg.Metadata.Version,
@@ -156,11 +166,11 @@ func (h *Handler) installMiddleware(req *restful.Request, resp *restful.Response
 		api.HandleError(resp, req, err)
 		return
 	}
+	utils.PublishMiddlewareEventAsync(owner, app, string(v1alpha1.InstallOp), opID, v1alpha1.Installing.String(), "", nil)
 
 	klog.Infof("Start to install middleware name=%v", middlewareConfig.MiddlewareName)
 	err = middlewareinstaller.Install(req.Request.Context(), h.kubeConfig, middlewareConfig)
 	if err != nil {
-
 		api.HandleError(resp, req, err)
 		return
 	}
@@ -208,7 +218,9 @@ func (h *Handler) installMiddleware(req *restful.Request, resp *restful.Response
 					err = apputils.UpdateStatus(mgr, v1alpha1.InstallingCanceled, &opRecord, opRecord.Message)
 					if err != nil {
 						klog.Infof("Failed to update status err=%v", err)
+						return
 					}
+					utils.PublishMiddlewareEventAsync(owner, app, string(v1alpha1.CancelOp), opID, v1alpha1.InstallingCanceled.String(), "", nil)
 					return
 				}
 				klog.Infof("ticker get middleware status")
@@ -227,6 +239,8 @@ func (h *Handler) installMiddleware(req *restful.Request, resp *restful.Response
 					e := apputils.UpdateStatus(a, opRecord.Status, &opRecord, opRecord.Message)
 					if e != nil {
 						klog.Error(e)
+					} else {
+						utils.PublishMiddlewareEventAsync(owner, app, string(v1alpha1.InstallOp), opID, opRecord.Status.String(), "", nil)
 					}
 					delete(middlewareManager, name)
 					return
@@ -240,7 +254,7 @@ func (h *Handler) installMiddleware(req *restful.Request, resp *restful.Response
 	}()
 	resp.WriteEntity(api.InstallationResponse{
 		Response: api.Response{Code: 200},
-		Data:     api.InstallationResponseData{UID: middlewareConfig.MiddlewareName},
+		Data:     api.InstallationResponseData{UID: middlewareConfig.MiddlewareName, OpID: opID},
 	})
 }
 
@@ -272,10 +286,13 @@ func (h *Handler) uninstallMiddleware(req *restful.Request, resp *restful.Respon
 	}
 
 	now := metav1.Now()
+	opID := strconv.FormatInt(time.Now().Unix(), 10)
+
 	var mgr *v1alpha1.ApplicationManager
 	middlewareStatus := v1alpha1.ApplicationManagerStatus{
 		OpType:     v1alpha1.UninstallOp,
 		State:      v1alpha1.Uninstalling,
+		OpID:       opID,
 		Message:    "try to uninstall a middleware",
 		StatusTime: &now,
 		UpdateTime: &now,
@@ -286,22 +303,26 @@ func (h *Handler) uninstallMiddleware(req *restful.Request, resp *restful.Respon
 		api.HandleError(resp, req, err)
 		return
 	}
+	utils.PublishMiddlewareEventAsync(owner, app, string(v1alpha1.UninstallOp), opID, v1alpha1.Uninstalling.String(), "", nil)
+
 	now = metav1.Now()
 	opRecord := v1alpha1.OpRecord{
 		OpType:    v1alpha1.UninstallOp,
 		Message:   "",
 		Source:    mgr.Spec.Source,
 		Version:   mgr.Status.Payload["version"],
-		Status:    "failed",
+		Status:    v1alpha1.UninstallFailed,
 		StateTime: &now,
 	}
 	defer func() {
 		if err != nil {
 			opRecord.Message = fmt.Sprintf(constants.OperationFailedTpl, mgr.Status.OpType, err.Error())
 
-			e := apputils.UpdateStatus(mgr, "failed", &opRecord, opRecord.Message)
+			e := apputils.UpdateStatus(mgr, v1alpha1.UninstallFailed, &opRecord, opRecord.Message)
 			if e != nil {
 				klog.Errorf("Failed to update applicationmanager status in uninstall middleware name=%s err=%v", mgr.Name, e)
+			} else {
+				utils.PublishMiddlewareEventAsync(owner, app, string(v1alpha1.UninstallOp), opID, v1alpha1.UninstallFailed.String(), "", nil)
 			}
 		}
 	}()
@@ -317,6 +338,7 @@ func (h *Handler) uninstallMiddleware(req *restful.Request, resp *restful.Respon
 		api.HandleError(resp, req, err)
 		return
 	}
+	utils.PublishMiddlewareEventAsync(owner, app, string(v1alpha1.Uninstalled), opID, v1alpha1.Uninstalled.String(), "", nil)
 
 	resp.WriteEntity(api.InstallationResponse{
 		Response: api.Response{Code: 200},
@@ -344,8 +366,12 @@ func (h *Handler) cancelMiddleware(req *restful.Request, resp *restful.Response)
 	}
 	cancel()
 	now := metav1.Now()
+	opID := strconv.FormatInt(time.Now().Unix(), 10)
+
 	status := v1alpha1.ApplicationManagerStatus{
 		OpType:     v1alpha1.CancelOp,
+		State:      v1alpha1.InstallingCanceling,
+		OpID:       opID,
 		Progress:   "0.00",
 		Message:    cancelType,
 		StatusTime: &now,
@@ -358,6 +384,7 @@ func (h *Handler) cancelMiddleware(req *restful.Request, resp *restful.Response)
 		api.HandleError(resp, req, err)
 		return
 	}
+	utils.PublishMiddlewareEventAsync(owner, app, string(v1alpha1.CancelOp), opID, v1alpha1.InstallingCanceling.String(), "", nil)
 
 	resp.WriteAsJson(api.InstallationResponse{
 		Response: api.Response{Code: 200},
