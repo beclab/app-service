@@ -662,16 +662,21 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 	//	api.HandleError(resp, req, err)
 	//	return
 	//}
-	genEntranceURL := func(entrances []v1alpha1.Entrance, owner, appName string) ([]v1alpha1.Entrance, error) {
-		zone, _ := kubesphere.GetUserZone(req.Request.Context(), owner)
-
+	genEntranceURL := func(app *v1alpha1.Application, appDomainConfigs []appcfg.DefaultThirdLevelDomainConfig) ([]v1alpha1.Entrance, error) {
+		zone, _ := kubesphere.GetUserZone(req.Request.Context(), app.Spec.Owner)
+		entrances := app.Spec.Entrances
 		if len(zone) > 0 {
-			appid := apputils.GetAppID(appName)
+			appid := apputils.GetAppID(app.Spec.Name)
 			for i := range entrances {
 				if len(entrances) == 1 {
 					entrances[i].URL = fmt.Sprintf("%s.%s", appid, zone)
 				} else {
 					entrances[i].URL = fmt.Sprintf("%s%d.%s", appid, i, zone)
+					for _, adc := range appDomainConfigs {
+						if adc.AppName == app.Spec.Name && adc.EntranceName == entrances[i].Name && len(adc.ThirdLevelDomain) > 0 {
+							entrances[i].URL = fmt.Sprintf("%s.%s", adc.ThirdLevelDomain, zone)
+						}
+					}
 				}
 			}
 		}
@@ -777,7 +782,14 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 	}
 
 	for _, app := range appsMap {
-		entrances, err := genEntranceURL(app.Spec.Entrances, app.Spec.Owner, app.Spec.Name)
+		var appDomainConfigs []appcfg.DefaultThirdLevelDomainConfig
+		if len(app.Spec.Settings["defaultThirdLevelDomainConfig"]) > 0 {
+			err := json.Unmarshal([]byte(app.Spec.Settings["defaultThirdLevelDomainConfig"]), &appDomainConfigs)
+			if err != nil {
+				klog.Errorf("unmarshal defaultThirdLevelDomainConfig error %v", err)
+			}
+		}
+		entrances, err := genEntranceURL(app, appDomainConfigs)
 		if err != nil {
 			api.HandleError(resp, req, err)
 			return

@@ -163,3 +163,9 @@ func (c *Chart) Namespace(owner string) string {
 func (c *Chart) ChartPath(appName string) string {
 	return AppChartPath(filepath.Join(appName, c.Name))
 }
+
+type DefaultThirdLevelDomainConfig struct {
+	AppName          string `json:"appName"`
+	EntranceName     string `json:"entranceName"`
+	ThirdLevelDomain string `json:"thirdLevelDomain"`
+}
