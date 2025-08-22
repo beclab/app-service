@@ -655,13 +655,6 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 	isSysApp := req.QueryParameter("issysapp")
 	state := req.QueryParameter("state")
 
-	//kClient, _ := utils.GetClient()
-	//role, err := kubesphere.GetUserRole(req.Request.Context(), h.kubeConfig, owner)
-	//if err != nil {
-	//	api.HandleError(resp, req, err)
-	//	return
-	//}
-
 	ss := make([]string, 0)
 	if state != "" {
 		ss = strings.Split(state, "|")
@@ -683,6 +676,11 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 	appsEntranceMap := make(map[string]*v1alpha1.Application)
 	// get pending app's from app managers
 	ams, err := h.appmgrLister.List(labels.Everything())
+	if err != nil {
+		klog.Error(err)
+		api.HandleError(resp, req, err)
+		return
+	}
 
 	for _, am := range ams {
 		if am.Spec.Type != v1alpha1.App {
@@ -820,6 +818,11 @@ func (h *Handler) renderManifest(req *restful.Request, resp *restful.Response) {
 		return
 	}
 	isAdmin, err := kubesphere.IsAdmin(req.Request.Context(), h.kubeConfig, owner)
+	if err != nil {
+		klog.Error(err)
+		api.HandleError(resp, req, err)
+		return
+	}
 	renderedYAML, err := utils.RenderManifestFromContent([]byte(request.Content), owner, admin, isAdmin)
 	if err != nil {
 		api.HandleError(resp, req, err)

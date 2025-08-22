@@ -44,10 +44,11 @@ func (h *Handler) statusMiddleware(req *restful.Request, resp *restful.Response)
 }
 
 func (h *Handler) statusMiddlewareList(req *restful.Request, resp *restful.Response) {
-	owner := req.Attribute(constants.UserContextAttribute).(string)
-	client := req.Attribute(constants.KubeSphereClientAttribute).(*clientset.ClientSet)
+	//owner := req.Attribute(constants.UserContextAttribute).(string)
+	//client := req.Attribute(constants.KubeSphereClientAttribute).(*clientset.ClientSet)
 
-	mgrs, err := client.AppClient.AppV1alpha1().ApplicationManagers().List(req.Request.Context(), metav1.ListOptions{})
+	var mgrs v1alpha1.ApplicationManagerList
+	err := h.ctrlClient.List(req.Request.Context(), &mgrs)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -58,11 +59,11 @@ func (h *Handler) statusMiddlewareList(req *restful.Request, resp *restful.Respo
 		if mgr.Spec.Type != v1alpha1.Middleware {
 			continue
 		}
-		if mgr.Spec.AppOwner != owner {
-			continue
-		}
+		//if mgr.Spec.AppOwner != owner {
+		//	continue
+		//}
 
-		data, err := getMiddlewareStatus(req.Request.Context(), h.kubeConfig, mgr.Spec.AppName, owner)
+		data, err := getMiddlewareStatus(req.Request.Context(), h.kubeConfig, mgr.Spec.AppName, mgr.Spec.AppOwner)
 		if err != nil {
 			api.HandleError(resp, req, err)
 			return
@@ -94,19 +95,11 @@ func getMiddlewareStatus(ctx context.Context, kubeConfig *rest.Config, app, owne
 		klog.Errorf("Failed to get install history app=%s err=%v", app, err)
 		return nil, err
 	}
-	status := "notfound"
-	if installed {
-		status = "installing"
-	}
+	//status := v1alpha1.Uninstalled.String()
+	//if installed {
+	//	status = v1alpha1.Uninstalling.String()
+	//}
 
-	res := statusData{
-		UUID:           "",
-		Namespace:      namespace,
-		User:           owner,
-		ResourceStatus: status,
-		ResourceType:   v1alpha1.Middleware.String(),
-		Metadata:       metadata{Name: app},
-	}
 	client, err := utils.GetClient()
 	if err != nil {
 		return nil, err
@@ -120,11 +113,19 @@ func getMiddlewareStatus(ctx context.Context, kubeConfig *rest.Config, app, owne
 	if err != nil {
 		return nil, err
 	}
-	if mgr.Status.OpType == v1alpha1.UninstallOp && mgr.Status.State == v1alpha1.Uninstalling {
-		res.ResourceStatus = v1alpha1.Uninstalling.String()
-	}
-	if mgr.Status.State == v1alpha1.Running {
-		res.ResourceStatus = v1alpha1.AppRunning.String()
+	//if mgr.Status.OpType == v1alpha1.UninstallOp && mgr.Status.State == v1alpha1.Uninstalling {
+	//	res.ResourceStatus = v1alpha1.Uninstalling.String()
+	//}
+	//if mgr.Status.State == v1alpha1.Running {
+	//	res.ResourceStatus = v1alpha1.AppRunning.String()
+	//}
+	res := statusData{
+		UUID:           "",
+		Namespace:      namespace,
+		User:           owner,
+		ResourceStatus: mgr.Status.State.String(),
+		ResourceType:   v1alpha1.Middleware.String(),
+		Metadata:       metadata{Name: app},
 	}
 
 	if release != nil {

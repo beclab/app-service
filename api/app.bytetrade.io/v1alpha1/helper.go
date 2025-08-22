@@ -12,6 +12,12 @@ import (
 	"k8s.io/klog/v2"
 )
 
+type DefaultThirdLevelDomainConfig struct {
+	AppName          string `json:"appName"`
+	EntranceName     string `json:"entranceName"`
+	ThirdLevelDomain string `json:"thirdLevelDomain"`
+}
+
 func (a *Application) IsClusterScoped() bool {
 	if a.Spec.Settings == nil {
 		return false
@@ -74,6 +80,15 @@ func (app *Application) GenEntranceURL(ctx context.Context) ([]Entrance, error) 
 		return nil, err
 	}
 
+	var appDomainConfigs []DefaultThirdLevelDomainConfig
+	if defaultThirdLevelDomainConfig, ok := app.Spec.Settings["defaultThirdLevelDomainConfig"]; ok && len(defaultThirdLevelDomainConfig) > 0 {
+		err := json.Unmarshal([]byte(app.Spec.Settings["defaultThirdLevelDomainConfig"]), &appDomainConfigs)
+		if err != nil {
+			klog.Errorf("unmarshal defaultThirdLevelDomainConfig error %v", err)
+			return nil, err
+		}
+	}
+
 	if len(zone) > 0 {
 		appid := AppName(app.Spec.Name).GetAppID()
 		if len(app.Spec.Entrances) == 1 {
@@ -81,6 +96,11 @@ func (app *Application) GenEntranceURL(ctx context.Context) ([]Entrance, error) 
 		}
 		for i := range app.Spec.Entrances {
 			app.Spec.Entrances[i].URL = fmt.Sprintf("%s%d.%s", appid, i, zone)
+			for _, adc := range appDomainConfigs {
+				if adc.AppName == app.Spec.Name && adc.EntranceName == app.Spec.Entrances[i].Name && len(adc.ThirdLevelDomain) > 0 {
+					app.Spec.Entrances[i].URL = fmt.Sprintf("%s.%s", adc.ThirdLevelDomain, zone)
+				}
+			}
 		}
 	}
 	return app.Spec.Entrances, nil
