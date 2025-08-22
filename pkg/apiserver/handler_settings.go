@@ -10,13 +10,14 @@ import (
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
+	"bytetrade.io/web3os/app-service/pkg/appinstaller"
+	"bytetrade.io/web3os/app-service/pkg/appinstaller/versioned"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
-	"bytetrade.io/web3os/app-service/pkg/helm"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/provider"
 	"bytetrade.io/web3os/app-service/pkg/tapr"
-	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 
 	"github.com/emicklei/go-restful/v3"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -84,6 +85,7 @@ func (h *Handler) setupAppEntranceDomain(req *restful.Request, resp *restful.Res
 		// if error, response in function. Do nothing
 		return
 	}
+	token := req.HeaderParameter(constants.AuthorizationTokenKey)
 
 	entranceName := req.PathParameter(ParamEntranceName)
 	validName := false
@@ -181,12 +183,6 @@ func (h *Handler) setupAppEntranceDomain(req *restful.Request, resp *restful.Res
 	if ok {
 		// upgrade app set values
 		owner := req.Attribute(constants.UserContextAttribute).(string)
-		repoURL := getRepoURL()
-		actionConfig, cliSttings, err := helm.InitConfig(h.kubeConfig, app.Spec.Namespace)
-		if err != nil {
-			api.HandleError(resp, req, err)
-			return
-		}
 		zone, err := kubesphere.GetUserZone(req.Request.Context(), owner)
 		if err != nil {
 			api.HandleError(resp, req, err)
@@ -219,13 +215,25 @@ func (h *Handler) setupAppEntranceDomain(req *restful.Request, resp *restful.Res
 		}
 		vals["domain"] = entries
 
-		chartName := fmt.Sprintf("./charts/%s", app.Spec.Name)
-
-		if userspace.IsSysApp(app.Spec.Name) {
-			chartName = fmt.Sprintf("./userapps/apps/%s", app.Spec.Name)
+		appMgr, err := client.AppClient.AppV1alpha1().ApplicationManagers().Get(req.Request.Context(), appUpdated.Name, metav1.GetOptions{})
+		if err != nil {
+			api.HandleError(resp, req, err)
+			return
 		}
-		err = helm.UpgradeCharts(req.Request.Context(), actionConfig, cliSttings, app.Spec.Name, chartName,
-			repoURL, app.Spec.Namespace, vals, true)
+
+		var appCfg *appcfg.ApplicationConfig
+		err = json.Unmarshal([]byte(appMgr.Spec.Config), &appCfg)
+		if err != nil {
+			api.HandleError(resp, req, err)
+			return
+		}
+
+		ops, err := versioned.NewHelmOps(req.Request.Context(), h.kubeConfig, appCfg, token, appinstaller.Opt{Source: app.Spec.Settings["source"]})
+		if err != nil {
+			api.HandleError(resp, req, err)
+			return
+		}
+		err = ops.Upgrade()
 		if err != nil {
 			api.HandleError(resp, req, err)
 			return

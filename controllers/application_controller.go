@@ -19,6 +19,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/utils"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
+	"github.com/thoas/go-funk"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/storage/driver"
 	appsv1 "k8s.io/api/apps/v1"
@@ -44,6 +45,8 @@ import (
 const (
 	applicationFinalizer = "finalizers.bytetrade.io/application"
 )
+
+var protectedRelease = []string{"headscale"}
 
 // ApplicationReconciler reconciles a Application object
 type ApplicationReconciler struct {
@@ -117,18 +120,6 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 						deletingObjects[name] = d
 						klog.Errorf("deleting app name: %s", name)
 					} // end if deployment is deleted
-
-					// if validAppObject != nil || !ok || owner == "" {
-					// 	// duplicate or ownerless deployment is invalid
-					// 	ctrl.Log.Info("delete invalid deployment or statefulset", "name", d.GetName(), "namespace", d.GetNamespace())
-					// 	err = r.Delete(ctx, d)
-					// 	if err != nil {
-					// 		ctrl.Log.Error(err, "delete invalid deployment or statefulset error", "name", d.GetName(), "namespace", d.GetNamespace())
-					// 	}
-					// } else {
-
-					// 	break
-					// }
 				}
 
 			} // end loop deployment.Items
@@ -178,33 +169,6 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				return ctrl.Result{}, err
 			} // end if error
 
-			//owner := validAppObject.GetLabels()[constants.ApplicationOwnerLabel]
-			//analyticsEnabled := validAppObject.GetAnnotations()[constants.ApplicationAnalytics]
-			//if analyticsEnabled == "" {
-			//	analyticsEnabled = "false"
-			//}
-			//actionConfig, _, err := helm.InitConfig(r.Kubeconfig, app.Spec.Namespace)
-			//if err != nil {
-			//	ctrl.Log.Error(err, "init helm config error")
-			//	return ctrl.Result{}, err
-			//}
-			//versionChanged := false
-			//if !userspace.IsSysApp(app.Spec.Name) {
-			//	version, _, err := utils.GetDeployedReleaseVersion(actionConfig, name)
-			//	if err != nil {
-			//		ctrl.Log.Error(err, "get release version error")
-			//		return ctrl.Result{}, err
-			//	}
-			//	if app.Spec.Settings["version"] != version {
-			//		versionChanged = true
-			//	}
-			//}
-			//if app.Spec.Namespace != validAppObject.GetNamespace() ||
-			//	app.Spec.Name != name ||
-			//	app.Spec.Owner != owner ||
-			//	app.Spec.DeploymentName != validAppObject.GetName() ||
-			//	app.Spec.Settings["analyticsEnabled"] != analyticsEnabled ||
-			//	versionChanged {
 			ctrl.Log.Info("Application update", "name", app.Name, "spec.name", app.Spec.Name, "spec.owner", app.Spec.Owner)
 			err = r.updateApplication(ctx, req, validAppObject, app, name)
 			if err != nil {
@@ -214,40 +178,19 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		} else {
 			// deployment or statefulset is nil, delete application
 			if err == nil && app != nil {
-				//client, _ := kubernetes.NewForConfig(r.Kubeconfig)
-				//if utils.IsProtectedNamespace(app.Spec.Namespace) {
-				//	_, err = client.CoreV1().Namespaces().Get(context.TODO(), "not exists namespace", metav1.GetOptions{})
-				//} else {
-				//	_, err = client.CoreV1().Namespaces().Get(context.TODO(), app.Spec.Namespace, metav1.GetOptions{})
-				//}
-
 				ctrl.Log.Info("Application delete", "name", app.Name, "spec.name", app.Spec.Name, "spec.owner", app.Spec.Owner)
 				err = r.Delete(ctx, app.DeepCopy())
 				if err != nil && !apierrors.IsNotFound(err) {
 					return ctrl.Result{}, err
+				}
+				if funk.Contains(protectedRelease, app.Spec.Name) {
+					return ctrl.Result{}, nil
 				}
 				err = r.clearHelmHistory(app.Spec.Name, app.Spec.Namespace)
 				if err != nil && !errors.Is(err, driver.ErrReleaseNotFound) {
 					return ctrl.Result{RequeueAfter: 2 * time.Second}, err
 				}
 
-				//if err != nil {
-				//	if apierrors.IsNotFound(err) {
-				//		ctrl.Log.Info("Application delete", "name", app.Name, "spec.name", app.Spec.Name, "spec.owner", app.Spec.Owner)
-				//		err = r.Delete(ctx, app.DeepCopy())
-				//		if err != nil && !apierrors.IsNotFound(err) {
-				//			return ctrl.Result{}, err
-				//		}
-				//
-				//		err = r.clearHelmHistory(app.Spec.Name, app.Spec.Namespace)
-				//	} else {
-				//		// get namespace err, re-enqueue
-				//		return ctrl.Result{RequeueAfter: 2 * time.Second}, err
-				//	}
-				//} else {
-				//	return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
-				//
-				//}
 			} else if apierrors.IsNotFound(err) {
 				// app not found, just return
 				return ctrl.Result{}, nil
