@@ -16,6 +16,7 @@ type Event struct {
 	EventID          string                    `json:"eventID"`
 	CreateTime       time.Time                 `json:"createTime"`
 	Name             string                    `json:"name"`
+	Type             string                    `json:"type"`
 	OpType           string                    `json:"opType,omitempty"`
 	OpID             string                    `json:"opID,omitempty"`
 	State            string                    `json:"state"`
@@ -64,6 +65,7 @@ func PublishAsync(owner, name, opType, opID, state, progress string, entranceSta
 		EventID:    fmt.Sprintf("%s-%s-%d", owner, name, now.UnixMilli()),
 		CreateTime: now,
 		Name:       name,
+		Type:       "app",
 		OpType:     opType,
 		OpID:       opID,
 		State:      state,
@@ -111,4 +113,31 @@ func publish(subject string, data interface{}) error {
 		return err
 	}
 	return nil
+}
+
+func PublishMiddlewareEventAsync(owner, name, opType, opID, state, progress string, entranceStatuses []v1alpha1.EntranceStatus) {
+	subject := fmt.Sprintf("os.application.%s", owner)
+
+	now := time.Now()
+	data := Event{
+		EventID:    fmt.Sprintf("%s-%s-%d", owner, name, now.UnixMilli()),
+		CreateTime: now,
+		Name:       name,
+		Type:       "middleware",
+		OpType:     opType,
+		OpID:       opID,
+		State:      state,
+		Progress:   progress,
+		User:       owner,
+	}
+	if len(entranceStatuses) > 0 {
+		data.EntranceStatuses = entranceStatuses
+	}
+
+	go func() {
+		if err := publish(subject, data); err != nil {
+			klog.Errorf("async publish subject %s,data %v, failed %v", subject, data, err)
+		}
+		klog.Infof("publish event success data: %#v", data)
+	}()
 }
