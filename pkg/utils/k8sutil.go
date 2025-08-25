@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/url"
 	"strings"
@@ -204,4 +205,36 @@ func FindOwnerUser(ctrlClient client.Client, user *iamv1alpha2.User) (*iamv1alph
 		}
 	}
 	return nil, errors.New("user with owner role not found")
+}
+
+func GetDeploymentName(pod *corev1.Pod) string {
+	if pod == nil {
+		return ""
+	}
+
+	replicaSetHash := pod.Labels["pod-template-hash"]
+	if replicaSetHash == "" {
+		return ""
+	}
+
+	replicaSetSuffix := fmt.Sprintf("%s-", replicaSetHash)
+	return strings.TrimSuffix(pod.Name, replicaSetSuffix)
+}
+
+var serviceAccountToken string
+
+func GetServiceAccountToken() (string, error) {
+	if serviceAccountToken != "" {
+		return serviceAccountToken, nil
+	}
+
+	config, err := ctrl.GetConfig()
+	if err != nil {
+		klog.Errorf("Failed to get config: %v", err)
+		return "", err
+	}
+
+	serviceAccountToken = config.BearerToken
+
+	return serviceAccountToken, nil
 }

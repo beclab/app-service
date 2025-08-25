@@ -21,7 +21,7 @@ import (
 func (h *Handler) uninstall(req *restful.Request, resp *restful.Response) {
 	app := req.PathParameter(ParamAppName)
 	owner := req.Attribute(constants.UserContextAttribute).(string)
-	token := req.HeaderParameter(constants.AuthorizationTokenKey)
+	token := h.GetServiceAccountToken()
 
 	request := &api.UninstallRequest{}
 	if req.Request.ContentLength > 0 {

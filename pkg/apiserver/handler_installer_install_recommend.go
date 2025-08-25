@@ -138,7 +138,7 @@ func (h *Handler) installRecommend(req *restful.Request, resp *restful.Response)
 	}
 
 	app := req.PathParameter(ParamWorkflowName)
-	token := req.HeaderParameter(constants.AuthorizationTokenKey)
+	token := h.GetServiceAccountToken()
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 	marketSource := req.HeaderParameter(constants.MarketSource)
 
@@ -389,7 +389,7 @@ func (h *Handler) uninstallRecommend(req *restful.Request, resp *restful.Respons
 func (h *Handler) upgradeRecommend(req *restful.Request, resp *restful.Response) {
 	app := req.PathParameter(ParamWorkflowName)
 	owner := req.Attribute(constants.UserContextAttribute).(string)
-	token := req.HeaderParameter(constants.AuthorizationTokenKey)
+	token := h.GetServiceAccountToken()
 	marketSource := req.HeaderParameter(constants.MarketSource)
 	var err error
 	upReq := &api.UpgradeRequest{}

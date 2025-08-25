@@ -76,9 +76,29 @@ func (h *HelmOps) Uninstall_(client kubernetes.Interface, actionConfig *action.C
 		klog.Errorf("failed to uninstall app %s, err=%v", releaseName, err)
 		return err
 	}
-	err = h.unregisterAppPerm()
+
+	h.app.Permission = parseAppPermission(h.app.Permission)
+	var perm []appcfg.SysDataPermission
+	for _, p := range h.app.Permission {
+		if t, ok := p.([]appcfg.SysDataPermission); ok {
+			perm = append(perm, t...)
+		}
+	}
+
+	permCfg, err := apputils.ProviderPermissionsConvertor(perm).ToPermissionCfg(h.ctx, h.app.OwnerName)
+	if err != nil {
+		klog.Errorf("Failed to convert app permissions for %s: %v", h.app.AppName, err)
+		return err
+	}
+
+	err = h.unregisterAppPerm(h.app.ServiceAccountName, h.app.OwnerName, permCfg)
 	if err != nil {
 		klog.Warningf("Failed to unregister app err=%v", err)
+	}
+
+	err = h.RegisterOrUnregisterAppProvider(Unregister)
+	if err != nil {
+		klog.Warningf("Failed to unregister app provider err=%v", err)
 	}
 
 	return nil
@@ -88,8 +108,8 @@ func (h *HelmOps) ClearCache(client kubernetes.Interface, appCacheDirs []string)
 	if len(appCacheDirs) > 0 {
 		klog.Infof("clear app cache dirs: %v", appCacheDirs)
 
-		c := resty.New().SetTimeout(2*time.Second).
-			SetHeader(constants.AuthorizationTokenKey, h.token)
+		c := resty.New().SetTimeout(2 * time.Second).
+			SetAuthToken(h.token)
 		nodes, e := client.CoreV1().Nodes().List(h.ctx, metav1.ListOptions{})
 
 		if e == nil {
@@ -139,18 +159,30 @@ func (h *HelmOps) DeleteNamespace(client kubernetes.Interface, namespace string)
 	return nil
 }
 
-func (h *HelmOps) unregisterAppPerm() error {
+func (h *HelmOps) unregisterAppPerm(sa *string, ownerName string, perm []appcfg.PermissionCfg) error {
+	requires := make([]appcfg.PermissionRequire, 0, len(perm))
+	for _, p := range perm {
+		requires = append(requires, appcfg.PermissionRequire{
+			ProviderName:      p.ProviderName,
+			ProviderNamespace: p.GetNamespace(ownerName),
+			ServiceAccount:    sa,
+			ProviderAppName:   p.AppName,
+			ProviderDomain:    p.Domain,
+		})
+	}
+
 	register := appcfg.PermissionRegister{
 		App:   h.app.AppName,
 		AppID: h.app.AppID,
+		Perm:  requires,
 	}
 
-	url := fmt.Sprintf("http://%s/permission/v1alpha1/unregister", h.systemServerHost())
+	url := fmt.Sprintf("http://%s/permission/v2alpha1/unregister", h.systemServerHost())
 	client := resty.New()
 
 	resp, err := client.SetTimeout(2*time.Second).R().
 		SetHeader(restful.HEADER_ContentType, restful.MIME_JSON).
-		SetHeader(constants.AuthorizationTokenKey, h.token).
+		SetAuthToken(h.token).
 		SetBody(register).Post(url)
 	if err != nil {
 		return err

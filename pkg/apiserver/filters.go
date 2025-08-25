@@ -11,7 +11,6 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
-	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 
 	"github.com/emicklei/go-restful/v3"
@@ -66,8 +65,7 @@ func logRequestAndResponse(req *restful.Request, resp *restful.Response, chain *
 }
 
 func (h *Handler) createClientSet(req *restful.Request, resp *restful.Response, chain *restful.FilterChain) {
-	kubeConfig := newKubeConfigFromRequest(req, h.kubeHost)
-	client, err := clientset.New(kubeConfig)
+	client, err := clientset.New(h.kubeConfig)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -125,17 +123,12 @@ func (h *Handler) authenticate(req *restful.Request, resp *restful.Response, cha
 	}()
 
 	if needAuth {
-		token := req.Request.Header.Get(constants.AuthorizationTokenKey)
-		if token == "" {
-			api.HandleUnauthorized(resp, req, errors.New("no authentication token error"))
+		username := req.Request.Header.Get(constants.BflUserKey)
+		if username == "" {
+			api.HandleUnauthorized(resp, req, errors.New("no authentication info error"))
 			return
 		}
 
-		username, err := kubesphere.ValidateToken(req.Request.Context(), h.kubeConfig, req.HeaderParameter(constants.AuthorizationTokenKey))
-		if err != nil {
-			api.HandleUnauthorized(resp, req, err)
-			return
-		}
 		req.SetAttribute(constants.UserContextAttribute, username)
 	}
 

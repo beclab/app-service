@@ -60,8 +60,8 @@ func (h *Handler) get(req *restful.Request, resp *restful.Response) {
 			},
 			Spec: appv1alpha1.ApplicationSpec{
 				Name:      am.Spec.AppName,
-				Appid:     apputils.GetAppID(am.Spec.AppName),
-				IsSysApp:  userspace.IsSysApp(am.Spec.AppName),
+				Appid:     appv1alpha1.AppName(am.Spec.AppName).GetAppID(),
+				IsSysApp:  appv1alpha1.AppName(am.Spec.AppName).IsSysApp(),
 				Namespace: am.Spec.AppNamespace,
 				Owner:     owner,
 				Entrances: appconfig.Entrances,
@@ -111,8 +111,8 @@ func (h *Handler) list(req *restful.Request, resp *restful.Response) {
 				},
 				Spec: appv1alpha1.ApplicationSpec{
 					Name:      am.Spec.AppName,
-					Appid:     apputils.GetAppID(am.Spec.AppName),
-					IsSysApp:  userspace.IsSysApp(am.Spec.AppName),
+					Appid:     appv1alpha1.AppName(am.Spec.AppName).GetAppID(),
+					IsSysApp:  appv1alpha1.AppName(am.Spec.AppName).IsSysApp(),
 					Namespace: am.Spec.AppNamespace,
 					Owner:     owner,
 					Entrances: appconfig.Entrances,
@@ -194,8 +194,8 @@ func (h *Handler) listBackend(req *restful.Request, resp *restful.Response) {
 			},
 			Spec: appv1alpha1.ApplicationSpec{
 				Name:      am.Spec.AppName,
-				Appid:     apputils.GetAppID(am.Spec.AppName),
-				IsSysApp:  userspace.IsSysApp(am.Spec.AppName),
+				Appid:     appv1alpha1.AppName(am.Spec.AppName).GetAppID(),
+				IsSysApp:  appv1alpha1.AppName(am.Spec.AppName).IsSysApp(),
 				Namespace: am.Spec.AppNamespace,
 				Owner:     owner,
 				Entrances: appconfig.Entrances,

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"bytetrade.io/web3os/app-service/pkg/constants"
-
 	"github.com/emicklei/go-restful/v3"
 	"github.com/go-resty/resty/v2"
 	"k8s.io/client-go/rest"
@@ -96,7 +95,8 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 		}
 		resp, err := client.SetTimeout(1*time.Second).R().
 			SetHeader(restful.HEADER_ContentType, restful.MIME_JSON).
-			SetHeader(constants.AuthorizationTokenKey, token).
+			SetAuthToken(token).
+			SetHeader(constants.BflUserKey, ownerName).
 			SetBody(request).Post(url)
 		if err != nil {
 			klog.Errorf("Failed to make middleware request middlewareType=%s err=%v", middlewareType, err)

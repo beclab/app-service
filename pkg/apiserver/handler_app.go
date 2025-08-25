@@ -3,7 +3,6 @@ package apiserver
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"sort"
 	"strconv"
@@ -55,7 +54,7 @@ func (h *Handler) status(req *restful.Request, resp *restful.Response) {
 	now := metav1.Now()
 	sts := appinstaller.Status{
 		Name:              am.Spec.AppName,
-		AppID:             apputils.GetAppID(am.Spec.AppName),
+		AppID:             v1alpha1.AppName(am.Spec.AppName).GetAppID(),
 		Namespace:         am.Spec.AppNamespace,
 		CreationTimestamp: now,
 		Source:            am.Spec.Source,
@@ -109,7 +108,7 @@ func (h *Handler) appsStatus(req *restful.Request, resp *restful.Response) {
 			now := metav1.Now()
 			status := appinstaller.Status{
 				Name:              am.Spec.AppName,
-				AppID:             apputils.GetAppID(am.Spec.AppName),
+				AppID:             v1alpha1.AppName(am.Spec.AppName).GetAppID(),
 				Namespace:         am.Spec.AppNamespace,
 				CreationTimestamp: now,
 				Source:            am.Spec.Source,
@@ -408,8 +407,8 @@ func (h *Handler) apps(req *restful.Request, resp *restful.Response) {
 			},
 			Spec: v1alpha1.ApplicationSpec{
 				Name:      am.Spec.AppName,
-				Appid:     apputils.GetAppID(am.Spec.AppName),
-				IsSysApp:  userspace.IsSysApp(am.Spec.AppName),
+				Appid:     v1alpha1.AppName(am.Spec.AppName).GetAppID(),
+				IsSysApp:  v1alpha1.AppName(am.Spec.AppName).IsSysApp(),
 				Namespace: am.Spec.AppNamespace,
 				Owner:     owner,
 				Entrances: appconfig.Entrances,
@@ -656,33 +655,6 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 	isSysApp := req.QueryParameter("issysapp")
 	state := req.QueryParameter("state")
 
-	//kClient, _ := utils.GetClient()
-	//role, err := kubesphere.GetUserRole(req.Request.Context(), h.kubeConfig, owner)
-	//if err != nil {
-	//	api.HandleError(resp, req, err)
-	//	return
-	//}
-	genEntranceURL := func(app *v1alpha1.Application, appDomainConfigs []appcfg.DefaultThirdLevelDomainConfig) ([]v1alpha1.Entrance, error) {
-		zone, _ := kubesphere.GetUserZone(req.Request.Context(), app.Spec.Owner)
-		entrances := app.Spec.Entrances
-		if len(zone) > 0 {
-			appid := apputils.GetAppID(app.Spec.Name)
-			for i := range entrances {
-				if len(entrances) == 1 {
-					entrances[i].URL = fmt.Sprintf("%s.%s", appid, zone)
-				} else {
-					entrances[i].URL = fmt.Sprintf("%s%d.%s", appid, i, zone)
-					for _, adc := range appDomainConfigs {
-						if adc.AppName == app.Spec.Name && adc.EntranceName == entrances[i].Name && len(adc.ThirdLevelDomain) > 0 {
-							entrances[i].URL = fmt.Sprintf("%s.%s", adc.ThirdLevelDomain, zone)
-						}
-					}
-				}
-			}
-		}
-		return entrances, nil
-	}
-
 	ss := make([]string, 0)
 	if state != "" {
 		ss = strings.Split(state, "|")
@@ -704,6 +676,11 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 	appsEntranceMap := make(map[string]*v1alpha1.Application)
 	// get pending app's from app managers
 	ams, err := h.appmgrLister.List(labels.Everything())
+	if err != nil {
+		klog.Error(err)
+		api.HandleError(resp, req, err)
+		return
+	}
 
 	for _, am := range ams {
 		if am.Spec.Type != v1alpha1.App {
@@ -740,8 +717,8 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 			},
 			Spec: v1alpha1.ApplicationSpec{
 				Name:      am.Spec.AppName,
-				Appid:     apputils.GetAppID(am.Spec.AppName),
-				IsSysApp:  userspace.IsSysApp(am.Spec.AppName),
+				Appid:     v1alpha1.AppName(am.Spec.AppName).GetAppID(),
+				IsSysApp:  v1alpha1.AppName(am.Spec.AppName).IsSysApp(),
 				Namespace: am.Spec.AppNamespace,
 				Owner:     am.Spec.AppOwner,
 				Entrances: appconfig.Entrances,
@@ -782,14 +759,7 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 	}
 
 	for _, app := range appsMap {
-		var appDomainConfigs []appcfg.DefaultThirdLevelDomainConfig
-		if len(app.Spec.Settings["defaultThirdLevelDomainConfig"]) > 0 {
-			err := json.Unmarshal([]byte(app.Spec.Settings["defaultThirdLevelDomainConfig"]), &appDomainConfigs)
-			if err != nil {
-				klog.Errorf("unmarshal defaultThirdLevelDomainConfig error %v", err)
-			}
-		}
-		entrances, err := genEntranceURL(app, appDomainConfigs)
+		entrances, err := app.GenEntranceURL(req.Request.Context())
 		if err != nil {
 			api.HandleError(resp, req, err)
 			return
@@ -848,6 +818,11 @@ func (h *Handler) renderManifest(req *restful.Request, resp *restful.Response) {
 		return
 	}
 	isAdmin, err := kubesphere.IsAdmin(req.Request.Context(), h.kubeConfig, owner)
+	if err != nil {
+		klog.Error(err)
+		api.HandleError(resp, req, err)
+		return
+	}
 	renderedYAML, err := utils.RenderManifestFromContent([]byte(request.Content), owner, admin, isAdmin)
 	if err != nil {
 		api.HandleError(resp, req, err)
@@ -900,23 +875,6 @@ func (h *Handler) adminUserList(req *restful.Request, resp *restful.Response) {
 }
 
 func (h *Handler) oamValues(req *restful.Request, resp *restful.Response) {
-	//app := req.PathParameter(ParamAppName)
-	//owner := req.Attribute(constants.UserContextAttribute).(string)
-	//token := req.HeaderParameter(constants.AuthorizationTokenKey)
-
-	//insReq := &api.InstallRequest{}
-	//err := req.ReadEntity(insReq)
-	//if err != nil {
-	//	api.HandleBadRequest(resp, req, err)
-	//	return
-	//}
-
-	//admin, err := kubesphere.GetAdminUsername(req.Request.Context(), h.kubeConfig)
-	//if err != nil {
-	//	api.HandleError(resp, req, err)
-	//	return
-	//}
-
 	values := map[string]interface{}{
 		"admin": "admin",
 		"bfl": map[string]string{

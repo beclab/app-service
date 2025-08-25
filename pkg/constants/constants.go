@@ -2,13 +2,13 @@ package constants
 
 import (
 	"flag"
+	"os"
 
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 const (
 	KubeSphereAPIScheme                = "http"
-	AuthorizationTokenKey              = "X-Authorization"
 	ApplicationDefaultThirdLevelDomain = "applications.app.bytetrade.io/default-thirdlevel-domains"
 	ApplicationNameLabel               = "applications.app.bytetrade.io/name"
 	ApplicationAppGroupLabel           = "applications.app.bytetrade.io/group"
@@ -35,6 +35,7 @@ const (
 	MarketSource                       = "X-Market-Source"
 	MarketUser                         = "X-Market-User"
 	ApplicationInstallUserLabel        = "applications.app.bytetrade.io/install_user"
+	BflUserKey                         = "X-Bfl-User"
 
 	InstanceIDLabel         = "workflows.argoproj.io/controller-instanceid"
 	WorkflowOwnerLabel      = "workflows.app.bytetrade.io/owner"
@@ -61,7 +62,7 @@ const (
 	EnvoyOutboundListenerPortName         = "proxy-outbound"
 	EnvoyLivenessProbePort                = 15008
 	EnvoyConfigFileName                   = "envoy.yaml"
-	EnvoyConfigFilePath                   = "/etc/envoy"
+	EnvoyConfigFilePath                   = "/config"
 	EnvoyConfigOnlyOutBoundFileName       = "envoy2.yaml"
 	WsContainerName                       = "terminus-ws-sidecar"
 	WsContainerImage                      = "WS_CONTAINER_IMAGE"
@@ -71,6 +72,7 @@ const (
 
 	SidecarConfigMapVolumeName = "terminus-sidecar-config"
 	SidecarInitContainerName   = "terminus-sidecar-init"
+	EnvoyConfigWorkDirName     = "envoy-config"
 
 	ByteTradeAuthor         = "bytetrade.io"
 	NvshareGPU              = "nvshare.com/gpu"
@@ -111,6 +113,8 @@ var (
 	WebhookServerListenAddress = ":8433"
 	// KubeSphereAPIHost kubesphere api host.
 	KubeSphereAPIHost string
+
+	CHART_REPO_URL string = "http://chart-repo-service.os-framework:82/"
 )
 
 func init() {
@@ -120,4 +124,9 @@ func init() {
 		"webhook listening address")
 	flag.StringVar(&KubeSphereAPIHost, "ks-apiserver", "ks-apiserver.kubesphere-system",
 		"kubesphere api server")
+
+	url := os.Getenv("CHART_REPO_URL")
+	if url != "" {
+		CHART_REPO_URL = url
+	}
 }

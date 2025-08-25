@@ -16,11 +16,12 @@ import (
 	appcfg_mod "bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
-	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/provider"
 	"bytetrade.io/web3os/app-service/pkg/sandbox/sidecar"
 	"bytetrade.io/web3os/app-service/pkg/security"
+	"bytetrade.io/web3os/app-service/pkg/utils"
 
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 	"github.com/emicklei/go-restful/v3"
 	"github.com/google/uuid"
 	"github.com/thoas/go-funk"
@@ -157,7 +158,7 @@ func (wh *Webhook) CreatePatch(
 		pod.Spec.Volumes = []corev1.Volume{}
 	}
 
-	pod.Spec.Volumes = append(pod.Spec.Volumes, volume)
+	pod.Spec.Volumes = append(pod.Spec.Volumes, volume, sidecar.GetEnvoyConfigWorkVolume())
 
 	initContainer := sidecar.GetInitContainerSpec(appcfg)
 	pod.Spec.InitContainers = append(pod.Spec.InitContainers, initContainer)
@@ -173,7 +174,11 @@ func (wh *Webhook) CreatePatch(
 	policySidecar := sidecar.GetEnvoySidecarContainerSpec(clusterID, envoyFilename, appKey, appSecret)
 	pod.Spec.Containers = append(pod.Spec.Containers, policySidecar)
 
-	pod.Spec.InitContainers = append([]corev1.Container{sidecar.GetInitContainerSpecForWaitFor(appcfg.OwnerName)},
+	pod.Spec.InitContainers = append(
+		[]corev1.Container{
+			sidecar.GetInitContainerSpecForWaitFor(appcfg.OwnerName),
+			sidecar.GetInitContainerSpecForRenderEnvoyConfig(),
+		},
 		pod.Spec.InitContainers...)
 
 	if injectWs {
@@ -233,6 +238,7 @@ func (wh *Webhook) MustInject(ctx context.Context, pod *corev1.Pod, namespace st
 		klog.Infof("Unknown namespace=%s, do not inject", namespace)
 		return false, false, false, perms, nil
 	}
+
 	var injectWs, injectUpload bool
 	if appcfg.WsConfig.URL != "" && appcfg.WsConfig.Port > 0 {
 		injectWs = true
@@ -244,31 +250,17 @@ func (wh *Webhook) MustInject(ctx context.Context, pod *corev1.Pod, namespace st
 		if sysDataP, ok := p.([]interface{}); ok {
 			for _, v := range sysDataP {
 				sysData := v.(map[string]interface{})
-				ops := make([]string, 0)
-				for _, o := range sysData["ops"].([]interface{}) {
-					ops = append(ops, o.(string))
+				var ns string
+				if val, ok := sysData["namespace"].(string); ok {
+					ns = val
 				}
-				dataType := sysData["dataType"].(string)
-				version := sysData["version"].(string)
-				if version == "v2" {
-					var svc, ns string
-					if val, ok := sysData["svc"].(string); ok {
-						svc = val
-					}
-					if val, ok := sysData["namespace"].(string); ok {
-						ns = val
-					}
-					perms = append(perms, appcfg_mod.SysDataPermission{
-						AppName:   sysData["appName"].(string),
-						Svc:       svc,
-						Namespace: ns,
-						Port:      sysData["port"].(string),
-						Group:     sysData["group"].(string),
-						DataType:  dataType,
-						Version:   sysData["version"].(string),
-						Ops:       ops,
-					})
-				}
+				providerAppName := sysData["appName"].(string)
+				providerName := sysData["providerName"].(string)
+				perms = append(perms, appcfg_mod.SysDataPermission{
+					AppName:      providerAppName,
+					Namespace:    ns,
+					ProviderName: providerName,
+				})
 
 			}
 		}
@@ -314,6 +306,9 @@ func (wh *Webhook) createSidecarConfigMap(
 	perms []appcfg_mod.SysDataPermission,
 ) (string, error) {
 	configMapName := fmt.Sprintf("%s-%s", constants.SidecarConfigMapVolumeName, proxyUUID)
+	if deployName := utils.GetDeploymentName(pod); deployName != "" {
+		configMapName = fmt.Sprintf("%s-%s", configMapName, deployName)
+	}
 	cm, e := wh.kubeClient.CoreV1().ConfigMaps(namespace).Get(ctx, configMapName, metav1.GetOptions{})
 	if e != nil && !apierrors.IsNotFound(e) {
 		return "", e
@@ -324,25 +319,14 @@ func (wh *Webhook) createSidecarConfigMap(
 		klog.Errorf("Failed to get app config err=%v", err)
 		return "", err
 	}
-	zone, err := kubesphere.GetUserZone(ctx, appcfg.OwnerName)
+
+	permCfg, err := apputils.ProviderPermissionsConvertor(perms).ToPermissionCfg(ctx, appcfg.OwnerName)
 	if err != nil {
+		klog.Errorf("Failed to convert permissions for app %s: %v", appcfg.AppName, err)
 		return "", err
 	}
 
-	appDomains := make([]string, 0)
-	if appcfg.ResetCookieEnabled {
-		if len(appcfg.Entrances) == 1 {
-			appDomains = append(appDomains, fmt.Sprintf("%s.%s", appcfg.AppID, zone))
-			appDomains = append(appDomains, fmt.Sprintf("%s.local.%s", appcfg.AppID, zone))
-		} else {
-			for i := range appcfg.Entrances {
-				appDomains = append(appDomains, fmt.Sprintf("%s%d.%s", appcfg.AppID, i, zone))
-				appDomains = append(appDomains, fmt.Sprintf("%s%d.local.%s", appcfg.AppID, i, zone))
-			}
-		}
-	}
-
-	newConfigMap := sidecar.GetSidecarConfigMap(configMapName, namespace, appcfg, injectPolicy, injectWs, injectUpload, appDomains, pod, perms)
+	newConfigMap := sidecar.GetSidecarConfigMap(configMapName, namespace, appcfg, injectPolicy, injectWs, injectUpload, pod, permCfg)
 	if e == nil {
 		// configmap found
 		cm.Data = newConfigMap.Data

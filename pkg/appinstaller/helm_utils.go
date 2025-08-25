@@ -14,6 +14,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/tapr"
 	userspacev1 "bytetrade.io/web3os/app-service/pkg/users/userspace/v1"
 	"bytetrade.io/web3os/app-service/pkg/utils"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/kubernetes"
@@ -85,7 +86,12 @@ func (h *HelmOps) SetValues() (values map[string]interface{}, err error) {
 			}
 
 		case []appcfg.SysDataPermission:
-			appReg, err := h.registerAppPerm(perm)
+			permCfgs, err := apputils.ProviderPermissionsConvertor(perm).ToPermissionCfg(h.ctx, h.app.OwnerName)
+			if err != nil {
+				klog.Errorf("Failed to convert app permissions for %s: %v", h.app.AppName, err)
+				return values, err
+			}
+			appReg, err := h.registerAppPerm(h.app.ServiceAccountName, h.app.OwnerName, permCfgs)
 			if err != nil {
 				klog.Errorf("Failed to register err=%v", err)
 				return values, err

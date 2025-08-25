@@ -44,14 +44,12 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the namespace of a application")).
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get a application", nil))
 
 	ws.Route(ws.GET("/applications").
 		To(handler.list).
 		Doc("List user's applications").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get the list of user's application", []appv1alpha1.Application{}))
 
 	ws.Route(ws.GET("/user-apps/{"+ParamUserName+"}").
@@ -67,7 +65,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Reads(depRequest{}).
 		Doc("check whether specified dependencies were meet").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "return not satisfied dependencies", api.DependenciesResp{}))
 
 	ws.Route(ws.GET("/applications/{"+ParamAppName+"}/version").
@@ -75,7 +72,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("get application chart version").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of application")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "application chart version", &api.ReleaseVersionResponse{}))
 
 	// handler_registry
@@ -83,7 +79,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		To(handler.listRegistry).
 		Doc("List charts registry applications (to be seperated)").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get the list of the applications in registry", nil))
 
 	ws.Route(ws.GET("/registry/applications/{"+ParamAppName+"}").
@@ -91,7 +86,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("get the application chart from registry (to be seperated)").
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get the application in registry", nil))
 
 	// handler_user
@@ -100,7 +94,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("create new user's launcher and apps").
 		Param(ws.PathParameter(ParamAppName, "the name of the user")).
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to create", nil))
 
 	ws.Route(ws.DELETE("/users/{"+ParamUserName+"}").
@@ -108,7 +101,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("delete a user's launcher and apps").
 		Param(ws.PathParameter(ParamUserName, "the name of the user")).
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to delete", nil))
 
 	ws.Route(ws.GET("/users/{"+ParamUserName+"}/status").
@@ -116,7 +108,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("get a user's launcher and apps creating or deleting status").
 		Param(ws.PathParameter(ParamUserName, "the name of the user")).
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get", nil))
 
 	ws.Route(ws.GET("/users").
@@ -124,7 +115,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("get a user's launcher and apps creating or deleting status").
 		Param(ws.PathParameter(ParamUserName, "the name of the user")).
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get", nil))
 
 	ws.Route(ws.GET("/users/{"+ParamUserName+"}").
@@ -132,7 +122,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("get a user's launcher and apps creating or deleting status").
 		Param(ws.PathParameter(ParamUserName, "the name of the user")).
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get", nil))
 
 	ws.Route(ws.POST("/users/{user}/limits").
@@ -140,7 +129,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("update user limits").
 		Param(ws.PathParameter(ParamUserName, "the name of the user")).
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "update success", nil)).
 		Consumes(restful.MIME_JSON)
 
@@ -148,7 +136,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		To(handler.userInfo).
 		Doc("get a user's role").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get", nil))
 
 	ws.Route(ws.GET("/users/{"+ParamUserName+"}/metrics").
@@ -156,7 +143,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("get a user's metric").
 		Param(ws.PathParameter(ParamAppName, "the name of the user")).
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get", nil))
 
 	//ws.Route(ws.GET("/users/{"+ParamUserName+"}/resource").
@@ -171,14 +157,12 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		To(handler.curUserResource).
 		Doc("get a cur user's resource and resource usage").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get", nil))
 
 	ws.Route(ws.GET("/cluster/resource").
 		To(handler.clusterResource).
 		Doc("get cluster resource and resource usage").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get", nil))
 
 	// handler_system
@@ -186,28 +170,24 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		To(handler.enableServiceSync).
 		Doc("enable user's system service 'Sync' ").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to enable", nil))
 
 	ws.Route(ws.POST("/system/service/disable/sync").
 		To(handler.disableServiceSync).
 		Doc("disable user's system service 'Sync' ").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to disable", nil))
 
 	ws.Route(ws.POST("/system/service/enable/backup").
 		To(handler.enableServiceBackup).
 		Doc("enable user's system service 'Backup' ").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to enable", nil))
 
 	ws.Route(ws.POST("/system/service/disable/backup").
 		To(handler.disableServiceBackup).
 		Doc("disable user's system service 'Backup' ").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to disable", nil))
 
 	// handler_settings
@@ -216,7 +196,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("update the application settings").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Consumes(restful.MIME_JSON).
 		Returns(http.StatusOK, "Success to update the application settings", nil))
 
@@ -225,7 +204,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("get the application settings").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get the application settings", nil))
 
 	ws.Route(ws.POST("/applications/{"+ParamAppName+"}/{"+ParamEntranceName+"}/setup").
@@ -234,7 +212,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
 		Param(ws.PathParameter(ParamEntranceName, "the name of a application entrance")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Consumes(restful.MIME_JSON).
 		Returns(http.StatusOK, "Success to update the application settings of domain", nil))
 
@@ -244,7 +221,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
 		Param(ws.PathParameter(ParamEntranceName, "the name of a application entrance")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to update the application settings", nil))
 
 	ws.Route(ws.GET("/applications/{"+ParamAppName+"}/entrances").
@@ -252,7 +228,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("get the application entrances").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get the application entrances", nil))
 
 	ws.Route(ws.POST("/applications/{"+ParamAppName+"}/{"+ParamEntranceName+"}/auth-level").
@@ -261,7 +236,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
 		Param(ws.PathParameter(ParamEntranceName, "the name of a application entrance")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to set the application entrance auth level", nil))
 
 	ws.Route(ws.POST("/applications/{"+ParamAppName+"}/{"+ParamEntranceName+"}/policy").
@@ -270,28 +244,24 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
 		Param(ws.PathParameter(ParamEntranceName, "the name of a application entrance")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to set the application entrance policy", nil))
 
 	ws.Route(ws.POST("/gpu/disable/managed-memory").
 		To(handler.disableGpuManagedMemory).
 		Doc("disable nvshare's managed memory ").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to disable", nil))
 
 	ws.Route(ws.POST("/gpu/enable/managed-memory").
 		To(handler.enableGpuManagedMemory).
 		Doc("enable nvshare's managed memory ").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to enable", nil))
 
 	ws.Route(ws.GET("/gpu/managed-memory").
 		To(handler.getManagedMemoryValue).
 		Doc("get nvshare's managed memory enabled or not").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get ", &ResultResponse{}))
 
 	// handler_webhook
@@ -370,7 +340,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("Install the application").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to begin a installation of the application", &api.InstallationResponse{}))
 
 	ws.Route(ws.POST("/apps/{"+ParamAppName+"}/uninstall").
@@ -378,7 +347,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("Uninstall the application").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to begin a uninstallation of the application", &api.InstallationResponse{}))
 
 	ws.Route(ws.POST("/apps/{"+ParamAppName+"}/suspend").
@@ -386,7 +354,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("suspend the application").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to suspend of the application", &api.InstallationResponseData{}))
 
 	ws.Route(ws.POST("/apps/{"+ParamAppName+"}/resume").
@@ -394,7 +361,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("resume the application").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to begin to resume the application", &api.InstallationResponseData{}))
 
 	ws.Route(ws.POST("/apps/{"+ParamAppName+"}/upgrade").
@@ -403,7 +369,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("Upgrade the application").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to begin upgrade of the application", &api.ReleaseUpgradeResponse{}))
 
 	ws.Route(ws.POST("/apps/{"+ParamAppName+"}/cancel").
@@ -411,7 +376,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("cancel pending or installing app").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamInstallationID, "the id of a installation or uninstallation")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get a installation or uninstallation status", &api.InstallationResponse{}))
 
 	ws.Route(ws.GET("/apps/{"+ParamAppName+"}/status").
@@ -419,14 +383,12 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("get specified app status").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of application")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get a app status", nil))
 
 	ws.Route(ws.GET("/apps/status").
 		To(handler.appsStatus).
 		Doc("get specified app status").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get a apps status", nil))
 
 	ws.Route(ws.GET("/apps/{"+ParamAppName+"}/operate").
@@ -434,14 +396,12 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("get specified app status").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of application")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get a apps status", nil))
 
 	ws.Route(ws.GET("/apps/operate").
 		To(handler.appsOperate).
 		Doc("get specified app status").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get a apps status", nil))
 
 	ws.Route(ws.GET("/apps/{"+ParamAppName+"}/operate_history").
@@ -449,7 +409,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("get specified app operate history").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of application")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get a apps status", nil))
 
 	ws.Route(ws.GET("/apps/operate_history").
@@ -457,21 +416,18 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("get specified all app operate history").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of application")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get a apps operate history", nil))
 
 	ws.Route(ws.GET("/apps").
 		To(handler.apps).
 		Doc("get list of app").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "success to get list of app", nil))
 
 	ws.Route(ws.GET("/all/apps").
 		To(handler.allUsersApps).
 		Doc("get list of app for all user").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "success to get list of app for all user", nil))
 
 	ws.Route(ws.GET("/apps/{"+ParamAppName+"}").
@@ -479,7 +435,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("get an app").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of application")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "success to get an app", nil))
 
 	ws.Route(ws.GET("/apps/oamvalues").
@@ -487,21 +442,18 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("get an app oam values").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of application")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "success to get an app oamvalues", nil))
 
 	ws.Route(ws.POST("/apps/image-info").
 		To(handler.imageInfo).
 		Doc("get an app image info").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "success to get an app image info", nil))
 
 	ws.Route(ws.GET("/perms").
 		To(handler.applicationPermissionList).
 		Doc("get app permissions list").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "success to get an apps permissions list", nil))
 
 	ws.Route(ws.GET("/perms/{"+ParamAppName+"}").
@@ -509,14 +461,12 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("get an app permission").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamAppName, "the name of application")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "success to get an app permission", nil))
 
 	ws.Route(ws.GET("/perms/provider-registry/{"+ParamDataType+"}/{"+ParamGroup+"}/{"+ParamVersion+"}").
 		To(handler.getProviderRegistry).
 		Doc("get an app permission").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Param(ws.PathParameter(ParamDataType, "the dataType of providerregistry")).
 		Param(ws.PathParameter(ParamGroup, "the group of providerregistry")).
 		Param(ws.PathParameter(ParamVersion, "the version of providerregistry")).
@@ -526,7 +476,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		To(handler.getApplicationProviderList).
 		Doc("get an app provider list").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Param(ws.PathParameter(ParamAppName, "the appName of providerregistry")).
 		Returns(http.StatusOK, "success to get an app providerregistry list", nil))
 
@@ -534,7 +483,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		To(handler.getApplicationSubject).
 		Doc("get an app subject").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Param(ws.PathParameter(ParamAppName, "the name of app")).
 		Returns(http.StatusOK, "success to get an app subject", nil))
 
@@ -542,21 +490,18 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		To(handler.pendingOrInstallingApps).
 		Doc("get list of pending or installing app").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "success to get list of app", nil))
 
 	ws.Route(ws.GET("/terminus/version").
 		To(handler.terminusVersion).
 		Doc("get version of terminus").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "get version of terminus", nil))
 
 	ws.Route(ws.GET("/terminus/nodes").
 		To(handler.nodes).
 		Doc("get terminus all nodes").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "get nodes of terminus", nil))
 
 	ws.Route(ws.POST("/recommends/{"+ParamWorkflowName+"}/install").
@@ -564,7 +509,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("Install the recommend workflow").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamWorkflowName, "the name of a workflow")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to install the workflow", &api.InstallationResponse{}))
 
 	ws.Route(ws.POST("/recommends/{"+ParamWorkflowName+"}/uninstall").
@@ -572,7 +516,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("Uninstall the recommend workflow").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamWorkflowName, "the name of a recommend")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to uninstall the recommend", &api.InstallationResponse{}))
 
 	ws.Route(ws.POST("/recommends/{"+ParamWorkflowName+"}/upgrade").
@@ -580,7 +523,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("upgrade the recommend workflow").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamWorkflowName, "the name of a recommend")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to upgrade the recommend", &api.InstallationResponse{}))
 
 	ws.Route(ws.GET("/recommends/{"+ParamWorkflowName+"}/status").
@@ -588,14 +530,12 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("get the recommend workflow status").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamWorkflowName, "the name of a recommend")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get the recommend status", &api.InstallationResponse{}))
 
 	ws.Route(ws.GET("/recommends/status").
 		To(handler.statusRecommendList).
 		Doc("get the recommend workflow status list").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get the recommend status list", &api.InstallationResponse{}))
 
 	ws.Route(ws.GET("/recommenddev/{"+UserName+"}/status").
@@ -609,14 +549,12 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("get specified recommend operate").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamWorkflowName, "the name of recommend")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get a workflow operate", nil))
 
 	ws.Route(ws.GET("/recommends/operate").
 		To(handler.operateRecommendList).
 		Doc("get recommends operate list").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "get recommends operate list", nil))
 
 	ws.Route(ws.GET("/recommends/{"+ParamWorkflowName+"}/operate_history").
@@ -624,14 +562,12 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("get specified recommend operate history").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamWorkflowName, "the name of recommend")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get a recommend status", nil))
 
 	ws.Route(ws.GET("/recommends/operate_history").
 		To(handler.allOperateRecommendHistory).
 		Doc("get specified all recommend operate history").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "get specified all recommend operate history", nil))
 
 	// middleware route
@@ -640,7 +576,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("Install the middleware").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamWorkflowName, "the name of a middleware")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to install the middleware", &api.InstallationResponse{}))
 
 	ws.Route(ws.POST("/middlewares/{"+ParamAppName+"}/uninstall").
@@ -648,7 +583,6 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("Uninstall the middleware").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamWorkflowName, "the name of a recommend")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to uninstall the middleware", &api.InstallationResponse{}))
 
 	ws.Route(ws.GET("/middlewares/{"+ParamAppName+"}/status").
@@ -656,14 +590,12 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("get the middleware status").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamWorkflowName, "the name of a middleware")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get the middleware status", &api.InstallationResponse{}))
 
 	ws.Route(ws.GET("/middlewares/status").
 		To(handler.statusMiddlewareList).
 		Doc("get the middleware status list").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get the recommend status list", &api.InstallationResponse{}))
 
 	ws.Route(ws.GET("/middlewares/{"+ParamAppName+"}/operate").
@@ -671,14 +603,12 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("get specified middleware operate").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamWorkflowName, "the name of middleware")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get a middleware operate", nil))
 
 	ws.Route(ws.GET("/middlewares/operate").
 		To(handler.operateMiddlewareList).
 		Doc("get middlewares operate list").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "get middleware operate list", nil))
 
 	ws.Route(ws.POST("/middlewares/{"+ParamAppName+"}/cancel").
@@ -686,28 +616,24 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Doc("cancel installing middleware").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.PathParameter(ParamInstallationID, "the id of a installation or uninstallation")).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to cancel app install", &api.InstallationResponse{}))
 
 	ws.Route(ws.POST("/apps/manifest/render").
 		To(handler.renderManifest).
 		Doc("render olares manifest").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to render olares manifest", &api.ManifestRenderResponse{}))
 
 	ws.Route(ws.GET("/users/admin/username").
 		To(handler.adminUsername).
 		Doc("return admin username").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get admin username", nil))
 
 	ws.Route(ws.GET("/users/admins").
 		To(handler.adminUserList).
 		Doc("return admin list").
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
-		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to get admin username", nil))
 
 	ws.Route(ws.POST("/applicationmanager/inject").

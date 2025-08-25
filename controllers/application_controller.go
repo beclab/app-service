@@ -515,12 +515,12 @@ func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, app
 	//}
 
 	if defaultDomainAnnotation, ok := deployment.GetAnnotations()[constants.ApplicationDefaultThirdLevelDomain]; ok {
-		var allDomainConfigs []appcfg.DefaultThirdLevelDomainConfig
+		var allDomainConfigs []appv1alpha1.DefaultThirdLevelDomainConfig
 		err := json.Unmarshal([]byte(defaultDomainAnnotation), &allDomainConfigs)
 		if err != nil {
 			klog.Errorf("Failed to unmarshal default domain annotation err=%v", err)
 		} else {
-			var appDomainConfigs []appcfg.DefaultThirdLevelDomainConfig
+			var appDomainConfigs []appv1alpha1.DefaultThirdLevelDomainConfig
 			for _, config := range allDomainConfigs {
 				if config.AppName == appName {
 					appDomainConfigs = append(appDomainConfigs, config)

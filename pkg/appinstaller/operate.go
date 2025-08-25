@@ -39,3 +39,10 @@ type OperateHistory struct {
 	ResourceType      string `json:"resourceType"`
 	v1alpha1.OpRecord `json:",inline"`
 }
+
+type ProviderOperation string
+
+const (
+	Register   ProviderOperation = "register"
+	Unregister ProviderOperation = "unregister"
+)
