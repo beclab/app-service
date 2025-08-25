@@ -62,7 +62,7 @@ type installHandlerHelperV2 struct {
 func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 	app := req.PathParameter(ParamAppName)
 	owner := req.Attribute(constants.UserContextAttribute).(string)
-	token := req.HeaderParameter(constants.AuthorizationTokenKey)
+	token := h.GetServiceAccountToken()
 
 	marketSource := req.HeaderParameter(constants.MarketSource)
 	klog.Infof("install: user: %v, source: %v", owner, marketSource)

@@ -9,7 +9,6 @@ import (
 
 const (
 	KubeSphereAPIScheme                = "http"
-	AuthorizationTokenKey              = "X-Authorization"
 	ApplicationDefaultThirdLevelDomain = "applications.app.bytetrade.io/default-thirdlevel-domains"
 	ApplicationNameLabel               = "applications.app.bytetrade.io/name"
 	ApplicationAppGroupLabel           = "applications.app.bytetrade.io/group"
@@ -36,6 +35,7 @@ const (
 	MarketSource                       = "X-Market-Source"
 	MarketUser                         = "X-Market-User"
 	ApplicationInstallUserLabel        = "applications.app.bytetrade.io/install_user"
+	BflUserKey                         = "X-Bfl-User"
 
 	InstanceIDLabel         = "workflows.argoproj.io/controller-instanceid"
 	WorkflowOwnerLabel      = "workflows.app.bytetrade.io/owner"

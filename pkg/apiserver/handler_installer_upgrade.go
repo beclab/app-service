@@ -206,7 +206,7 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	token := req.HeaderParameter(constants.AuthorizationTokenKey)
+	token := h.GetServiceAccountToken()
 
 	apiVersion, err := apputils.GetApiVersionFromAppConfig(req.Request.Context(), &apputils.ConfigOptions{
 		App:          app,

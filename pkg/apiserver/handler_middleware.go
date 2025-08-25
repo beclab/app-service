@@ -36,7 +36,7 @@ func (h *Handler) installMiddleware(req *restful.Request, resp *restful.Response
 		return
 	}
 	app := req.PathParameter(ParamAppName)
-	token := req.HeaderParameter(constants.AuthorizationTokenKey)
+	token := h.GetServiceAccountToken()
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 	marketSource := req.HeaderParameter(constants.MarketSource)
 

@@ -108,8 +108,8 @@ func (h *HelmOps) ClearCache(client kubernetes.Interface, appCacheDirs []string)
 	if len(appCacheDirs) > 0 {
 		klog.Infof("clear app cache dirs: %v", appCacheDirs)
 
-		c := resty.New().SetTimeout(2*time.Second).
-			SetHeader(constants.AuthorizationTokenKey, h.token)
+		c := resty.New().SetTimeout(2 * time.Second).
+			SetAuthToken(h.token)
 		nodes, e := client.CoreV1().Nodes().List(h.ctx, metav1.ListOptions{})
 
 		if e == nil {
@@ -182,7 +182,7 @@ func (h *HelmOps) unregisterAppPerm(sa *string, ownerName string, perm []appcfg.
 
 	resp, err := client.SetTimeout(2*time.Second).R().
 		SetHeader(restful.HEADER_ContentType, restful.MIME_JSON).
-		SetHeader(constants.AuthorizationTokenKey, h.token).
+		SetAuthToken(h.token).
 		SetBody(register).Post(url)
 	if err != nil {
 		return err

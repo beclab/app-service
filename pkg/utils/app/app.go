@@ -784,7 +784,6 @@ func GetIndexAndDownloadChart(ctx context.Context, options *ConfigOptions) (stri
 		return "", err
 	}
 	client := resty.New().SetTimeout(10*time.Second).
-		SetHeader(constants.AuthorizationTokenKey, options.Token).
 		SetAuthToken(options.Token).
 		SetHeader("Terminus-Nonce", terminusNonce).
 		SetHeader(constants.MarketUser, options.Owner).
@@ -848,7 +847,7 @@ func downloadAndUnpack(ctx context.Context, tgz *url.URL, token, terminusNonce, 
 	dst := appcfg.ChartsPath
 	g := new(getter.HttpGetter)
 	g.Header = make(http.Header)
-	g.Header.Set(constants.AuthorizationTokenKey, token)
+	g.Header.Set("Authorization", "Bearer "+token)
 	g.Header.Set("Terminus-Nonce", terminusNonce)
 	g.Header.Set(constants.MarketUser, owner)
 	g.Header.Set(constants.MarketSource, marketSource)

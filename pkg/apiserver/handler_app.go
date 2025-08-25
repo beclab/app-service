@@ -875,23 +875,6 @@ func (h *Handler) adminUserList(req *restful.Request, resp *restful.Response) {
 }
 
 func (h *Handler) oamValues(req *restful.Request, resp *restful.Response) {
-	//app := req.PathParameter(ParamAppName)
-	//owner := req.Attribute(constants.UserContextAttribute).(string)
-	//token := req.HeaderParameter(constants.AuthorizationTokenKey)
-
-	//insReq := &api.InstallRequest{}
-	//err := req.ReadEntity(insReq)
-	//if err != nil {
-	//	api.HandleBadRequest(resp, req, err)
-	//	return
-	//}
-
-	//admin, err := kubesphere.GetAdminUsername(req.Request.Context(), h.kubeConfig)
-	//if err != nil {
-	//	api.HandleError(resp, req, err)
-	//	return
-	//}
-
 	values := map[string]interface{}{
 		"admin": "admin",
 		"bfl": map[string]string{

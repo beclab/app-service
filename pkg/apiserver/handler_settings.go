@@ -85,7 +85,7 @@ func (h *Handler) setupAppEntranceDomain(req *restful.Request, resp *restful.Res
 		// if error, response in function. Do nothing
 		return
 	}
-	token := req.HeaderParameter(constants.AuthorizationTokenKey)
+	token := h.GetServiceAccountToken()
 
 	entranceName := req.PathParameter(ParamEntranceName)
 	validName := false

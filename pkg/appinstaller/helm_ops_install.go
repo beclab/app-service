@@ -287,7 +287,7 @@ func (h *HelmOps) registerAppPerm(sa *string, ownerName string, perm []appcfg.Pe
 
 	resp, err := client.SetTimeout(2*time.Second).R().
 		SetHeader(restful.HEADER_ContentType, restful.MIME_JSON).
-		SetHeader(constants.AuthorizationTokenKey, h.token).
+		SetAuthToken(h.token).
 		SetBody(body).Post(url)
 	if err != nil {
 		klog.Errorf("Failed to make register request: %v", err)
@@ -827,13 +827,12 @@ func (h *HelmOps) RegisterOrUnregisterAppProvider(operation ProviderOperation) e
 		Providers:    providers,
 	}
 
-	var url string
-	url = fmt.Sprintf("http://%s/provider/v2alpha1/%s", h.systemServerHost(), operation)
+	url := fmt.Sprintf("http://%s/provider/v2alpha1/%s", h.systemServerHost(), operation)
 	client := resty.New()
 
 	resp, err := client.SetTimeout(2*time.Second).R().
 		SetHeader(restful.HEADER_ContentType, restful.MIME_JSON).
-		SetHeader(constants.AuthorizationTokenKey, h.token).
+		SetAuthToken(h.token).
 		SetBody(register).Post(url)
 	if err != nil {
 		return err
