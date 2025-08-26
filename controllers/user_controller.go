@@ -186,10 +186,6 @@ func (r *UserController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 
 	if user.Status.State == "" || user.Status.State == "Creating" {
 		ret, err := r.handleUserCreation(ctx, user)
-		if err == nil {
-			klog.Infof("publish user creation event.....")
-			utils.PublishUserEventAsync("Create", user.Name, user.Annotations[users.AnnotationUserCreator])
-		}
 		time.Sleep(time.Second)
 		return ret, err
 	}
@@ -300,6 +296,9 @@ func (r *UserController) handleUserCreation(ctx context.Context, user *iamv1alph
 	updateErr := r.updateUserStatus(ctx, user, "Created", "Created user success")
 	if updateErr != nil {
 		klog.Errorf("failed to update user status to Created %v", updateErr)
+	} else {
+		klog.Infof("publish user creation event.....")
+		utils.PublishUserEventAsync("Create", user.Name, user.Annotations[users.AnnotationUserCreator])
 	}
 	return ctrl.Result{}, updateErr
 }

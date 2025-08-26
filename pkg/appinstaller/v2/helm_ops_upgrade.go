@@ -63,14 +63,12 @@ func (h *HelmOpsV2) Upgrade() error {
 		err = h.addApplicationLabelsToSharedNamespace()
 		if err != nil {
 			klog.Errorf("Failed to add application labels to shared namespace err=%v", err)
-			h.Uninstall()
 			return err
 		}
 
 		// v2 && multi-charts app, add labels to namespace for cluster scoped apps
 		err = h.AddLabelToNamespaceForDependClusterApp()
 		if err != nil {
-			h.Uninstall()
 			return err
 		}
 
