@@ -85,7 +85,7 @@ func (h *Handler) setupAppEntranceDomain(req *restful.Request, resp *restful.Res
 		// if error, response in function. Do nothing
 		return
 	}
-	token := req.HeaderParameter(constants.AuthorizationTokenKey)
+	token := h.GetServiceAccountToken()
 
 	entranceName := req.PathParameter(ParamEntranceName)
 	validName := false
@@ -274,8 +274,7 @@ func (h *Handler) getAppSettings(req *restful.Request, resp *restful.Response) {
 }
 
 func getRepoURL() string {
-	repoURL := "http://chart-repo-service.os-framework:82/"
-	return repoURL
+	return constants.CHART_REPO_URL
 }
 
 func (h *Handler) setupAppAuthLevel(req *restful.Request, resp *restful.Response) {

@@ -644,16 +644,7 @@ func toApplicationConfig(app, chart string, cfg *appcfg.AppConfiguration) (*appc
 	if len(cfg.Permission.SysData) > 0 {
 		var perm []appcfg.SysDataPermission
 		for _, s := range cfg.Permission.SysData {
-			perm = append(perm, appcfg.SysDataPermission{
-				AppName:   s.AppName,
-				Svc:       s.Svc,
-				Namespace: s.Namespace,
-				Port:      s.Port,
-				Group:     s.Group,
-				DataType:  s.DataType,
-				Version:   s.Version,
-				Ops:       s.Ops,
-			})
+			perm = append(perm, appcfg.SysDataPermission(s))
 		}
 		permission = append(permission, perm)
 	}
@@ -760,6 +751,8 @@ func toApplicationConfig(app, chart string, cfg *appcfg.AppConfiguration) (*appc
 		RequiredGPU:          cfg.Spec.RequiredGPU,
 		Internal:             cfg.Spec.RunAsInternal,
 		SubCharts:            cfg.Spec.SubCharts,
+		ServiceAccountName:   cfg.Permission.ServiceAccount,
+		Provider:             cfg.Provider,
 	}, chart, nil
 }
 
@@ -791,7 +784,7 @@ func GetIndexAndDownloadChart(ctx context.Context, options *ConfigOptions) (stri
 		return "", err
 	}
 	client := resty.New().SetTimeout(10*time.Second).
-		SetHeader(constants.AuthorizationTokenKey, options.Token).
+		SetAuthToken(options.Token).
 		SetHeader("Terminus-Nonce", terminusNonce).
 		SetHeader(constants.MarketUser, options.Owner).
 		SetHeader(constants.MarketSource, options.MarketSource)
@@ -854,7 +847,7 @@ func downloadAndUnpack(ctx context.Context, tgz *url.URL, token, terminusNonce, 
 	dst := appcfg.ChartsPath
 	g := new(getter.HttpGetter)
 	g.Header = make(http.Header)
-	g.Header.Set(constants.AuthorizationTokenKey, token)
+	g.Header.Set("Authorization", "Bearer "+token)
 	g.Header.Set("Terminus-Nonce", terminusNonce)
 	g.Header.Set(constants.MarketUser, owner)
 	g.Header.Set(constants.MarketSource, marketSource)

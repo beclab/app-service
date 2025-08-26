@@ -148,3 +148,7 @@ func (h *Handler) Run(stopCh <-chan struct{}) error {
 	}
 	return nil
 }
+
+func (h *Handler) GetServiceAccountToken() string {
+	return h.kubeConfig.BearerToken
+}

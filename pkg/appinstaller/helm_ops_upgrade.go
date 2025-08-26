@@ -93,10 +93,16 @@ func (h *HelmOps) upgrade() error {
 		return err
 	}
 
+	if err = h.RegisterOrUnregisterAppProvider(Register); err != nil {
+		klog.Errorf("Failed to register app provider err=%v", err)
+		return err
+	}
+
 	ok, err := h.WaitForStartUp()
 	if !ok {
 		// canceled
 		//h.rollBack()
+		klog.Error("App upgrade start up failed, ", err)
 		return err
 	}
 

@@ -33,6 +33,7 @@ type AppConfiguration struct {
 	Permission    Permission             `yaml:"permission" json:"permission" description:"app permission request"`
 	Middleware    *tapr.Middleware       `yaml:"middleware" json:"middleware" description:"app middleware request"`
 	Options       Options                `yaml:"options" json:"options" description:"app options"`
+	Provider      []Provider             `yaml:"provider,omitempty" json:"provider,omitempty" description:"app provider information"`
 }
 
 type AppSpec struct {
@@ -65,21 +66,23 @@ type SupportClient struct {
 }
 
 type Permission struct {
-	AppData  bool         `yaml:"appData" json:"appData"  description:"app data permission for writing"`
-	AppCache bool         `yaml:"appCache" json:"appCache"`
-	UserData []string     `yaml:"userData" json:"userData"`
-	SysData  []SysDataCfg `yaml:"sysData" json:"sysData"  description:"system shared data permission for accessing"`
+	AppData        bool         `yaml:"appData" json:"appData"  description:"app data permission for writing"`
+	AppCache       bool         `yaml:"appCache" json:"appCache"`
+	UserData       []string     `yaml:"userData" json:"userData"`
+	SysData        []SysDataCfg `yaml:"sysData" json:"sysData"  description:"system shared data permission for accessing"`
+	ServiceAccount *string      `yaml:"serviceAccount,omitempty" json:"serviceAccount,omitempty" description:"service account for app permission"`
 }
 
 type SysDataCfg struct {
-	AppName   string   `yaml:"appName" json:"appName"`
-	Svc       string   `yaml:"svc,omitempty" json:"svc,omitempty"`
-	Namespace string   `yaml:"namespace,omitempty" json:"namespace,omitempty"`
-	Port      string   `yaml:"port" json:"port"`
-	Group     string   `yaml:"group" json:"group"`
-	DataType  string   `yaml:"dataType" json:"dataType"`
-	Version   string   `yaml:"version" json:"version"`
-	Ops       []string `yaml:"ops" json:"ops"`
+	AppName   string `yaml:"appName" json:"appName"`
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+	// Svc          string   `yaml:"svc,omitempty" json:"svc,omitempty"`
+	// Port         string   `yaml:"port" json:"port"`
+	// Group        string   `yaml:"group" json:"group"`
+	// DataType     string   `yaml:"dataType" json:"dataType"`
+	// Version      string   `yaml:"version" json:"version"`
+	// Ops          []string `yaml:"ops" json:"ops"`
+	ProviderName string `yaml:"providerName" json:"providerName"`
 }
 
 type Policy struct {
@@ -153,6 +156,13 @@ type Chart struct {
 	Shared bool   `yaml:"shared" json:"shared"`
 }
 
+type Provider struct {
+	Name     string   `yaml:"name" json:"name"`
+	Entrance string   `yaml:"entrance" json:"entrance"`
+	Paths    []string `yaml:"paths" json:"paths"`
+	Verbs    []string `yaml:"verbs" json:"verbs"`
+}
+
 func (c *Chart) Namespace(owner string) string {
 	if c.Shared {
 		return fmt.Sprintf("%s-%s", c.Name, "shared")
@@ -162,10 +172,4 @@ func (c *Chart) Namespace(owner string) string {
 
 func (c *Chart) ChartPath(appName string) string {
 	return AppChartPath(filepath.Join(appName, c.Name))
-}
-
-type DefaultThirdLevelDomainConfig struct {
-	AppName          string `json:"appName"`
-	EntranceName     string `json:"entranceName"`
-	ThirdLevelDomain string `json:"thirdLevelDomain"`
 }
