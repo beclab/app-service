@@ -77,19 +77,18 @@ func (app *Application) GenEntranceURL(ctx context.Context) ([]Entrance, error) 
 	zone, err := kubesphere.GetUserZone(ctx, app.Spec.Owner)
 	if err != nil {
 		klog.Errorf("failed to get user zone: %v", err)
-		return nil, err
-	}
-
-	var appDomainConfigs []DefaultThirdLevelDomainConfig
-	if defaultThirdLevelDomainConfig, ok := app.Spec.Settings["defaultThirdLevelDomainConfig"]; ok && len(defaultThirdLevelDomainConfig) > 0 {
-		err := json.Unmarshal([]byte(app.Spec.Settings["defaultThirdLevelDomainConfig"]), &appDomainConfigs)
-		if err != nil {
-			klog.Errorf("unmarshal defaultThirdLevelDomainConfig error %v", err)
-			return nil, err
-		}
 	}
 
 	if len(zone) > 0 {
+		var appDomainConfigs []DefaultThirdLevelDomainConfig
+		if defaultThirdLevelDomainConfig, ok := app.Spec.Settings["defaultThirdLevelDomainConfig"]; ok && len(defaultThirdLevelDomainConfig) > 0 {
+			err := json.Unmarshal([]byte(app.Spec.Settings["defaultThirdLevelDomainConfig"]), &appDomainConfigs)
+			if err != nil {
+				klog.Errorf("unmarshal defaultThirdLevelDomainConfig error %v", err)
+				return nil, err
+			}
+		}
+
 		appid := AppName(app.Spec.Name).GetAppID()
 		if len(app.Spec.Entrances) == 1 {
 			app.Spec.Entrances[0].URL = fmt.Sprintf("%s.%s", appid, zone)
