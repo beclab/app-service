@@ -36,8 +36,13 @@ func (h *Handler) installMiddleware(req *restful.Request, resp *restful.Response
 		return
 	}
 	app := req.PathParameter(ParamAppName)
-	token := h.GetServiceAccountToken()
 	owner := req.Attribute(constants.UserContextAttribute).(string)
+	token, err := h.GetUserServiceAccountToken(req.Request.Context(), owner)
+	if err != nil {
+		klog.Error("Failed to get user service account token: ", err)
+		api.HandleError(resp, req, err)
+		return
+	}
 	marketSource := req.HeaderParameter(constants.MarketSource)
 
 	middlewareConfig, err := getMiddlewareConfigFromRepo(req.Request.Context(), &apputils.ConfigOptions{

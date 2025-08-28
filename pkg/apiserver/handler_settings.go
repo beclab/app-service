@@ -85,8 +85,6 @@ func (h *Handler) setupAppEntranceDomain(req *restful.Request, resp *restful.Res
 		// if error, response in function. Do nothing
 		return
 	}
-	token := h.GetServiceAccountToken()
-
 	entranceName := req.PathParameter(ParamEntranceName)
 	validName := false
 	for _, e := range app.Spec.Entrances {
@@ -185,6 +183,13 @@ func (h *Handler) setupAppEntranceDomain(req *restful.Request, resp *restful.Res
 		owner := req.Attribute(constants.UserContextAttribute).(string)
 		zone, err := kubesphere.GetUserZone(req.Request.Context(), owner)
 		if err != nil {
+			api.HandleError(resp, req, err)
+			return
+		}
+
+		token, err := h.GetUserServiceAccountToken(req.Request.Context(), owner)
+		if err != nil {
+			klog.Error("Failed to get user service account token: %v", err)
 			api.HandleError(resp, req, err)
 			return
 		}

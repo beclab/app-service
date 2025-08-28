@@ -16,12 +16,19 @@ import (
 	"github.com/emicklei/go-restful/v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/klog/v2"
 )
 
 func (h *Handler) uninstall(req *restful.Request, resp *restful.Response) {
 	app := req.PathParameter(ParamAppName)
 	owner := req.Attribute(constants.UserContextAttribute).(string)
-	token := h.GetServiceAccountToken()
+	var err error
+	token, err := h.GetUserServiceAccountToken(req.Request.Context(), owner)
+	if err != nil {
+		klog.Error("Failed to get user service account token: %v", err)
+		api.HandleError(resp, req, err)
+		return
+	}
 
 	request := &api.UninstallRequest{}
 	if req.Request.ContentLength > 0 {

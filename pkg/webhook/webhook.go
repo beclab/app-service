@@ -307,7 +307,7 @@ func (wh *Webhook) createSidecarConfigMap(
 ) (string, error) {
 	configMapName := fmt.Sprintf("%s-%s", constants.SidecarConfigMapVolumeName, proxyUUID)
 	if deployName := utils.GetDeploymentName(pod); deployName != "" {
-		configMapName = fmt.Sprintf("%s-%s", configMapName, deployName)
+		configMapName = fmt.Sprintf("%s-%s", constants.SidecarConfigMapVolumeName, deployName)
 	}
 	cm, e := wh.kubeClient.CoreV1().ConfigMaps(namespace).Get(ctx, configMapName, metav1.GetOptions{})
 	if e != nil && !apierrors.IsNotFound(e) {

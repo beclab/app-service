@@ -8,7 +8,9 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/utils"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
+	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 type SysDataPermissionHelper appcfg.SysDataPermission
@@ -23,7 +25,19 @@ func (c ProviderPermissionsConvertor) ToPermissionCfg(ctx context.Context, owner
 		return nil, nil
 	}
 
-	token, err := utils.GetServiceAccountToken()
+	config, err := ctrl.GetConfig()
+	if err != nil {
+		klog.Errorf("Failed to get kube config: %v", err)
+		return nil, err
+	}
+
+	kubeClient, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		klog.Errorf("Failed to create kube client: %v", err)
+		return nil, err
+	}
+
+	token, err := utils.GetUserServiceAccountToken(ctx, kubeClient, owner)
 	if err != nil {
 		klog.Errorf("Failed to get service account token: %v", err)
 		return nil, err
