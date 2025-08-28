@@ -189,7 +189,7 @@ func (h *Handler) setupAppEntranceDomain(req *restful.Request, resp *restful.Res
 
 		token, err := h.GetUserServiceAccountToken(req.Request.Context(), owner)
 		if err != nil {
-			klog.Error("Failed to get user service account token: %v", err)
+			klog.Error("Failed to get user service account token: ", err)
 			api.HandleError(resp, req, err)
 			return
 		}
@@ -205,7 +205,7 @@ func (h *Handler) setupAppEntranceDomain(req *restful.Request, resp *restful.Res
 			if cDomain, _ := cfg["third_party_domain"].(string); cDomain != "" {
 				urls = append(urls, cDomain)
 			}
-			if prefix, _ := cfg["third_level_domain"]; prefix != "" {
+			if prefix := cfg["third_level_domain"]; prefix != "" {
 				urls = append(urls, fmt.Sprintf("%s.%s", prefix, zone))
 			}
 			var url string
@@ -382,6 +382,10 @@ func (h *Handler) setupAppEntrancePolicy(req *restful.Request, resp *restful.Res
 
 	var origin map[string]interface{}
 	err = json.Unmarshal([]byte(appCopy.Spec.Settings["policy"]), &origin)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
 
 	merge := make(map[string]interface{})
 	merge[entranceName] = settings

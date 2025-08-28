@@ -142,7 +142,7 @@ func (h *Handler) installRecommend(req *restful.Request, resp *restful.Response)
 	marketSource := req.HeaderParameter(constants.MarketSource)
 	token, err := h.GetUserServiceAccountToken(req.Request.Context(), owner)
 	if err != nil {
-		klog.Error("Failed to get user service account token: %v", err)
+		klog.Error("Failed to get user service account token: ", err)
 		api.HandleError(resp, req, err)
 		return
 	}
@@ -397,7 +397,7 @@ func (h *Handler) upgradeRecommend(req *restful.Request, resp *restful.Response)
 	var err error
 	token, err := h.GetUserServiceAccountToken(req.Request.Context(), owner)
 	if err != nil {
-		klog.Error("Failed to get user service account token: %v", err)
+		klog.Error("Failed to get user service account token: ", err)
 		api.HandleError(resp, req, err)
 		return
 	}

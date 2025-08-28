@@ -427,7 +427,7 @@ func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opI
 			api.HandleError(h.resp, h.req, err)
 			return
 		}
-		a, err = h.client.AppV1alpha1().ApplicationManagers().Create(h.req.Request.Context(), appMgr, metav1.CreateOptions{})
+		_, err = h.client.AppV1alpha1().ApplicationManagers().Create(h.req.Request.Context(), appMgr, metav1.CreateOptions{})
 		if err != nil {
 			api.HandleError(h.resp, h.req, err)
 			return
