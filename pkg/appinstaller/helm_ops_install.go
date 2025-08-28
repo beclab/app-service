@@ -821,30 +821,33 @@ func (h *HelmOps) RegisterOrUnregisterAppProvider(operation ProviderOperation) e
 			Provider: provider,
 		})
 	}
-	register := appcfg.ProviderRegisterRequest{
-		AppName:      h.app.AppName,
-		AppNamespace: h.app.Namespace,
-		Providers:    providers,
-	}
 
-	url := fmt.Sprintf("http://%s/provider/v2alpha1/%s", h.systemServerHost(), operation)
-	client := resty.New()
-
-	resp, err := client.SetTimeout(2*time.Second).R().
-		SetHeader(restful.HEADER_ContentType, restful.MIME_JSON).
-		SetAuthToken(h.token).
-		SetBody(register).Post(url)
-	if err != nil {
-		return err
-	}
-
-	if resp.StatusCode() != 200 {
-		dump, e := httputil.DumpRequest(resp.Request.RawRequest, true)
-		if e == nil {
-			klog.Errorf("Failed to get response body=%s url=%s", string(dump), url)
+	if len(providers) > 0 {
+		register := appcfg.ProviderRegisterRequest{
+			AppName:      h.app.AppName,
+			AppNamespace: h.app.Namespace,
+			Providers:    providers,
 		}
 
-		return errors.New(string(resp.Body()))
+		url := fmt.Sprintf("http://%s/provider/v2alpha1/%s", h.systemServerHost(), operation)
+		client := resty.New()
+
+		resp, err := client.SetTimeout(2*time.Second).R().
+			SetHeader(restful.HEADER_ContentType, restful.MIME_JSON).
+			SetAuthToken(h.token).
+			SetBody(register).Post(url)
+		if err != nil {
+			return err
+		}
+
+		if resp.StatusCode() != 200 {
+			dump, e := httputil.DumpRequest(resp.Request.RawRequest, true)
+			if e == nil {
+				klog.Errorf("Failed to get response body=%s url=%s", string(dump), url)
+			}
+
+			return errors.New(string(resp.Body()))
+		}
 	}
 
 	return nil

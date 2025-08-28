@@ -206,7 +206,12 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	token := h.GetServiceAccountToken()
+	token, err := h.GetUserServiceAccountToken(req.Request.Context(), owner)
+	if err != nil {
+		klog.Error("Failed to get user service account token: ", err)
+		api.HandleError(resp, req, err)
+		return
+	}
 
 	apiVersion, err := apputils.GetApiVersionFromAppConfig(req.Request.Context(), &apputils.ConfigOptions{
 		App:          app,

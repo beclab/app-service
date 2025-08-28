@@ -10,9 +10,12 @@ import (
 	lister_v1alpha1 "bytetrade.io/web3os/app-service/pkg/generated/listers/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/upgrade"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace/v1"
+	"bytetrade.io/web3os/app-service/pkg/utils"
 	"bytetrade.io/web3os/app-service/pkg/webhook"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -149,6 +152,15 @@ func (h *Handler) Run(stopCh <-chan struct{}) error {
 	return nil
 }
 
-func (h *Handler) GetServiceAccountToken() string {
+func (h *Handler) GetServerServiceAccountToken() string {
 	return h.kubeConfig.BearerToken
+}
+
+func (h *Handler) GetUserServiceAccountToken(ctx context.Context, user string) (string, error) {
+	kubeClient, err := kubernetes.NewForConfig(h.kubeConfig)
+	if err != nil {
+		klog.Errorf("Failed to create kube client: %v", err)
+		return "", err
+	}
+	return utils.GetUserServiceAccountToken(ctx, kubeClient, user)
 }

@@ -28,7 +28,7 @@ func (h *Handler) userMetrics(req *restful.Request, resp *restful.Response) {
 }
 
 func (h *Handler) clusterResource(req *restful.Request, resp *restful.Response) {
-	token := h.GetServiceAccountToken()
+	token := h.GetServerServiceAccountToken()
 	metrics, supportArch, err := apputils.GetClusterResource(token)
 	if err != nil {
 		api.HandleError(resp, req, err)

@@ -138,9 +138,14 @@ func (h *Handler) installRecommend(req *restful.Request, resp *restful.Response)
 	}
 
 	app := req.PathParameter(ParamWorkflowName)
-	token := h.GetServiceAccountToken()
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 	marketSource := req.HeaderParameter(constants.MarketSource)
+	token, err := h.GetUserServiceAccountToken(req.Request.Context(), owner)
+	if err != nil {
+		klog.Error("Failed to get user service account token: ", err)
+		api.HandleError(resp, req, err)
+		return
+	}
 
 	klog.Infof("Download chart and get workflow config appName=%s repoURL=%s", app, insReq.RepoURL)
 	//workflowCfg, err := getWorkflowConfigFromRepo(req.Request.Context(), owner, app, insReq.RepoURL, "", token, marketSource)
@@ -389,9 +394,15 @@ func (h *Handler) uninstallRecommend(req *restful.Request, resp *restful.Respons
 func (h *Handler) upgradeRecommend(req *restful.Request, resp *restful.Response) {
 	app := req.PathParameter(ParamWorkflowName)
 	owner := req.Attribute(constants.UserContextAttribute).(string)
-	token := h.GetServiceAccountToken()
-	marketSource := req.HeaderParameter(constants.MarketSource)
 	var err error
+	token, err := h.GetUserServiceAccountToken(req.Request.Context(), owner)
+	if err != nil {
+		klog.Error("Failed to get user service account token: ", err)
+		api.HandleError(resp, req, err)
+		return
+	}
+
+	marketSource := req.HeaderParameter(constants.MarketSource)
 	upReq := &api.UpgradeRequest{}
 	err = req.ReadEntity(upReq)
 	if err != nil {

@@ -62,13 +62,19 @@ type installHandlerHelperV2 struct {
 func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 	app := req.PathParameter(ParamAppName)
 	owner := req.Attribute(constants.UserContextAttribute).(string)
-	token := h.GetServiceAccountToken()
+	var err error
+	token, err := h.GetUserServiceAccountToken(req.Request.Context(), owner)
+	if err != nil {
+		klog.Error("Failed to get user service account token: ", err)
+		api.HandleError(resp, req, err)
+		return
+	}
 
 	marketSource := req.HeaderParameter(constants.MarketSource)
 	klog.Infof("install: user: %v, source: %v", owner, marketSource)
 
 	insReq := &api.InstallRequest{}
-	err := req.ReadEntity(insReq)
+	err = req.ReadEntity(insReq)
 	if err != nil {
 		api.HandleBadRequest(resp, req, err)
 		return
@@ -421,7 +427,7 @@ func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opI
 			api.HandleError(h.resp, h.req, err)
 			return
 		}
-		a, err = h.client.AppV1alpha1().ApplicationManagers().Create(h.req.Request.Context(), appMgr, metav1.CreateOptions{})
+		_, err = h.client.AppV1alpha1().ApplicationManagers().Create(h.req.Request.Context(), appMgr, metav1.CreateOptions{})
 		if err != nil {
 			api.HandleError(h.resp, h.req, err)
 			return

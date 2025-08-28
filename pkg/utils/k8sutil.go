@@ -15,10 +15,13 @@ import (
 	iamv1alpha2 "github.com/beclab/api/iam/v1alpha2"
 
 	srvconfig "github.com/containerd/containerd/services/server/config"
+	authv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -217,13 +220,13 @@ func GetDeploymentName(pod *corev1.Pod) string {
 		return ""
 	}
 
-	replicaSetSuffix := fmt.Sprintf("%s-", replicaSetHash)
-	return strings.TrimSuffix(pod.Name, replicaSetSuffix)
+	replicaSetSuffix := fmt.Sprintf("-%s", replicaSetHash)
+	return strings.Split(pod.GenerateName, replicaSetSuffix)[0] // pod.name not exists
 }
 
 var serviceAccountToken string
 
-func GetServiceAccountToken() (string, error) {
+func GetServerServiceAccountToken() (string, error) {
 	if serviceAccountToken != "" {
 		return serviceAccountToken, nil
 	}
@@ -237,4 +240,23 @@ func GetServiceAccountToken() (string, error) {
 	serviceAccountToken = config.BearerToken
 
 	return serviceAccountToken, nil
+}
+
+func GetUserServiceAccountToken(ctx context.Context, client kubernetes.Interface, user string) (string, error) {
+	namespace := fmt.Sprintf("user-system-%s", user)
+	tr := &authv1.TokenRequest{
+		Spec: authv1.TokenRequestSpec{
+			Audiences:         []string{"https://kubernetes.default.svc.cluster.local"},
+			ExpirationSeconds: ptr.To[int64](86400), // one day
+		},
+	}
+
+	token, err := client.CoreV1().ServiceAccounts(namespace).
+		CreateToken(ctx, "user-backend", tr, metav1.CreateOptions{})
+	if err != nil {
+		klog.Errorf("Failed to create token for user %s in namespace %s: %v", user, namespace, err)
+		return "", err
+	}
+
+	return token.Status.Token, nil
 }

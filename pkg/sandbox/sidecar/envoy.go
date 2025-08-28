@@ -1323,28 +1323,28 @@ func GetInitContainerSpecForRenderEnvoyConfig() corev1.Container {
 		Image:           "busybox:1.28",
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Command: []string{
-			"while [ ! -f /var/run/secrets/kubernetes.io/serviceaccount/token ]; do sleep 0.2; done",
-			"TOKEN=\"$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)\"",
-			fmt.Sprintf("sed \"s|__SA_TOKEN__|${TOKEN}|g\" %s > /work/%s", constants.EnvoyConfigFilePath+"/"+constants.EnvoyConfigFileName, constants.EnvoyConfigFileName),
-			fmt.Sprintf("chmod 0400 /work/%s", constants.EnvoyConfigFileName),
-			fmt.Sprintf("sed \"s|__SA_TOKEN__|${TOKEN}|g\" %s > /work/%s", constants.EnvoyConfigFilePath+"/"+constants.EnvoyConfigFileName, constants.EnvoyConfigOnlyOutBoundFileName),
-			fmt.Sprintf("chmod 0400 /work/%s", constants.EnvoyConfigOnlyOutBoundFileName),
+			"sh", "-c",
+			"while [ ! -f /var/run/secrets/kubernetes.io/serviceaccount/token ]; do sleep 0.2; done; " +
+				"TOKEN=\"$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)\" && " +
+				fmt.Sprintf("sed \"s|__SA_TOKEN__|${TOKEN}|g\" /work/%s > %s && ", constants.EnvoyConfigFileName, constants.EnvoyConfigFilePath+"/"+constants.EnvoyConfigFileName) +
+				fmt.Sprintf("sed \"s|__SA_TOKEN__|${TOKEN}|g\" /work/%s > %s && ", constants.EnvoyConfigOnlyOutBoundFileName, constants.EnvoyConfigFilePath+"/"+constants.EnvoyConfigOnlyOutBoundFileName) +
+				fmt.Sprintf("cat %s ", constants.EnvoyConfigFilePath+"/"+constants.EnvoyConfigOnlyOutBoundFileName),
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      constants.EnvoyConfigWorkDirName,
-				MountPath: "/work",
+				MountPath: constants.EnvoyConfigFilePath,
 			},
 			{
 				Name:      constants.SidecarConfigMapVolumeName,
 				ReadOnly:  true,
-				MountPath: constants.EnvoyConfigFilePath + "/" + constants.EnvoyConfigFileName,
+				MountPath: "/work/" + constants.EnvoyConfigFileName,
 				SubPath:   constants.EnvoyConfigFileName,
 			},
 			{
 				Name:      constants.SidecarConfigMapVolumeName,
 				ReadOnly:  true,
-				MountPath: constants.EnvoyConfigFilePath + "/" + constants.EnvoyConfigOnlyOutBoundFileName,
+				MountPath: "/work/" + constants.EnvoyConfigOnlyOutBoundFileName,
 				SubPath:   constants.EnvoyConfigOnlyOutBoundFileName,
 			},
 		},
