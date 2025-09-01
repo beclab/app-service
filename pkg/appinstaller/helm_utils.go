@@ -243,6 +243,11 @@ func (h *HelmOps) SetValues() (values map[string]interface{}, err error) {
 	values["downloadCdnURL"] = os.Getenv("DOWNLOAD_CDN_URL")
 	values["fs_type"] = utils.EnvOrDefault("OLARES_FS_TYPE", "fs")
 
+	terminus, err := utils.GetTerminusVersion(ctx, h.kubeConfig)
+	if err != nil {
+		return values, err
+	}
+	values["sysVersion"] = terminus.Spec.Version
 	return values, err
 }
 
