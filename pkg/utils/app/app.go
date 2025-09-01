@@ -73,6 +73,9 @@ var forbidNamespace = []string{
 	"kubesphere-system",
 }
 
+var ErrAppNotFoundInChartRepo = errors.New("app not found in chart repo")
+var ErrProviderNotFound = errors.New("provider not found")
+
 // UpdateAppState update application status state.
 func UpdateAppState(ctx context.Context, am *v1alpha1.ApplicationManager, state string) error {
 	client, err := utils.GetClient()
@@ -641,10 +644,10 @@ func toApplicationConfig(app, chart string, cfg *appcfg.AppConfiguration) (*appc
 		permission = append(permission, appcfg.UserDataRW)
 	}
 
-	if len(cfg.Permission.SysData) > 0 {
-		var perm []appcfg.SysDataPermission
-		for _, s := range cfg.Permission.SysData {
-			perm = append(perm, appcfg.SysDataPermission(s))
+	if len(cfg.Permission.Provider) > 0 {
+		var perm []appcfg.ProviderPermission
+		for _, s := range cfg.Permission.Provider {
+			perm = append(perm, appcfg.ProviderPermission(s))
 		}
 		permission = append(permission, perm)
 	}
@@ -810,15 +813,19 @@ func GetIndexAndDownloadChart(ctx context.Context, options *ConfigOptions) (stri
 		return "", err
 	}
 
-	klog.Infof("Success to find app chart from index app=%s version=%s", options.App, options.Version)
+	klog.Infof("Success to load chart index from %s", indexFileURL)
 	// get specified version chart, if version is empty return the chart with the latest stable version
 	chartVersion, err := index.Get(options.App, options.Version)
 
 	if err != nil {
-		klog.Errorf("Failed to get chart version err=%v", err)
-		return "", fmt.Errorf("app [%s-%s] not found in repo", options.App, options.Version)
+		klog.Errorf("Failed to get chart version err=%v app [%s %s]", err, options.App, options.Version)
+		if errors.Is(err, repo.ErrNoChartName) {
+			return "", ErrAppNotFoundInChartRepo
+		}
+		return "", err
 	}
 
+	klog.Infof("Success to find app chart from index app=%s version=%s", options.App, options.Version)
 	chartURL, err := repo.ResolveReferenceURL(options.RepoURL, chartVersion.URLs[0])
 	if err != nil {
 		return "", err

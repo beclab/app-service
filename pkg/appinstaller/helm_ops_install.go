@@ -610,46 +610,22 @@ func parseAppPermission(data []appcfg.AppPermission) []appcfg.AppPermission {
 			permissions = append(permissions, appcfg.AppCacheRW)
 		case appcfg.UserDataPermission:
 			permissions = append(permissions, appcfg.UserDataRW)
-		case []appcfg.SysDataPermission:
+		case []appcfg.ProviderPermission:
 			permissions = append(permissions, p)
 		case []interface{}:
-			var sps []appcfg.SysDataPermission
+			var sps []appcfg.ProviderPermission
 			for _, item := range perm {
 				if m, ok := item.(map[string]interface{}); ok {
-					var sp appcfg.SysDataPermission
+					var sp appcfg.ProviderPermission
 					if appName, ok := m["appName"].(string); ok {
 						sp.AppName = appName
 					}
 					if providerName, ok := m["providerName"].(string); ok {
 						sp.ProviderName = providerName
 					}
-					// if port, ok := m["port"].(string); ok {
-					// 	sp.Port = port
-					// }
-					// if svc, ok := m["svc"].(string); ok {
-					// 	sp.Svc = svc
-					// }
 					if ns, ok := m["namespace"].(string); ok {
 						sp.Namespace = ns
 					}
-					// if group, ok := m["group"].(string); ok {
-					// 	sp.Group = group
-					// }
-					// if dataType, ok := m["dataType"].(string); ok {
-					// 	sp.DataType = dataType
-					// }
-					// if version, ok := m["version"].(string); ok {
-					// 	sp.Version = version
-					// }
-
-					// if ops, okk := m["ops"].([]interface{}); okk {
-					// 	sp.Ops = make([]string, len(ops))
-					// 	for i, op := range ops {
-					// 		sp.Ops[i] = op.(string)
-					// 	}
-					// } else {
-					// 	sp.Ops = []string{}
-					// }
 					sps = append(sps, sp)
 				}
 			}

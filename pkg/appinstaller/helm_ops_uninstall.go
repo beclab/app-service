@@ -78,9 +78,9 @@ func (h *HelmOps) Uninstall_(client kubernetes.Interface, actionConfig *action.C
 	}
 
 	h.app.Permission = parseAppPermission(h.app.Permission)
-	var perm []appcfg.SysDataPermission
+	var perm []appcfg.ProviderPermission
 	for _, p := range h.app.Permission {
-		if t, ok := p.([]appcfg.SysDataPermission); ok {
+		if t, ok := p.([]appcfg.ProviderPermission); ok {
 			perm = append(perm, t...)
 		}
 	}
