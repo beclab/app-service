@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/users"
@@ -18,8 +19,12 @@ import (
 	authv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -259,4 +264,30 @@ func GetUserServiceAccountToken(ctx context.Context, client kubernetes.Interface
 	}
 
 	return token.Status.Token, nil
+}
+
+func GetTerminusVersion(ctx context.Context, config *rest.Config) (*sysv1alpha1.Terminus, error) {
+	dynamicClient, err := dynamic.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create dynamic client: %v", err)
+	}
+
+	terminusGVR := schema.GroupVersionResource{
+		Group:    "sys.bytetrade.io",
+		Version:  "v1alpha1",
+		Resource: "terminus",
+	}
+
+	unstructuredTerminus, err := dynamicClient.Resource(terminusGVR).Get(ctx, "terminus", metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get terminus resource: %v", err)
+	}
+
+	var terminus sysv1alpha1.Terminus
+	err = runtime.DefaultUnstructuredConverter.FromUnstructured(unstructuredTerminus.Object, &terminus)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert unstructured to Terminus: %v", err)
+	}
+
+	return &terminus, nil
 }

@@ -168,6 +168,13 @@ func (p *DownloadingApp) exec(ctx context.Context) error {
 		"Cuda": os.Getenv("CUDA_VERSION"),
 	}
 
+	terminus, err := utils.GetTerminusVersion(ctx, kubeConfig)
+	if err != nil {
+		klog.Infof("get terminus error %v", err)
+		return err
+	}
+	values["sysVersion"] = terminus.Spec.Version
+
 	refs, err := p.getRefsForImageManager(appConfig, values)
 	if err != nil {
 		klog.Errorf("get image refs from resources failed %v", err)
