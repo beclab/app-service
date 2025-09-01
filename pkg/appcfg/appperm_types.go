@@ -46,7 +46,7 @@ type ProviderCfg struct {
 }
 
 type PermissionCfg struct {
-	*SysDataPermission
+	*ProviderPermission
 	Port   int    // not in yaml, cannot be set in OlaresManifest
 	Svc    string // not in yaml, cannot be set in OlaresManifest
 	Domain string // not in yaml, cannot be set in OlaresManifest

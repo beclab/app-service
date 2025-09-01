@@ -109,7 +109,7 @@ func (h *Handler) mutate(ctx context.Context, req *admissionv1.AdmissionRequest,
 		return h.sidecarWebhook.AdmissionError(req.UID, errors.New("HostNetwork Enabled Unsupported"))
 	}
 	var injectPolicy, injectWs, injectUpload bool
-	var perms []appcfg.SysDataPermission
+	var perms []appcfg.ProviderPermission
 	if injectPolicy, injectWs, injectUpload, perms, err = h.sidecarWebhook.MustInject(ctx, &pod, req.Namespace); err != nil {
 		return h.sidecarWebhook.AdmissionError(req.UID, err)
 	}

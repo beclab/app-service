@@ -644,10 +644,10 @@ func toApplicationConfig(app, chart string, cfg *appcfg.AppConfiguration) (*appc
 		permission = append(permission, appcfg.UserDataRW)
 	}
 
-	if len(cfg.Permission.SysData) > 0 {
-		var perm []appcfg.SysDataPermission
-		for _, s := range cfg.Permission.SysData {
-			perm = append(perm, appcfg.SysDataPermission(s))
+	if len(cfg.Permission.Provider) > 0 {
+		var perm []appcfg.ProviderPermission
+		for _, s := range cfg.Permission.Provider {
+			perm = append(perm, appcfg.ProviderPermission(s))
 		}
 		permission = append(permission, perm)
 	}

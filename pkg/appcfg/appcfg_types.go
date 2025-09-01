@@ -66,22 +66,16 @@ type SupportClient struct {
 }
 
 type Permission struct {
-	AppData        bool         `yaml:"appData" json:"appData"  description:"app data permission for writing"`
-	AppCache       bool         `yaml:"appCache" json:"appCache"`
-	UserData       []string     `yaml:"userData" json:"userData"`
-	SysData        []SysDataCfg `yaml:"sysData" json:"sysData"  description:"system shared data permission for accessing"`
-	ServiceAccount *string      `yaml:"serviceAccount,omitempty" json:"serviceAccount,omitempty" description:"service account for app permission"`
+	AppData        bool                 `yaml:"appData" json:"appData"  description:"app data permission for writing"`
+	AppCache       bool                 `yaml:"appCache" json:"appCache"`
+	UserData       []string             `yaml:"userData" json:"userData"`
+	Provider       []ProviderPermission `yaml:"provider" json:"provider"  description:"system shared data permission for accessing"`
+	ServiceAccount *string              `yaml:"serviceAccount,omitempty" json:"serviceAccount,omitempty" description:"service account for app permission"`
 }
 
-type SysDataCfg struct {
-	AppName   string `yaml:"appName" json:"appName"`
-	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
-	// Svc          string   `yaml:"svc,omitempty" json:"svc,omitempty"`
-	// Port         string   `yaml:"port" json:"port"`
-	// Group        string   `yaml:"group" json:"group"`
-	// DataType     string   `yaml:"dataType" json:"dataType"`
-	// Version      string   `yaml:"version" json:"version"`
-	// Ops          []string `yaml:"ops" json:"ops"`
+type ProviderPermission struct {
+	AppName      string `yaml:"appName" json:"appName"`
+	Namespace    string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
 	ProviderName string `yaml:"providerName" json:"providerName"`
 }
 

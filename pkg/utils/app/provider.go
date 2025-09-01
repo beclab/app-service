@@ -14,8 +14,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-type SysDataPermissionHelper appcfg.SysDataPermission
-type ProviderPermissionsConvertor []appcfg.SysDataPermission
+type ProviderPermissionHelper appcfg.ProviderPermission
+type ProviderPermissionsConvertor []appcfg.ProviderPermission
 type ProviderHelper struct {
 	appcfg.Provider
 	appCfg *appcfg.ApplicationConfig
@@ -71,7 +71,7 @@ func (c ProviderPermissionsConvertor) ToPermissionCfg(ctx context.Context, owner
 			appCfgMap[p.AppName] = appCfg
 		}
 
-		pc, err := SysDataPermissionHelper(p).GetPermissionCfg(ctx, appCfg)
+		pc, err := ProviderPermissionHelper(p).GetPermissionCfg(ctx, appCfg)
 		if err != nil {
 			klog.Errorf("Failed to get permission config for %s: %v", p.AppName, err)
 			if errors.Is(err, ErrProviderNotFound) {
@@ -85,7 +85,7 @@ func (c ProviderPermissionsConvertor) ToPermissionCfg(ctx context.Context, owner
 	return cfg, nil
 }
 
-func (h SysDataPermissionHelper) GetPermissionCfg(ctx context.Context, appCfg *appcfg.ApplicationConfig) (*appcfg.PermissionCfg, error) {
+func (h ProviderPermissionHelper) GetPermissionCfg(ctx context.Context, appCfg *appcfg.ApplicationConfig) (*appcfg.PermissionCfg, error) {
 	for _, p := range appCfg.Provider {
 		if p.Name == h.ProviderName {
 			entrance, err := (&ProviderHelper{p, appCfg}).GetEntrance(ctx)
@@ -95,11 +95,11 @@ func (h SysDataPermissionHelper) GetPermissionCfg(ctx context.Context, appCfg *a
 			}
 
 			return &appcfg.PermissionCfg{
-				SysDataPermission: (*appcfg.SysDataPermission)(&h),
-				Port:              int(entrance.Port),
-				Svc:               entrance.Host,
-				Domain:            entrance.URL,
-				Paths:             p.Paths,
+				ProviderPermission: (*appcfg.ProviderPermission)(&h),
+				Port:               int(entrance.Port),
+				Svc:                entrance.Host,
+				Domain:             entrance.URL,
+				Paths:              p.Paths,
 			}, nil
 
 		}

@@ -21,16 +21,6 @@ type UserDataPermission string
 
 type Middleware interface{}
 
-type SysDataPermission struct {
-	AppName   string `yaml:"appName" json:"appName"`
-	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
-	// Group     string   `yaml:"group" json:"group"`
-	// DataType  string   `yaml:"dataType" json:"dataType"`
-	// Version   string   `yaml:"version" json:"version"`
-	// Ops       []string `yaml:"ops" json:"ops"`
-	ProviderName string `yaml:"providerName" json:"providerName"`
-}
-
 type AppRequirement struct {
 	Memory *resource.Quantity
 	Disk   *resource.Quantity
@@ -141,7 +131,7 @@ func (c *ApplicationConfig) GetEntrances(ctx context.Context) (map[string]v1alph
 	}), nil
 }
 
-func (p *SysDataPermission) GetNamespace(ownerName string) string {
+func (p *ProviderPermission) GetNamespace(ownerName string) string {
 	if p.Namespace != "" {
 		if p.Namespace == "user-space" || p.Namespace == "user-system" {
 			return fmt.Sprintf("%s-%s", p.Namespace, ownerName)

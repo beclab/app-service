@@ -134,7 +134,7 @@ func (wh *Webhook) CreatePatch(
 	ctx context.Context,
 	pod *corev1.Pod,
 	req *admissionv1.AdmissionRequest,
-	proxyUUID uuid.UUID, injectPolicy, injectWs, injectUpload bool, perms []appcfg.SysDataPermission) ([]byte, error) {
+	proxyUUID uuid.UUID, injectPolicy, injectWs, injectUpload bool, perms []appcfg.ProviderPermission) ([]byte, error) {
 	isInjected, prevUUID := isInjectedPod(pod)
 
 	if isInjected {
@@ -218,8 +218,8 @@ func (wh *Webhook) AdmissionError(uid types.UID, err error) *admissionv1.Admissi
 }
 
 // MustInject checks which inject operation should do for a pod.
-func (wh *Webhook) MustInject(ctx context.Context, pod *corev1.Pod, namespace string) (bool, bool, bool, []appcfg.SysDataPermission, error) {
-	perms := make([]appcfg.SysDataPermission, 0)
+func (wh *Webhook) MustInject(ctx context.Context, pod *corev1.Pod, namespace string) (bool, bool, bool, []appcfg.ProviderPermission, error) {
+	perms := make([]appcfg.ProviderPermission, 0)
 	if !isNamespaceInjectable(namespace) {
 		return false, false, false, perms, nil
 	}
@@ -247,16 +247,16 @@ func (wh *Webhook) MustInject(ctx context.Context, pod *corev1.Pod, namespace st
 		injectUpload = true
 	}
 	for _, p := range appcfg.Permission {
-		if sysDataP, ok := p.([]interface{}); ok {
-			for _, v := range sysDataP {
-				sysData := v.(map[string]interface{})
+		if providerP, ok := p.([]interface{}); ok {
+			for _, v := range providerP {
+				provider := v.(map[string]interface{})
 				var ns string
-				if val, ok := sysData["namespace"].(string); ok {
+				if val, ok := provider["namespace"].(string); ok {
 					ns = val
 				}
-				providerAppName := sysData["appName"].(string)
-				providerName := sysData["providerName"].(string)
-				perms = append(perms, appcfg_mod.SysDataPermission{
+				providerAppName := provider["appName"].(string)
+				providerName := provider["providerName"].(string)
+				perms = append(perms, appcfg_mod.ProviderPermission{
 					AppName:      providerAppName,
 					Namespace:    ns,
 					ProviderName: providerName,
@@ -303,7 +303,7 @@ func (wh *Webhook) isAppEntrancePod(ctx context.Context, appname, host string, p
 func (wh *Webhook) createSidecarConfigMap(
 	ctx context.Context, pod *corev1.Pod,
 	proxyUUID, namespace string, injectPolicy, injectWs, injectUpload bool,
-	perms []appcfg_mod.SysDataPermission,
+	perms []appcfg_mod.ProviderPermission,
 ) (string, error) {
 	configMapName := fmt.Sprintf("%s-%s", constants.SidecarConfigMapVolumeName, proxyUUID)
 	if deployName := utils.GetDeploymentName(pod); deployName != "" {
