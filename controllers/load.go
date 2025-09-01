@@ -7,7 +7,7 @@ import (
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appstate"
-	"bytetrade.io/web3os/app-service/pkg/utils"
+	appevent "bytetrade.io/web3os/app-service/pkg/event"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
 	corev1 "k8s.io/api/core/v1"
@@ -48,7 +48,7 @@ func LoadStatefulApp(ctx context.Context, appmgr *ApplicationManagerController, 
 									klog.Infof("LoadStatefulApp: force delete application %s successfully", app.Name)
 								}
 								opID := strconv.FormatInt(time.Now().Unix(), 10)
-								utils.PublishAppEvent(app.Spec.Owner, app.Spec.Name, string(appv1alpha1.UninstallOp), opID, string(appv1alpha1.Uninstalling), "", nil)
+								appevent.PublishAppEventToQueue(app.Spec.Owner, app.Spec.Name, string(appv1alpha1.UninstallOp), opID, string(appv1alpha1.Uninstalling), "", nil)
 
 								ticker := time.NewTicker(2 * time.Second)
 								defer ticker.Stop()
@@ -61,7 +61,7 @@ func LoadStatefulApp(ctx context.Context, appmgr *ApplicationManagerController, 
 										err = appmgr.Get(delCtx, types.NamespacedName{Name: app.Spec.Namespace}, &ns)
 										klog.Infof("wait for namespace: %s to be deleted", app.Spec.Namespace)
 										if apierrors.IsNotFound(err) {
-											utils.PublishAppEvent(app.Spec.Owner, app.Spec.Name, string(appv1alpha1.UninstallOp), opID, string(appv1alpha1.Uninstalled), "", nil)
+											appevent.PublishAppEventToQueue(app.Spec.Owner, app.Spec.Name, string(appv1alpha1.UninstallOp), opID, string(appv1alpha1.Uninstalled), "", nil)
 											return
 										}
 									}

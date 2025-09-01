@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
-	"bytetrade.io/web3os/app-service/pkg/utils"
+	appevent "bytetrade.io/web3os/app-service/pkg/event"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -238,7 +238,7 @@ func (r *EntranceStatusManagerController) updateEntranceStatus(ctx context.Conte
 			return err
 		}
 		if err == nil {
-			utils.PublishAppEvent(appCopy.Spec.Owner, appCopy.Spec.Name, "", "", am.Status.State.String(), "", appCopy.Status.EntranceStatuses)
+			appevent.PublishAppEventToQueue(appCopy.Spec.Owner, appCopy.Spec.Name, "", "", am.Status.State.String(), "", appCopy.Status.EntranceStatuses)
 		}
 	}
 	return nil

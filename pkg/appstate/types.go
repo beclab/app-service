@@ -11,7 +11,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller/versioned"
-	"bytetrade.io/web3os/app-service/pkg/utils"
+	appevent "bytetrade.io/web3os/app-service/pkg/event"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -72,7 +72,7 @@ func (b *baseStatefulApp) updateStatus(ctx context.Context, am *appsv1.Applicati
 		klog.Errorf("patch appmgr's  %s status failed %v", am.Name, err)
 		return err
 	}
-	utils.PublishAppEvent(b.manager.Spec.AppOwner, b.manager.Spec.AppName, string(b.manager.Spec.OpType), b.manager.Status.OpID, state.String(), "", nil)
+	appevent.PublishAppEventToQueue(b.manager.Spec.AppOwner, b.manager.Spec.AppName, string(b.manager.Spec.OpType), b.manager.Status.OpID, state.String(), "", nil)
 
 	return nil
 }

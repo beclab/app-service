@@ -1,27 +1,25 @@
 package main
 
 import (
-	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
-	"bytetrade.io/web3os/app-service/pkg/images"
-	"k8s.io/client-go/dynamic"
-
-	//"bytetrade.io/web3os/app-service/pkg/images"
 	"context"
 	"flag"
 	"fmt"
-	iamv1alpha2 "github.com/beclab/api/iam/v1alpha2"
 	"os"
 	"os/signal"
 	"syscall"
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
-	//"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
-
 	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/controllers"
 	"bytetrade.io/web3os/app-service/pkg/apiserver"
+	appevent "bytetrade.io/web3os/app-service/pkg/event"
+	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
+	"bytetrade.io/web3os/app-service/pkg/images"
+	
+	"k8s.io/client-go/dynamic"
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
+	iamv1alpha2 "github.com/beclab/api/iam/v1alpha2"
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -121,6 +119,9 @@ func main() {
 		setupLog.Error(err, "Unable to create controller", "controller", "Security")
 		os.Exit(1)
 	}
+	appEventQueue := appevent.NewAppEventQueue(ictx)
+	appevent.SetAppEventQueue(appEventQueue)
+	go appEventQueue.Run()
 
 	if err = (&controllers.ApplicationManagerController{
 		Client:      mgr.GetClient(),
