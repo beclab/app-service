@@ -73,6 +73,7 @@ var forbidNamespace = []string{
 	"kubesphere-system",
 }
 
+var ErrAppNotFoundInChartRepo = errors.New("app not found in chart repo")
 var ErrProviderNotFound = errors.New("provider not found")
 
 // UpdateAppState update application status state.
@@ -819,7 +820,7 @@ func GetIndexAndDownloadChart(ctx context.Context, options *ConfigOptions) (stri
 	if err != nil {
 		klog.Errorf("Failed to get chart version err=%v app [%s %s]", err, options.App, options.Version)
 		if errors.Is(err, repo.ErrNoChartName) {
-			return "", ErrProviderNotFound
+			return "", ErrAppNotFoundInChartRepo
 		}
 		return "", err
 	}

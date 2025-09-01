@@ -62,7 +62,7 @@ func (c ProviderPermissionsConvertor) ToPermissionCfg(ctx context.Context, owner
 			appCfg, _, err = GetAppConfig(ctx, &o)
 			if err != nil {
 				klog.Errorf("Failed to get app config for %s: %v", p.AppName, err)
-				if errors.Is(err, ErrProviderNotFound) {
+				if errors.Is(err, ErrAppNotFoundInChartRepo) {
 					continue
 				}
 				return nil, err
