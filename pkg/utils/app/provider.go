@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
@@ -55,12 +56,15 @@ func (c ProviderPermissionsConvertor) ToPermissionCfg(ctx context.Context, owner
 				Version:      "",
 				Token:        token,
 				Admin:        owner,
-				MarketSource: "app-service",
+				MarketSource: "market.olares",
 				IsAdmin:      false,
 			}
 			appCfg, _, err = GetAppConfig(ctx, &o)
 			if err != nil {
 				klog.Errorf("Failed to get app config for %s: %v", p.AppName, err)
+				if errors.Is(err, ErrProviderNotFound) {
+					continue
+				}
 				return nil, err
 			}
 
@@ -70,10 +74,13 @@ func (c ProviderPermissionsConvertor) ToPermissionCfg(ctx context.Context, owner
 		pc, err := SysDataPermissionHelper(p).GetPermissionCfg(ctx, appCfg)
 		if err != nil {
 			klog.Errorf("Failed to get permission config for %s: %v", p.AppName, err)
+			if errors.Is(err, ErrProviderNotFound) {
+				continue
+			}
 			return nil, err
 		}
 		cfg = append(cfg, *pc)
-	}
+	} // end of for loop
 
 	return cfg, nil
 }
@@ -98,7 +105,8 @@ func (h SysDataPermissionHelper) GetPermissionCfg(ctx context.Context, appCfg *a
 		}
 	} // end of providers loop
 
-	return nil, fmt.Errorf("provider %s not found in app %s", h.ProviderName, appCfg.AppName)
+	klog.Errorf("provider %s not found in app %s", h.ProviderName, appCfg.AppName)
+	return nil, ErrProviderNotFound
 }
 
 func (p *ProviderHelper) GetEntrance(ctx context.Context) (*v1alpha1.Entrance, error) {

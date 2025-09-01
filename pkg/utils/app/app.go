@@ -73,6 +73,8 @@ var forbidNamespace = []string{
 	"kubesphere-system",
 }
 
+var ErrProviderNotFound = errors.New("provider not found")
+
 // UpdateAppState update application status state.
 func UpdateAppState(ctx context.Context, am *v1alpha1.ApplicationManager, state string) error {
 	client, err := utils.GetClient()
@@ -810,15 +812,19 @@ func GetIndexAndDownloadChart(ctx context.Context, options *ConfigOptions) (stri
 		return "", err
 	}
 
-	klog.Infof("Success to find app chart from index app=%s version=%s", options.App, options.Version)
+	klog.Infof("Success to load chart index from %s", indexFileURL)
 	// get specified version chart, if version is empty return the chart with the latest stable version
 	chartVersion, err := index.Get(options.App, options.Version)
 
 	if err != nil {
-		klog.Errorf("Failed to get chart version err=%v", err)
-		return "", fmt.Errorf("app [%s-%s] not found in repo", options.App, options.Version)
+		klog.Errorf("Failed to get chart version err=%v app [%s %s]", err, options.App, options.Version)
+		if errors.Is(err, repo.ErrNoChartName) {
+			return "", ErrProviderNotFound
+		}
+		return "", err
 	}
 
+	klog.Infof("Success to find app chart from index app=%s version=%s", options.App, options.Version)
 	chartURL, err := repo.ResolveReferenceURL(options.RepoURL, chartVersion.URLs[0])
 	if err != nil {
 		return "", err
