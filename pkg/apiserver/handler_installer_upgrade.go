@@ -323,7 +323,7 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
-	utils.PublishAsync(am.Spec.AppOwner, am.Spec.AppName, string(am.Status.OpType), opID, appv1alpha1.Upgrading.String(), "", nil)
+	utils.PublishAppEvent(am.Spec.AppOwner, am.Spec.AppName, string(am.Status.OpType), opID, appv1alpha1.Upgrading.String(), "", nil)
 
 	resp.WriteEntity(api.InstallationResponse{
 		Response: api.Response{Code: 200},

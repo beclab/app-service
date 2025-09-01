@@ -11,6 +11,7 @@ import (
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/constants"
+	appevent "bytetrade.io/web3os/app-service/pkg/event"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 
 	refdocker "github.com/containerd/containerd/reference/docker"
@@ -213,7 +214,7 @@ func (imc *ImageManagerClient) updateProgress(ctx context.Context, am *appv1alph
 	if *lastProgress != progress {
 		*lastProgress = progress
 
-		utils.PublishAsync(am.Spec.AppOwner, am.Spec.AppName, string(am.Status.OpType), am.Status.OpID, appv1alpha1.Downloading.String(), progressStr, nil)
+		appevent.PublishAppEventToQueue(am.Spec.AppOwner, am.Spec.AppName, string(am.Status.OpType), am.Status.OpID, appv1alpha1.Downloading.String(), progressStr, nil)
 	}
 	klog.Infof("app %s download progress.... %v", am.Spec.AppName, progressStr)
 	if progressStr == "100.00" {

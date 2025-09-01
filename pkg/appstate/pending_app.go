@@ -6,8 +6,8 @@ import (
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/constants"
+	appevent "bytetrade.io/web3os/app-service/pkg/event"
 	"bytetrade.io/web3os/app-service/pkg/helm"
-	"bytetrade.io/web3os/app-service/pkg/utils"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
 	corev1 "k8s.io/api/core/v1"
@@ -96,7 +96,7 @@ func (p *PendingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
 				klog.Error("update app manager status error, ", err, ", ", p.manager.Name)
 				return err
 			}
-			utils.PublishAsync(p.manager.Spec.AppOwner, p.manager.Spec.AppName, string(p.manager.Spec.OpType), p.manager.Status.OpID, appsv1.Downloading.String(), "", nil)
+			appevent.PublishAppEventToQueue(p.manager.Spec.AppOwner, p.manager.Spec.AppName, string(p.manager.Spec.OpType), p.manager.Status.OpID, appsv1.Downloading.String(), "", nil)
 
 			return nil
 		},
