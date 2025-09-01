@@ -164,7 +164,7 @@ func (r *UserController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 				klog.Infof("update user failed %v", updateErr)
 				return ctrl.Result{}, updateErr
 			}
-			utils.PublishUserEventAsync("Delete", user.Name, user.Annotations[users.AnnotationUserDeleter])
+			utils.PublishUserEvent("Delete", user.Name, user.Annotations[users.AnnotationUserDeleter])
 		}
 		return ctrl.Result{}, nil
 	}
@@ -298,7 +298,7 @@ func (r *UserController) handleUserCreation(ctx context.Context, user *iamv1alph
 		klog.Errorf("failed to update user status to Created %v", updateErr)
 	} else {
 		klog.Infof("publish user creation event.....")
-		utils.PublishUserEventAsync("Create", user.Name, user.Annotations[users.AnnotationUserCreator])
+		utils.PublishUserEvent("Create", user.Name, user.Annotations[users.AnnotationUserCreator])
 	}
 	return ctrl.Result{}, updateErr
 }

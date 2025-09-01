@@ -72,7 +72,7 @@ func (b *baseStatefulApp) updateStatus(ctx context.Context, am *appsv1.Applicati
 		klog.Errorf("patch appmgr's  %s status failed %v", am.Name, err)
 		return err
 	}
-	utils.PublishAsync(b.manager.Spec.AppOwner, b.manager.Spec.AppName, string(b.manager.Spec.OpType), b.manager.Status.OpID, state.String(), "", nil)
+	utils.PublishAppEvent(b.manager.Spec.AppOwner, b.manager.Spec.AppName, string(b.manager.Spec.OpType), b.manager.Status.OpID, state.String(), "", nil)
 
 	return nil
 }

@@ -489,7 +489,7 @@ func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opI
 		return
 	}
 
-	utils.PublishAsync(a.Spec.AppOwner, a.Spec.AppName, string(a.Status.OpType), opID, v1alpha1.Pending.String(), "", nil)
+	utils.PublishAppEvent(a.Spec.AppOwner, a.Spec.AppName, string(a.Status.OpType), opID, v1alpha1.Pending.String(), "", nil)
 	return
 }
 

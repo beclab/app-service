@@ -96,7 +96,7 @@ func (p *PendingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
 				klog.Error("update app manager status error, ", err, ", ", p.manager.Name)
 				return err
 			}
-			utils.PublishAsync(p.manager.Spec.AppOwner, p.manager.Spec.AppName, string(p.manager.Spec.OpType), p.manager.Status.OpID, appsv1.Downloading.String(), "", nil)
+			utils.PublishAppEvent(p.manager.Spec.AppOwner, p.manager.Spec.AppName, string(p.manager.Spec.OpType), p.manager.Status.OpID, appsv1.Downloading.String(), "", nil)
 
 			return nil
 		},

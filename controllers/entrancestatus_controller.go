@@ -238,7 +238,7 @@ func (r *EntranceStatusManagerController) updateEntranceStatus(ctx context.Conte
 			return err
 		}
 		if err == nil {
-			utils.PublishAsync(appCopy.Spec.Owner, appCopy.Spec.Name, "", "", am.Status.State.String(), "", appCopy.Status.EntranceStatuses)
+			utils.PublishAppEvent(appCopy.Spec.Owner, appCopy.Spec.Name, "", "", am.Status.State.String(), "", appCopy.Status.EntranceStatuses)
 		}
 	}
 	return nil

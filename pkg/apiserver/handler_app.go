@@ -48,6 +48,10 @@ func (h *Handler) status(req *restful.Request, resp *restful.Response) {
 	var am v1alpha1.ApplicationManager
 	e := h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: name}, &am)
 	if e != nil {
+		if apierrors.IsNotFound(e) {
+			api.HandleNotFound(resp, req, e)
+			return
+		}
 		api.HandleError(resp, req, e)
 		return
 	}

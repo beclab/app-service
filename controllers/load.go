@@ -48,7 +48,7 @@ func LoadStatefulApp(ctx context.Context, appmgr *ApplicationManagerController, 
 									klog.Infof("LoadStatefulApp: force delete application %s successfully", app.Name)
 								}
 								opID := strconv.FormatInt(time.Now().Unix(), 10)
-								utils.PublishAsync(app.Spec.Owner, app.Spec.Name, string(appv1alpha1.UninstallOp), opID, string(appv1alpha1.Uninstalling), "", nil)
+								utils.PublishAppEvent(app.Spec.Owner, app.Spec.Name, string(appv1alpha1.UninstallOp), opID, string(appv1alpha1.Uninstalling), "", nil)
 
 								ticker := time.NewTicker(2 * time.Second)
 								defer ticker.Stop()
@@ -61,7 +61,7 @@ func LoadStatefulApp(ctx context.Context, appmgr *ApplicationManagerController, 
 										err = appmgr.Get(delCtx, types.NamespacedName{Name: app.Spec.Namespace}, &ns)
 										klog.Infof("wait for namespace: %s to be deleted", app.Spec.Namespace)
 										if apierrors.IsNotFound(err) {
-											utils.PublishAsync(app.Spec.Owner, app.Spec.Name, string(appv1alpha1.UninstallOp), opID, string(appv1alpha1.Uninstalled), "", nil)
+											utils.PublishAppEvent(app.Spec.Owner, app.Spec.Name, string(appv1alpha1.UninstallOp), opID, string(appv1alpha1.Uninstalled), "", nil)
 											return
 										}
 									}
