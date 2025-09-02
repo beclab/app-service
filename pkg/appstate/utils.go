@@ -146,6 +146,9 @@ func suspendOrResumeApp(ctx context.Context, cli client.Client, am *appv1alpha1.
 			switch workload := w.(type) {
 			case *appsv1.Deployment:
 				if check(am.Spec.AppName, workload.Name) {
+					if workload.Annotations == nil {
+						workload.Annotations = make(map[string]string)
+					}
 					workload.Annotations[suspendAnnotation] = "app-service"
 					workload.Annotations[suspendCauseAnnotation] = "user operate"
 					workload.Spec.Replicas = &replicas
@@ -153,6 +156,9 @@ func suspendOrResumeApp(ctx context.Context, cli client.Client, am *appv1alpha1.
 				}
 			case *appsv1.StatefulSet:
 				if check(am.Spec.AppName, workload.Name) {
+					if workload.Annotations == nil {
+						workload.Annotations = make(map[string]string)
+					}
 					workload.Annotations[suspendAnnotation] = "app-service"
 					workload.Annotations[suspendCauseAnnotation] = "user operate"
 					workload.Spec.Replicas = &replicas

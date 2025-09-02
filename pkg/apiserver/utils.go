@@ -533,7 +533,7 @@ func FormatDependencyError(deps []appcfg.Dependency) error {
 		}
 	}
 
-	return fmt.Errorf(errMsg.String())
+	return errors.New(errMsg.String())
 }
 
 type ListResult struct {

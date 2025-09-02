@@ -144,7 +144,7 @@ func FormatDependencyError(deps []appcfg.Dependency) error {
 		}
 	}
 
-	return fmt.Errorf(errMsg.String())
+	return errors.New(errMsg.String())
 }
 
 func CheckConflicts(ctx context.Context, conflicts []appcfg.Conflict, owner string) error {
