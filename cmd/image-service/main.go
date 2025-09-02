@@ -40,7 +40,6 @@ func main() {
 	config := ctrl.GetConfigOrDie()
 	mgr, err := ctrl.NewManager(config, ctrl.Options{
 		Scheme:                 scheme,
-		MetricsBindAddress:     ":8087",
 		HealthProbeBindAddress: ":7081",
 		LeaderElection:         false,
 	})
