@@ -6,6 +6,8 @@ import (
 	clientset "bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
 	appv1alpha1 "bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned/typed/app.bytetrade.io/v1alpha1"
 	fakeappv1alpha1 "bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned/typed/app.bytetrade.io/v1alpha1/fake"
+	sysv1alpha1 "bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned/typed/sys.bytetrade.io/v1alpha1"
+	fakesysv1alpha1 "bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned/typed/sys.bytetrade.io/v1alpha1/fake"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"
@@ -66,4 +68,9 @@ var (
 // AppV1alpha1 retrieves the AppV1alpha1Client
 func (c *Clientset) AppV1alpha1() appv1alpha1.AppV1alpha1Interface {
 	return &fakeappv1alpha1.FakeAppV1alpha1{Fake: &c.Fake}
+}
+
+// SysV1alpha1 retrieves the SysV1alpha1Client
+func (c *Clientset) SysV1alpha1() sysv1alpha1.SysV1alpha1Interface {
+	return &fakesysv1alpha1.FakeSysV1alpha1{Fake: &c.Fake}
 }

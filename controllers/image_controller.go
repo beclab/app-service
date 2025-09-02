@@ -47,31 +47,28 @@ func (r *ImageManagerController) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
-	err = c.Watch(
-		&source.Kind{Type: &appv1alpha1.ImageManager{}},
-		handler.EnqueueRequestsFromMapFunc(
-			func(h client.Object) []reconcile.Request {
-				app, ok := h.(*appv1alpha1.ImageManager)
-				if !ok {
-					return nil
-				}
+	err = c.Watch(source.Kind(
+		mgr.GetCache(),
+		&appv1alpha1.ImageManager{},
+		handler.TypedEnqueueRequestsFromMapFunc(
+			func(ctx context.Context, app *appv1alpha1.ImageManager) []reconcile.Request {
 				return []reconcile.Request{{NamespacedName: types.NamespacedName{
 					Name:      app.Name,
 					Namespace: app.Spec.AppOwner,
 				}}}
 			}),
-		predicate.Funcs{
-			CreateFunc: func(e event.CreateEvent) bool {
+		predicate.TypedFuncs[*appv1alpha1.ImageManager]{
+			CreateFunc: func(e event.TypedCreateEvent[*appv1alpha1.ImageManager]) bool {
 				return r.preEnqueueCheckForCreate(e.Object)
 			},
-			UpdateFunc: func(e event.UpdateEvent) bool {
+			UpdateFunc: func(e event.TypedUpdateEvent[*appv1alpha1.ImageManager]) bool {
 				return r.preEnqueueCheckForUpdate(e.ObjectOld, e.ObjectNew)
 			},
-			DeleteFunc: func(e event.DeleteEvent) bool {
+			DeleteFunc: func(e event.TypedDeleteEvent[*appv1alpha1.ImageManager]) bool {
 				return false
 			},
 		},
-	)
+	))
 
 	if err != nil {
 		klog.Errorf("Failed to add watch err=%v", err)

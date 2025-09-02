@@ -62,30 +62,27 @@ func (r *AppImageInfoController) SetupWithManager(mgr ctrl.Manager) error {
 		}
 	}
 
-	err = c.Watch(
-		&source.Kind{Type: &appv1alpha1.AppImage{}},
-		handler.EnqueueRequestsFromMapFunc(
-			func(h client.Object) []reconcile.Request {
-				app, ok := h.(*appv1alpha1.AppImage)
-				if !ok {
-					return nil
-				}
+	err = c.Watch(source.Kind(
+		mgr.GetCache(),
+		&appv1alpha1.AppImage{},
+		handler.TypedEnqueueRequestsFromMapFunc(
+			func(ctx context.Context, app *appv1alpha1.AppImage) []reconcile.Request {
 				return []reconcile.Request{{NamespacedName: types.NamespacedName{
 					Name: app.Name,
 				}}}
 			}),
-		predicate.Funcs{
-			CreateFunc: func(e event.CreateEvent) bool {
+		predicate.TypedFuncs[*appv1alpha1.AppImage]{
+			CreateFunc: func(e event.TypedCreateEvent[*appv1alpha1.AppImage]) bool {
 				return r.preEnqueueCheckForCreate(e.Object)
 			},
-			UpdateFunc: func(e event.UpdateEvent) bool {
+			UpdateFunc: func(e event.TypedUpdateEvent[*appv1alpha1.AppImage]) bool {
 				return r.preEnqueueCheckForUpdate(e.ObjectOld, e.ObjectNew)
 			},
-			DeleteFunc: func(e event.DeleteEvent) bool {
+			DeleteFunc: func(e event.TypedDeleteEvent[*appv1alpha1.AppImage]) bool {
 				return false
 			},
 		},
-	)
+	))
 
 	if err != nil {
 		klog.Errorf("Failed to add watch err=%v", err)
@@ -233,9 +230,6 @@ func parseImageSource(ctx context.Context, name string) (imagetypes.ImageSource,
 		return nil, err
 	}
 	sys := newSystemContext()
-	if err != nil {
-		return nil, err
-	}
 	return ref.NewImageSource(ctx, sys)
 }
 

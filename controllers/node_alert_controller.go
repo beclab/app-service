@@ -67,26 +67,27 @@ func (r *NodeAlertController) SetupWithManager(mgr ctrl.Manager) error {
 		return fmt.Errorf("node-alert-controller setup failed %w", err)
 	}
 
-	err = c.Watch(
-		&source.Kind{Type: &corev1.Node{}},
-		handler.EnqueueRequestsFromMapFunc(
-			func(h client.Object) []reconcile.Request {
+	err = c.Watch(source.Kind(
+		mgr.GetCache(),
+		&corev1.Node{},
+		handler.TypedEnqueueRequestsFromMapFunc(
+			func(ctx context.Context, node *corev1.Node) []reconcile.Request {
 				return []reconcile.Request{{NamespacedName: types.NamespacedName{
-					Name: h.GetName(),
+					Name: node.GetName(),
 				}}}
 			}),
-		predicate.Funcs{
-			CreateFunc: func(e event.CreateEvent) bool {
+		predicate.TypedFuncs[*corev1.Node]{
+			CreateFunc: func(e event.TypedCreateEvent[*corev1.Node]) bool {
 				return true
 			},
-			UpdateFunc: func(e event.UpdateEvent) bool {
+			UpdateFunc: func(e event.TypedUpdateEvent[*corev1.Node]) bool {
 				return true
 			},
-			DeleteFunc: func(e event.DeleteEvent) bool {
+			DeleteFunc: func(e event.TypedDeleteEvent[*corev1.Node]) bool {
 				return false
 			},
 		},
-	)
+	))
 
 	if err != nil {
 		klog.Errorf("node-alert-controller add watch failed %v", err)

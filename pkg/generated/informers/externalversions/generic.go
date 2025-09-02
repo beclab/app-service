@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	v1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	sysbytetradeiov1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	cache "k8s.io/client-go/tools/cache"
 )
@@ -45,6 +46,10 @@ func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource
 		return &genericInformer{resource: resource.GroupResource(), informer: f.App().V1alpha1().ApplicationManagers().Informer()}, nil
 	case v1alpha1.SchemeGroupVersion.WithResource("imagemanagers"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.App().V1alpha1().ImageManagers().Informer()}, nil
+
+		// Group=sys.bytetrade.io, Version=v1alpha1
+	case sysbytetradeiov1alpha1.SchemeGroupVersion.WithResource("terminuses"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Sys().V1alpha1().Terminuses().Informer()}, nil
 
 	}
 

@@ -66,14 +66,15 @@ func (r *SecurityReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Mana
 	}
 
 	// watch the networkpolicy enqueue formarted request
-	err = c.Watch(
-		&source.Kind{Type: &netv1.NetworkPolicy{}},
-		handler.EnqueueRequestsFromMapFunc(
-			func(h client.Object) []reconcile.Request {
+	err = c.Watch(source.Kind(
+		mgr.GetCache(),
+		&netv1.NetworkPolicy{},
+		handler.TypedEnqueueRequestsFromMapFunc(
+			func(ctx context.Context, np *netv1.NetworkPolicy) []reconcile.Request {
 				return []reconcile.Request{{NamespacedName: types.NamespacedName{
-					Name: h.GetNamespace(),
+					Name: np.GetNamespace(),
 				}}}
-			}))
+			})))
 
 	if err != nil {
 		return err
@@ -87,18 +88,19 @@ func (r *SecurityReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Mana
 
 	// watch the object installed by app-installer
 	for _, w := range watches {
-		if err = r.addWatch(ctx, c, w); err != nil {
+		if err = r.addWatch(ctx, c, mgr, w); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (r *SecurityReconciler) addWatch(ctx context.Context, c controller.Controller, watchedObject client.Object) error {
-	return c.Watch(
-		&source.Kind{Type: watchedObject},
+func (r *SecurityReconciler) addWatch(ctx context.Context, c controller.Controller, mgr ctrl.Manager, watchedObject client.Object) error {
+	return c.Watch(source.Kind(
+		mgr.GetCache(),
+		watchedObject,
 		handler.EnqueueRequestsFromMapFunc(
-			func(h client.Object) []reconcile.Request {
+			func(ctx context.Context, h client.Object) []reconcile.Request {
 				if _, ok := h.(*corev1.Node); ok {
 					r.Logger.Info("node event fired, modify network policy to add node tunnel ip")
 					if reqs, err := r.namespacesShouldAllowNodeTunnel(ctx); err == nil {
@@ -127,7 +129,7 @@ func (r *SecurityReconciler) addWatch(ctx context.Context, c controller.Controll
 			DeleteFunc: func(e event.DeleteEvent) bool {
 				return isNodeChanged(e.Object) || isApp(e.Object) || isWorkflow(e.Object)
 			},
-		})
+		}))
 }
 
 // Reconcile implements the reconciliation loop for the SecurityReconciler

@@ -8,7 +8,6 @@ import (
 	v1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
-	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"
 	testing "k8s.io/client-go/testing"
@@ -19,9 +18,9 @@ type FakeApplicationManagers struct {
 	Fake *FakeAppV1alpha1
 }
 
-var applicationmanagersResource = schema.GroupVersionResource{Group: "app.bytetrade.io", Version: "v1alpha1", Resource: "applicationmanagers"}
+var applicationmanagersResource = v1alpha1.SchemeGroupVersion.WithResource("applicationmanagers")
 
-var applicationmanagersKind = schema.GroupVersionKind{Group: "app.bytetrade.io", Version: "v1alpha1", Kind: "ApplicationManager"}
+var applicationmanagersKind = v1alpha1.SchemeGroupVersion.WithKind("ApplicationManager")
 
 // Get takes name of the applicationManager, and returns the corresponding applicationManager object, and an error if there is any.
 func (c *FakeApplicationManagers) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha1.ApplicationManager, err error) {

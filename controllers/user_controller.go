@@ -72,26 +72,27 @@ func (r *UserController) SetupWithManager(mgr ctrl.Manager) error {
 		return fmt.Errorf("user-controller setup failed %w", err)
 	}
 
-	err = c.Watch(
-		&source.Kind{Type: &iamv1alpha2.User{}},
-		handler.EnqueueRequestsFromMapFunc(
-			func(h client.Object) []reconcile.Request {
+	err = c.Watch(source.Kind(
+		mgr.GetCache(),
+		&iamv1alpha2.User{},
+		handler.TypedEnqueueRequestsFromMapFunc(
+			func(ctx context.Context, user *iamv1alpha2.User) []reconcile.Request {
 				return []reconcile.Request{{NamespacedName: types.NamespacedName{
-					Name: h.GetName(),
+					Name: user.GetName(),
 				}}}
 			}),
-		predicate.Funcs{
-			CreateFunc: func(e event.CreateEvent) bool {
-				obj, _ := e.Object.(*iamv1alpha2.User)
+		predicate.TypedFuncs[*iamv1alpha2.User]{
+			CreateFunc: func(e event.TypedCreateEvent[*iamv1alpha2.User]) bool {
+				obj := e.Object
 				if obj.Status.State == "Failed" {
 					return false
 				}
 				klog.Infof("create enque name: %s, state: %s", obj.Name, obj.Status.State)
 				return true
 			},
-			UpdateFunc: func(e event.UpdateEvent) bool {
-				oldObj, _ := e.ObjectOld.(*iamv1alpha2.User)
-				newObj, _ := e.ObjectNew.(*iamv1alpha2.User)
+			UpdateFunc: func(e event.TypedUpdateEvent[*iamv1alpha2.User]) bool {
+				oldObj := e.ObjectOld
+				newObj := e.ObjectNew
 				oldObj.Spec.InitialPassword = newObj.Spec.InitialPassword
 
 				isDeletionUpdate := newObj.DeletionTimestamp != nil
@@ -101,11 +102,11 @@ func (r *UserController) SetupWithManager(mgr ctrl.Manager) error {
 				return shouldReconcile
 				//return true
 			},
-			DeleteFunc: func(e event.DeleteEvent) bool {
+			DeleteFunc: func(e event.TypedDeleteEvent[*iamv1alpha2.User]) bool {
 				return true
 			},
 		},
-	)
+	))
 
 	if err != nil {
 		klog.Errorf("user-controller add watch failed %v", err)
@@ -631,7 +632,7 @@ func (r *UserController) waitForSyncToLLDAP(user *iamv1alpha2.User) error {
 
 					// group does not exist in lldap, so create it
 					if lapierrors.IsNotFound(err) {
-						newGroup, err := r.LLdapClient.Groups().Create(context.TODO(), groupName)
+						newGroup, err := r.LLdapClient.Groups().Create(context.TODO(), groupName, "")
 						if err != nil && !lapierrors.IsAlreadyExists(err) {
 							return false, err
 						}
@@ -688,7 +689,7 @@ func (r *UserController) waitForSyncToLLDAP(user *iamv1alpha2.User) error {
 					if !lapierrors.IsNotFound(err) {
 						return false, err
 					}
-					groupNew, err := r.LLdapClient.Groups().Create(context.TODO(), groupName)
+					groupNew, err := r.LLdapClient.Groups().Create(context.TODO(), groupName, "")
 					if err != nil && !lapierrors.IsAlreadyExists(err) {
 						return false, err
 					}
