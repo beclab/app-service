@@ -81,31 +81,28 @@ func (r *TailScaleACLController) SetUpWithManager(mgr ctrl.Manager) error {
 	if err != nil {
 		return err
 	}
-	err = c.Watch(
-		&source.Kind{Type: &v1alpha1.Application{}},
-		handler.EnqueueRequestsFromMapFunc(
-			func(obj client.Object) []reconcile.Request {
-				app, ok := obj.(*v1alpha1.Application)
-				if !ok {
-					return nil
-				}
+	err = c.Watch(source.Kind(
+		mgr.GetCache(),
+		&v1alpha1.Application{},
+		handler.TypedEnqueueRequestsFromMapFunc(
+			func(ctx context.Context, app *v1alpha1.Application) []reconcile.Request {
 				return []reconcile.Request{{NamespacedName: types.NamespacedName{
 					Name:      app.Name,
 					Namespace: app.Spec.Owner,
 				}}}
 			}),
-		predicate.Funcs{
-			CreateFunc: func(e event.CreateEvent) bool {
+		predicate.TypedFuncs[*v1alpha1.Application]{
+			CreateFunc: func(e event.TypedCreateEvent[*v1alpha1.Application]) bool {
 				return true
 			},
-			UpdateFunc: func(e event.UpdateEvent) bool {
+			UpdateFunc: func(e event.TypedUpdateEvent[*v1alpha1.Application]) bool {
 				return true
 			},
-			DeleteFunc: func(e event.DeleteEvent) bool {
+			DeleteFunc: func(e event.TypedDeleteEvent[*v1alpha1.Application]) bool {
 				return true
 			},
 		},
-	)
+	))
 	if err != nil {
 		return err
 	}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"strings"
 	"time"
 
@@ -211,15 +212,18 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	// watch the application enqueue formarted request
-	err = c.Watch(
-		&source.Kind{Type: &appv1alpha1.Application{}},
-		handler.EnqueueRequestsFromMapFunc(
-			func(h client.Object) []reconcile.Request {
-				app := h.(*appv1alpha1.Application)
+	err = c.Watch(source.Kind(
+		mgr.GetCache(),
+		&appv1alpha1.Application{},
+		handler.TypedEnqueueRequestsFromMapFunc(
+			func(ctx context.Context, app *appv1alpha1.Application) []reconcile.Request {
 				return []reconcile.Request{{NamespacedName: types.NamespacedName{
 					Name:      app.Spec.Name,
-					Namespace: app.Spec.Namespace}}}
-			}))
+					Namespace: app.Spec.Namespace}},
+				}
+			}),
+	))
+
 	if err != nil {
 		return err
 	}
@@ -231,18 +235,19 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	// watch the object installed by app-installer
 	for _, w := range watches {
-		if err = r.addWatch(c, w); err != nil {
+		if err = r.addWatch(c, mgr.GetCache(), w); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (r *ApplicationReconciler) addWatch(c controller.Controller, watchedObject client.Object) error {
-	return c.Watch(
-		&source.Kind{Type: watchedObject},
+func (r *ApplicationReconciler) addWatch(c controller.Controller, cache cache.Cache, watchedObject client.Object) error {
+	return c.Watch(source.Kind(
+		cache,
+		watchedObject,
 		handler.EnqueueRequestsFromMapFunc(
-			func(h client.Object) []reconcile.Request {
+			func(ctx context.Context, h client.Object) []reconcile.Request {
 				appNames := getAppName(h)
 				return []reconcile.Request{{NamespacedName: types.NamespacedName{
 					Name:      strings.Join(appNames, ","),
@@ -258,7 +263,8 @@ func (r *ApplicationReconciler) addWatch(c controller.Controller, watchedObject 
 			DeleteFunc: func(e event.DeleteEvent) bool {
 				return isApp(e.Object)
 			},
-		})
+		},
+	))
 }
 
 // TODO: get application other spec info

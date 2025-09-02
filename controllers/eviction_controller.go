@@ -35,31 +35,28 @@ func (r *EvictionManagerController) SetUpWithManager(mgr ctrl.Manager) error {
 	if err != nil {
 		return err
 	}
-	err = c.Watch(
-		&source.Kind{Type: &corev1.Pod{}},
-		handler.EnqueueRequestsFromMapFunc(
-			func(h client.Object) []reconcile.Request {
-				pod, ok := h.(*corev1.Pod)
-				if !ok {
-					return nil
-				}
+	err = c.Watch(source.Kind(
+		mgr.GetCache(),
+		&corev1.Pod{},
+		handler.TypedEnqueueRequestsFromMapFunc(
+			func(ctx context.Context, pod *corev1.Pod) []reconcile.Request {
 				return []reconcile.Request{{NamespacedName: types.NamespacedName{
 					Name:      pod.Name,
 					Namespace: pod.Namespace,
 				}}}
 			}),
-		predicate.Funcs{
-			CreateFunc: func(e event.CreateEvent) bool {
+		predicate.TypedFuncs[*corev1.Pod]{
+			CreateFunc: func(e event.TypedCreateEvent[*corev1.Pod]) bool {
 				return true
 			},
-			UpdateFunc: func(e event.UpdateEvent) bool {
+			UpdateFunc: func(e event.TypedUpdateEvent[*corev1.Pod]) bool {
 				return true
 			},
-			DeleteFunc: func(e event.DeleteEvent) bool {
+			DeleteFunc: func(e event.TypedDeleteEvent[*corev1.Pod]) bool {
 				return false
 			},
 		},
-	)
+	))
 	if err != nil {
 		klog.Errorf("entrance-status-manager-controller failed to watch err=%v", err)
 		return err

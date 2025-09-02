@@ -8,7 +8,6 @@ import (
 	v1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
-	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"
 	testing "k8s.io/client-go/testing"
@@ -19,9 +18,9 @@ type FakeImageManagers struct {
 	Fake *FakeAppV1alpha1
 }
 
-var imagemanagersResource = schema.GroupVersionResource{Group: "app.bytetrade.io", Version: "v1alpha1", Resource: "imagemanagers"}
+var imagemanagersResource = v1alpha1.SchemeGroupVersion.WithResource("imagemanagers")
 
-var imagemanagersKind = schema.GroupVersionKind{Group: "app.bytetrade.io", Version: "v1alpha1", Kind: "ImageManager"}
+var imagemanagersKind = v1alpha1.SchemeGroupVersion.WithKind("ImageManager")
 
 // Get takes name of the imageManager, and returns the corresponding imageManager object, and an error if there is any.
 func (c *FakeImageManagers) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha1.ImageManager, err error) {

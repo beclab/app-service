@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned/typed/app.bytetrade.io/v1alpha1"
+	sysv1alpha1 "bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned/typed/sys.bytetrade.io/v1alpha1"
 	discovery "k8s.io/client-go/discovery"
 	rest "k8s.io/client-go/rest"
 	flowcontrol "k8s.io/client-go/util/flowcontrol"
@@ -15,17 +16,24 @@ import (
 type Interface interface {
 	Discovery() discovery.DiscoveryInterface
 	AppV1alpha1() appv1alpha1.AppV1alpha1Interface
+	SysV1alpha1() sysv1alpha1.SysV1alpha1Interface
 }
 
 // Clientset contains the clients for groups.
 type Clientset struct {
 	*discovery.DiscoveryClient
 	appV1alpha1 *appv1alpha1.AppV1alpha1Client
+	sysV1alpha1 *sysv1alpha1.SysV1alpha1Client
 }
 
 // AppV1alpha1 retrieves the AppV1alpha1Client
 func (c *Clientset) AppV1alpha1() appv1alpha1.AppV1alpha1Interface {
 	return c.appV1alpha1
+}
+
+// SysV1alpha1 retrieves the SysV1alpha1Client
+func (c *Clientset) SysV1alpha1() sysv1alpha1.SysV1alpha1Interface {
+	return c.sysV1alpha1
 }
 
 // Discovery retrieves the DiscoveryClient
@@ -76,6 +84,10 @@ func NewForConfigAndClient(c *rest.Config, httpClient *http.Client) (*Clientset,
 	if err != nil {
 		return nil, err
 	}
+	cs.sysV1alpha1, err = sysv1alpha1.NewForConfigAndClient(&configShallowCopy, httpClient)
+	if err != nil {
+		return nil, err
+	}
 
 	cs.DiscoveryClient, err = discovery.NewDiscoveryClientForConfigAndClient(&configShallowCopy, httpClient)
 	if err != nil {
@@ -98,6 +110,7 @@ func NewForConfigOrDie(c *rest.Config) *Clientset {
 func New(c rest.Interface) *Clientset {
 	var cs Clientset
 	cs.appV1alpha1 = appv1alpha1.New(c)
+	cs.sysV1alpha1 = sysv1alpha1.New(c)
 
 	cs.DiscoveryClient = discovery.NewDiscoveryClient(c)
 	return &cs

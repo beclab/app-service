@@ -41,26 +41,27 @@ func (r *ApplicationManagerController) SetupWithManager(mgr ctrl.Manager) error 
 		return fmt.Errorf("app manager setup failed %w", err)
 	}
 
-	err = c.Watch(
-		&source.Kind{Type: &appv1alpha1.ApplicationManager{}},
-		handler.EnqueueRequestsFromMapFunc(
-			func(h client.Object) []reconcile.Request {
+	err = c.Watch(source.Kind(
+		mgr.GetCache(),
+		&appv1alpha1.ApplicationManager{},
+		handler.TypedEnqueueRequestsFromMapFunc(
+			func(ctx context.Context, h *appv1alpha1.ApplicationManager) []reconcile.Request {
 				return []reconcile.Request{{NamespacedName: types.NamespacedName{
 					Name: h.GetName(),
 				}}}
 			}),
-		predicate.Funcs{
-			CreateFunc: func(e event.CreateEvent) bool {
+		predicate.TypedFuncs[*appv1alpha1.ApplicationManager]{
+			CreateFunc: func(e event.TypedCreateEvent[*appv1alpha1.ApplicationManager]) bool {
 				return r.preEnqueueCheckForCreate(e.Object)
 			},
-			UpdateFunc: func(e event.UpdateEvent) bool {
+			UpdateFunc: func(e event.TypedUpdateEvent[*appv1alpha1.ApplicationManager]) bool {
 				return r.preEnqueueCheckForUpdate(e.ObjectOld, e.ObjectNew)
 			},
-			DeleteFunc: func(e event.DeleteEvent) bool {
+			DeleteFunc: func(e event.TypedDeleteEvent[*appv1alpha1.ApplicationManager]) bool {
 				return true
 			},
 		},
-	)
+	))
 
 	if err != nil {
 		return fmt.Errorf("add watch failed %w", err)
