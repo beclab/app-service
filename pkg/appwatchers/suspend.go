@@ -163,11 +163,17 @@ func suspendApp(ctx context.Context, cli client.Client, namespace string) error 
 			workloadName := ""
 			switch workload := w.(type) {
 			case *appsv1.Deployment:
+				if workload.Annotations == nil {
+					workload.Annotations = make(map[string]string)
+				}
 				workload.Annotations[suspendAnnotation] = "app-service"
 				workload.Annotations[suspendCauseAnnotation] = "system high load"
 				workload.Spec.Replicas = &zeroReplica
 				workloadName = workload.Namespace + "/" + workload.Name
 			case *appsv1.StatefulSet:
+				if workload.Annotations == nil {
+					workload.Annotations = make(map[string]string)
+				}
 				workload.Annotations[suspendAnnotation] = "app-service"
 				workload.Annotations[suspendCauseAnnotation] = "system high load"
 				workload.Spec.Replicas = &zeroReplica
