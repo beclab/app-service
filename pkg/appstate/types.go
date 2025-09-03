@@ -102,7 +102,7 @@ func (p *baseStatefulApp) forceDeleteApp(ctx context.Context) error {
 		klog.Errorf("get kube config failed %v", err)
 		return err
 	}
-	ops, err := versioned.NewHelmOps(ctx, kubeConfig, appCfg, token, appinstaller.Opt{})
+	ops, err := versioned.NewHelmOps(ctx, kubeConfig, appCfg, token, appinstaller.Opt{MarketSource: p.manager.GetMarketSource()})
 	if err != nil {
 		klog.Errorf("make helm ops failed %v", err)
 		return err

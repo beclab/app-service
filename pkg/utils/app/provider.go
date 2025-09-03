@@ -21,7 +21,7 @@ type ProviderHelper struct {
 	appCfg *appcfg.ApplicationConfig
 }
 
-func (c ProviderPermissionsConvertor) ToPermissionCfg(ctx context.Context, owner string) (cfg []appcfg.PermissionCfg, err error) {
+func (c ProviderPermissionsConvertor) ToPermissionCfg(ctx context.Context, owner string, marksetSrouce string) (cfg []appcfg.PermissionCfg, err error) {
 	if len(c) == 0 {
 		return nil, nil
 	}
@@ -46,26 +46,43 @@ func (c ProviderPermissionsConvertor) ToPermissionCfg(ctx context.Context, owner
 
 	appCfgMap := make(map[string]*appcfg.ApplicationConfig)
 
+	const defaultMarketSource = "market.olares"
+	var marketSources []string
+	if marksetSrouce != "" && marksetSrouce != defaultMarketSource {
+		marketSources = append(marketSources, marksetSrouce)
+	}
+	marketSources = append(marketSources, defaultMarketSource)
+	klog.Info("try to find provider from market source, ", marketSources)
 	for _, p := range c {
 		appCfg, ok := appCfgMap[p.AppName]
 		if !ok {
-			o := ConfigOptions{
-				App:          p.AppName,
-				RepoURL:      constants.CHART_REPO_URL,
-				Owner:        owner,
-				Version:      "",
-				Token:        token,
-				Admin:        owner,
-				MarketSource: "market.olares",
-				IsAdmin:      false,
-			}
-			appCfg, _, err = GetAppConfig(ctx, &o)
-			if err != nil {
-				klog.Errorf("Failed to get app config for %s: %v", p.AppName, err)
-				if errors.Is(err, ErrAppNotFoundInChartRepo) {
-					continue
+			for _, m := range marketSources {
+				o := ConfigOptions{
+					App:          p.AppName,
+					RepoURL:      constants.CHART_REPO_URL,
+					Owner:        owner,
+					Version:      "",
+					Token:        token,
+					Admin:        owner,
+					MarketSource: m,
+					IsAdmin:      false,
 				}
-				return nil, err
+				appCfg, _, err = GetAppConfig(ctx, &o)
+				if err != nil {
+					klog.Errorf("Failed to get app config for %s: %v", p.AppName, err)
+					if errors.Is(err, ErrAppNotFoundInChartRepo) {
+						continue
+					}
+					return nil, err
+				}
+
+				if appCfg != nil {
+					break
+				}
+			}
+
+			if appCfg == nil {
+				continue
 			}
 
 			appCfgMap[p.AppName] = appCfg

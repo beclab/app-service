@@ -86,7 +86,7 @@ func (h *HelmOps) SetValues() (values map[string]interface{}, err error) {
 			}
 
 		case []appcfg.ProviderPermission:
-			permCfgs, err := apputils.ProviderPermissionsConvertor(perm).ToPermissionCfg(h.ctx, h.app.OwnerName)
+			permCfgs, err := apputils.ProviderPermissionsConvertor(perm).ToPermissionCfg(h.ctx, h.app.OwnerName, h.options.MarketSource)
 			if err != nil {
 				klog.Errorf("Failed to convert app permissions for %s: %v", h.app.AppName, err)
 				return values, err
