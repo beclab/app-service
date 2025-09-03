@@ -8,6 +8,10 @@ import (
 
 // Interface provides access to all the informers in this group version.
 type Interface interface {
+	// AppEnvs returns a AppEnvInformer.
+	AppEnvs() AppEnvInformer
+	// SystemEnvs returns a SystemEnvInformer.
+	SystemEnvs() SystemEnvInformer
 	// Terminuses returns a TerminusInformer.
 	Terminuses() TerminusInformer
 }
@@ -21,6 +25,16 @@ type version struct {
 // New returns a new Interface.
 func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakListOptions internalinterfaces.TweakListOptionsFunc) Interface {
 	return &version{factory: f, namespace: namespace, tweakListOptions: tweakListOptions}
+}
+
+// AppEnvs returns a AppEnvInformer.
+func (v *version) AppEnvs() AppEnvInformer {
+	return &appEnvInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+}
+
+// SystemEnvs returns a SystemEnvInformer.
+func (v *version) SystemEnvs() SystemEnvInformer {
+	return &systemEnvInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }
 
 // Terminuses returns a TerminusInformer.

@@ -95,6 +95,14 @@ const (
 	OIDCSecret = "oidc-secret"
 
 	AppMarketSourceKey = "bytetrade.io/market-source"
+
+	SystemEnvRefStatusPending  = "pending"
+	SystemEnvRefStatusSynced   = "synced"
+	SystemEnvRefStatusNotFound = "notfound"
+
+	OlaresEnvHelmValuesKey = "olaresEnv"
+	SystemEnvHelmValuesKey = "system"
+	AppEnvHelmValuesKey    = "app"
 )
 
 var (

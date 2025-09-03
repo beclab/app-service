@@ -2,6 +2,18 @@
 
 package v1alpha1
 
+// AppEnvListerExpansion allows custom methods to be added to
+// AppEnvLister.
+type AppEnvListerExpansion interface{}
+
+// AppEnvNamespaceListerExpansion allows custom methods to be added to
+// AppEnvNamespaceLister.
+type AppEnvNamespaceListerExpansion interface{}
+
+// SystemEnvListerExpansion allows custom methods to be added to
+// SystemEnvLister.
+type SystemEnvListerExpansion interface{}
+
 // TerminusListerExpansion allows custom methods to be added to
 // TerminusLister.
 type TerminusListerExpansion interface{}

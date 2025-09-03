@@ -468,3 +468,23 @@ func CheckMiddlewareRequirement(ctx context.Context, kubeConfig *rest.Config, mi
 	}
 	return true, nil
 }
+
+func CheckAppEnvironmentConfig(appConfig *appcfg.ApplicationConfig) error {
+	if appConfig == nil || appConfig.Environment == nil {
+		return nil
+	}
+	// todo: should we check the existence of referenced system envs?
+	for _, env := range appConfig.Environment.Envs {
+		if env.Required && env.Value == "" && env.Default == "" {
+			return fmt.Errorf("app env '%s' is required", env.Name)
+		}
+		effectiveValue := env.Value
+		if effectiveValue == "" {
+			effectiveValue = env.Default
+		}
+		if err := utils.CheckEnvValueByType(effectiveValue, env.Type); err != nil {
+			return fmt.Errorf("app env '%s' is invalid: %v", env.Name, err)
+		}
+	}
+	return nil
+}

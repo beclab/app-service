@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -27,6 +28,7 @@ type upgradeHelperIntf interface {
 	getAdminUsers() (admin []string, isAdmin bool, err error)
 	getAppConfig(prevCfg *appcfg.ApplicationConfig, adminUsers []string, marketSource string, isAdmin bool) (err error)
 	validate() error
+	applyAppEnv(ctx context.Context) error
 	encodingAppCofnig() (string, error)
 }
 
@@ -129,6 +131,14 @@ func (h *upgradeHandlerHelper) encodingAppCofnig() (string, error) {
 		return "", err
 	}
 	return string(encoding), nil
+}
+
+func (h *upgradeHandlerHelper) applyAppEnv(ctx context.Context) (err error) {
+	_, err = apputils.ApplyAppEnv(ctx, h.h.ctrlClient, h.appConfig)
+	if err != nil {
+		api.HandleError(h.resp, h.req, err)
+	}
+	return
 }
 
 func (h *upgradeHandlerHelperV2) getAppConfig(prevCfg *appcfg.ApplicationConfig, adminUsers []string, marketSource string, isAdmin bool) (err error) {
@@ -284,6 +294,12 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 	err = helper.validate()
 	if err != nil {
 		klog.Errorf("Failed to validate app config err=%v", err)
+		return
+	}
+
+	err = helper.applyAppEnv(req.Request.Context())
+	if err != nil {
+		klog.Errorf("Failed to apply app env err=%v", err)
 		return
 	}
 

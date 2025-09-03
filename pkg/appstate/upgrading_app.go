@@ -82,9 +82,10 @@ func (p *UpgradingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) 
 						updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.UpgradeFailed, opRecord, err.Error())
 						if updateErr != nil {
 							klog.Errorf("update appmgr state to upgradeFailed state failed %v", updateErr)
-							return
 						}
-
+						if err := p.markEnvApplied(context.Background()); err != nil {
+							klog.Errorf("mark appenv as applied failed %v", err)
+						}
 					}
 					return
 				}

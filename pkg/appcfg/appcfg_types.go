@@ -1,6 +1,7 @@
 package appcfg
 
 import (
+	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
 	"fmt"
 	"path/filepath"
 
@@ -29,6 +30,7 @@ type AppConfiguration struct {
 	Entrances     []v1alpha1.Entrance    `yaml:"entrances" json:"entrances"`
 	Ports         []v1alpha1.ServicePort `yaml:"ports" json:"ports"`
 	TailScale     v1alpha1.TailScale     `yaml:"tailscale" json:"tailscale"`
+	Environment   *EnvironmentConfig     `yaml:"environment" json:"environment"`
 	Spec          AppSpec                `yaml:"spec" json:"spec"`
 	Permission    Permission             `yaml:"permission" json:"permission" description:"app permission request"`
 	Middleware    *tapr.Middleware       `yaml:"middleware" json:"middleware" description:"app middleware request"`
@@ -166,4 +168,18 @@ func (c *Chart) Namespace(owner string) string {
 
 func (c *Chart) ChartPath(appName string) string {
 	return AppChartPath(filepath.Join(appName, c.Name))
+}
+
+type EnvironmentConfig struct {
+	SystemEnvs []SystemEnvConfig `yaml:"systemEnvs,omitempty" json:"systemEnvs,omitempty"`
+	Envs       []EnvVarConfig    `yaml:"envs,omitempty" json:"envs,omitempty"`
+}
+
+type SystemEnvConfig struct {
+	Name          string `yaml:"name" json:"name"`
+	ApplyOnChange bool   `yaml:"applyOnChange" json:"applyOnChange"`
+}
+
+type EnvVarConfig struct {
+	sysv1alpha1.AppEnvVar `json:",inline" yaml:",inline"`
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	corev1 "k8s.io/api/core/v1"
 	"net"
 	"net/http"
 	"net/netip"
@@ -11,6 +12,9 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
@@ -185,6 +189,112 @@ func UpdateAppMgrStatus(name string, status v1alpha1.ApplicationManagerStatus) (
 	})
 
 	return appMgr, err
+}
+
+// ApplyAppEnv applies the environment variable configuration of the app:
+// if no existing AppEnv is found for the app, the AppEnv is created
+// if existing AppEnv is found for the app, any new configured env is added to the AppEnv
+func ApplyAppEnv(ctx context.Context, c client.Client, appConfig *appcfg.ApplicationConfig) (*sysv1alpha1.AppEnv, error) {
+	if appConfig == nil {
+		return nil, fmt.Errorf("app config is nil")
+	}
+
+	if appConfig.Environment == nil {
+		klog.Infof("No environment found for app: %s owner: %s, skip app env apply", appConfig.AppName, appConfig.OwnerName)
+		return nil, nil
+	}
+
+	var desiredSystemEnvs []sysv1alpha1.SystemEnvRef
+	var desiredAppEnvs []sysv1alpha1.AppEnvVar
+	for _, se := range appConfig.Environment.SystemEnvs {
+		desiredSystemEnvs = append(desiredSystemEnvs, sysv1alpha1.SystemEnvRef{
+			Name:          se.Name,
+			ApplyOnChange: se.ApplyOnChange,
+			Status:        constants.SystemEnvRefStatusPending,
+		})
+	}
+	for _, e := range appConfig.Environment.Envs {
+		desiredAppEnvs = append(desiredAppEnvs, sysv1alpha1.AppEnvVar{
+			Name:          e.Name,
+			Default:       e.Default,
+			Editable:      e.Editable,
+			Type:          e.Type,
+			Required:      e.Required,
+			ApplyOnChange: e.ApplyOnChange,
+			Description:   e.Description,
+		})
+	}
+
+	appEnv := new(sysv1alpha1.AppEnv)
+	appEnv.SetName(FormatAppEnvName(appConfig.AppName, appConfig.OwnerName))
+	appEnv.SetNamespace(appConfig.Namespace)
+	if err := c.Get(ctx, client.ObjectKeyFromObject(appEnv), appEnv); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return nil, err
+		}
+		klog.Infof("no existing app env found for app: %s owner: %s, create new app env", appConfig.AppName, appConfig.OwnerName)
+		appNS := new(corev1.Namespace)
+		appNS.SetName(appConfig.Namespace)
+		err = c.Create(ctx, appNS)
+		if err != nil && !apierrors.IsAlreadyExists(err) {
+			return nil, err
+		}
+		newAppEnv := &sysv1alpha1.AppEnv{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      appEnv.GetName(),
+				Namespace: appEnv.GetNamespace(),
+			},
+			Spec: sysv1alpha1.AppEnvSpec{
+				AppName:    appConfig.AppName,
+				AppOwner:   appConfig.OwnerName,
+				SystemEnvs: desiredSystemEnvs,
+				Envs:       desiredAppEnvs,
+			},
+		}
+		if err := c.Create(ctx, newAppEnv); err != nil {
+			return nil, err
+		}
+		return newAppEnv, nil
+	}
+
+	original := appEnv.DeepCopy()
+	updated := false
+
+	if len(desiredSystemEnvs) > 0 {
+		existingSys := make(map[string]struct{}, len(appEnv.Spec.SystemEnvs))
+		for _, s := range appEnv.Spec.SystemEnvs {
+			existingSys[s.Name] = struct{}{}
+		}
+		for _, s := range desiredSystemEnvs {
+			if _, ok := existingSys[s.Name]; !ok {
+				appEnv.Spec.SystemEnvs = append(appEnv.Spec.SystemEnvs, s)
+				updated = true
+			}
+		}
+	}
+
+	if len(desiredAppEnvs) > 0 {
+		existingEnvs := make(map[string]struct{}, len(appEnv.Spec.Envs))
+		for _, e := range appEnv.Spec.Envs {
+			existingEnvs[e.Name] = struct{}{}
+		}
+		for _, e := range desiredAppEnvs {
+			if _, ok := existingEnvs[e.Name]; !ok {
+				appEnv.Spec.Envs = append(appEnv.Spec.Envs, e)
+				updated = true
+			}
+		}
+	}
+
+	if !updated {
+		return appEnv, nil
+	}
+
+	if err := c.Patch(ctx, appEnv, client.MergeFrom(original)); err != nil {
+		return nil, err
+	}
+	klog.Infof("patched app env for app: %s, owner: %s", appConfig.AppName, appConfig.OwnerName)
+	return appEnv, nil
 }
 
 // GetDeployedReleaseVersion check whether app has been deployed and return release chart version
@@ -756,6 +866,7 @@ func toApplicationConfig(app, chart string, cfg *appcfg.AppConfiguration) (*appc
 		SubCharts:            cfg.Spec.SubCharts,
 		ServiceAccountName:   cfg.Permission.ServiceAccount,
 		Provider:             cfg.Provider,
+		Environment:          cfg.Environment,
 	}, chart, nil
 }
 
@@ -951,4 +1062,8 @@ func FormatCacheDirs(dirs []string) []string {
 		ret = append(ret, formatCacheDir(dir))
 	}
 	return ret
+}
+
+func FormatAppEnvName(appName, appowner string) string {
+	return fmt.Sprintf("%s-%s", appName, appowner)
 }

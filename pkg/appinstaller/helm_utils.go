@@ -3,6 +3,7 @@ package appinstaller
 import (
 	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"os"
 	"path/filepath"
 
@@ -248,6 +249,11 @@ func (h *HelmOps) SetValues() (values map[string]interface{}, err error) {
 		return values, err
 	}
 	values["sysVersion"] = terminus.Spec.Version
+	if err := h.addEnvironmentVariables(values); err != nil {
+		klog.Errorf("Failed to add environment variables: %v", err)
+		return values, err
+	}
+
 	return values, err
 }
 
@@ -281,4 +287,37 @@ func (h *HelmOps) getInstalledApps(ctx context.Context) (installed bool, app []*
 	}
 
 	return
+}
+
+func (h *HelmOps) addEnvironmentVariables(values map[string]interface{}) error {
+	appEnv, err := h.client.AppClient.SysV1alpha1().AppEnvs(h.app.Namespace).Get(h.ctx, apputils.FormatAppEnvName(h.app.AppName, h.app.OwnerName), metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	envValues := make(map[string]interface{})
+
+	systemEnvs := make(map[string]interface{})
+	for _, sysEnv := range appEnv.Spec.SystemEnvs {
+		systemEnvs[sysEnv.Name] = sysEnv.Value
+	}
+	envValues[constants.SystemEnvHelmValuesKey] = systemEnvs
+
+	appEnvs := make(map[string]interface{})
+	for _, env := range appEnv.Spec.Envs {
+		value := env.Value
+		if value == "" && env.Default != "" {
+			value = env.Default
+		}
+		appEnvs[env.Name] = value
+	}
+	envValues[constants.AppEnvHelmValuesKey] = appEnvs
+
+	values[constants.OlaresEnvHelmValuesKey] = envValues
+	klog.Infof("Added environment variables to Helm values: %+v", envValues)
+
+	return nil
 }

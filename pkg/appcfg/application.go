@@ -88,6 +88,7 @@ type ApplicationConfig struct {
 	SubCharts            []Chart
 	ServiceAccountName   *string
 	Provider             []Provider
+	Environment          *EnvironmentConfig
 }
 
 func (c *ApplicationConfig) IsV2() bool {

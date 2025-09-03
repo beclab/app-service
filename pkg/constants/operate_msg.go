@@ -12,6 +12,8 @@ const (
 	UninstallOperationCompletedTpl = "Successfully uninstalled %s: %s"
 	// UpgradeOperationCompletedTpl is for successful upgrade operation.
 	UpgradeOperationCompletedTpl = "Successfully upgraded %s: %s"
+	// ApplyEnvOperationCompletedTpl is for successful upgrade operation.
+	ApplyEnvOperationCompletedTpl = "Successfully applied env to %s: %s"
 	// StopOperationCompletedTpl is for suspend operation.
 	StopOperationCompletedTpl = "%s stopped."
 

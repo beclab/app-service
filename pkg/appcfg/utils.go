@@ -178,5 +178,6 @@ func getAppConfigFromConfigurationFile(app, chart, owner string) (*ApplicationCo
 		AllowedOutboundPorts: cfg.Options.AllowedOutboundPorts,
 		RequiredGPU:          cfg.Spec.RequiredGPU,
 		Internal:             cfg.Spec.RunAsInternal,
+		Environment:          cfg.Environment,
 	}, nil
 }

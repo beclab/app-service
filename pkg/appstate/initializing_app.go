@@ -105,6 +105,9 @@ func (p *InitializingApp) Exec(ctx context.Context) (StatefulInProgressApp, erro
 					if p.manager.Spec.OpType == appsv1.UpgradeOp {
 						message = fmt.Sprintf(constants.UpgradeOperationCompletedTpl, p.manager.Spec.Type.String(), p.manager.Spec.AppName)
 					}
+					if p.manager.Spec.OpType == appsv1.ApplyEnvOp {
+						message = fmt.Sprintf(constants.ApplyEnvOperationCompletedTpl, p.manager.Spec.Type.String(), p.manager.Spec.AppName)
+					}
 					opRecord := makeRecord(p.manager, appsv1.Running, message)
 					updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.Running, opRecord, appsv1.Running.String())
 					if updateErr != nil {

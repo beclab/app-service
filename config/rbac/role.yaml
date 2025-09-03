@@ -7,6 +7,14 @@ rules:
 - apiGroups:
   - app.bytetrade.io
   resources:
+  - applicationmanagers/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - app.bytetrade.io
+  resources:
   - applications
   verbs:
   - create
@@ -26,6 +34,46 @@ rules:
   - app.bytetrade.io
   resources:
   - applications/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - sys.bytetrade.io
+  resources:
+  - appenvs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - sys.bytetrade.io
+  resources:
+  - appenvs/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - sys.bytetrade.io
+  resources:
+  - systemenvs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - sys.bytetrade.io
+  resources:
+  - systemenvs/status
   verbs:
   - get
   - patch
