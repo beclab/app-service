@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"k8s.io/klog/v2"
@@ -48,6 +49,10 @@ func (a *ApplicationManager) SetAppConfig(appConfig any) error {
 	a.Spec.Config = string(configBytes)
 
 	return nil
+}
+
+func (a *ApplicationManager) GetMarketSource() string {
+	return a.Annotations[constants.AppMarketSourceKey]
 }
 
 type AppName string

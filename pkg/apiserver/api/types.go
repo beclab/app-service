@@ -1,10 +1,12 @@
 package api
 
+import "bytetrade.io/web3os/app-service/pkg/constants"
+
 const (
 	AppTokenKey         = "bytetrade.io/token"
 	AppRepoURLKey       = "bytetrade.io/repo-url"
 	AppVersionKey       = "bytetrade.io/chart-version"
-	AppMarketSourceKey  = "bytetrade.io/market-source"
+	AppMarketSourceKey  = constants.AppMarketSourceKey
 	AppInstallSourceKey = "bytetrade.io/install-source"
 	AppUninstallAllKey  = "bytetrade.io/uninstall-all"
 	AppImagesKey        = "bytetrade.io/images"

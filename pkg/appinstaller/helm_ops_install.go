@@ -71,7 +71,8 @@ type HelmOpsInterface interface {
 
 // Opt options for helm ops.
 type Opt struct {
-	Source string
+	Source       string
+	MarketSource string
 }
 
 var _ HelmOpsInterface = &HelmOps{}

@@ -24,6 +24,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/utils/registry"
 	"bytetrade.io/web3os/app-service/pkg/webhook"
 
+	appcfg_mod "bytetrade.io/web3os/app-service/pkg/appcfg"
 	wfv1alpha1 "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
 	iamv1alpha2 "github.com/beclab/api/iam/v1alpha2"
 	"github.com/containerd/containerd/reference/docker"
@@ -108,9 +109,13 @@ func (h *Handler) mutate(ctx context.Context, req *admissionv1.AdmissionRequest,
 		klog.Errorf("Pod with uid=%s namespace=%s has HostNetwork enabled, that's DENIED", proxyUUID, req.Namespace)
 		return h.sidecarWebhook.AdmissionError(req.UID, errors.New("HostNetwork Enabled Unsupported"))
 	}
-	var injectPolicy, injectWs, injectUpload bool
-	var perms []appcfg.ProviderPermission
-	if injectPolicy, injectWs, injectUpload, perms, err = h.sidecarWebhook.MustInject(ctx, &pod, req.Namespace); err != nil {
+	var (
+		injectPolicy, injectWs, injectUpload bool
+		appMgr                               *v1alpha1.ApplicationManager
+		appCfg                               *appcfg_mod.ApplicationConfig
+		perms                                []appcfg.ProviderPermission
+	)
+	if injectPolicy, injectWs, injectUpload, perms, appCfg, appMgr, err = h.sidecarWebhook.MustInject(ctx, &pod, req.Namespace); err != nil {
 		return h.sidecarWebhook.AdmissionError(req.UID, err)
 	}
 	klog.Infof("injectPolicy=%v, injectWs=%v, injectUpload=%v, perms=%v", injectPolicy, injectWs, injectUpload, perms)
@@ -119,7 +124,7 @@ func (h *Handler) mutate(ctx context.Context, req *admissionv1.AdmissionRequest,
 		return resp
 	}
 
-	patchBytes, err := h.sidecarWebhook.CreatePatch(ctx, &pod, req, proxyUUID, injectPolicy, injectWs, injectUpload, perms)
+	patchBytes, err := h.sidecarWebhook.CreatePatch(ctx, &pod, req, proxyUUID, injectPolicy, injectWs, injectUpload, appMgr, appCfg, perms)
 	if err != nil {
 		klog.Errorf("Failed to create patch for pod uuid=%s name=%s namespace=%s err=%v", proxyUUID, pod.Name, req.Namespace, err)
 		return h.sidecarWebhook.AdmissionError(req.UID, err)
@@ -279,7 +284,12 @@ func (h *Handler) gpuLimitMutate(ctx context.Context, req *admissionv1.Admission
 		UID:     req.UID,
 	}
 
-	appcfg, _ := h.sidecarWebhook.GetAppConfig(req.Namespace)
+	_, appcfg, err := h.sidecarWebhook.GetAppConfig(req.Namespace)
+	if err != nil {
+		klog.Error(err)
+		return resp
+	}
+
 	if appcfg == nil {
 		klog.Error("get appcfg is empty")
 		return resp
@@ -709,7 +719,7 @@ func (h *Handler) appLabelMutate(ctx context.Context, req *admissionv1.Admission
 		UID:     req.UID,
 	}
 
-	appCfg, _ := h.sidecarWebhook.GetAppConfig(req.Namespace)
+	_, appCfg, _ := h.sidecarWebhook.GetAppConfig(req.Namespace)
 	if appCfg == nil {
 		klog.Error("get appcfg is empty")
 		return resp

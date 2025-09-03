@@ -93,6 +93,8 @@ const (
 	UserAppDataDirKey = "appcache_hostpath"
 
 	OIDCSecret = "oidc-secret"
+
+	AppMarketSourceKey = "bytetrade.io/market-source"
 )
 
 var (
