@@ -88,7 +88,7 @@ func (h *Handler) resume(req *restful.Request, resp *restful.Response) {
 		return
 	}
 	if !appstate.IsOperationAllowed(am.Status.State, v1alpha1.ResumeOp) {
-		api.HandleBadRequest(resp, req, fmt.Errorf("%s operation is not allowed for %s state", v1alpha1.UpgradeOp, am.Status.State))
+		api.HandleBadRequest(resp, req, fmt.Errorf("%s operation is not allowed for %s state", v1alpha1.ResumeOp, am.Status.State))
 		return
 	}
 
