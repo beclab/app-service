@@ -219,10 +219,10 @@ func (wh *Webhook) AdmissionError(uid types.UID, err error) *admissionv1.Admissi
 
 // MustInject checks which inject operation should do for a pod.
 func (wh *Webhook) MustInject(ctx context.Context, pod *corev1.Pod, namespace string) (
-	injectPolicy, injectWs, injectUpload bool, perm []appcfg.ProviderPermission,
+	injectPolicy, injectWs, injectUpload bool, perms []appcfg.ProviderPermission,
 	appCfg *appcfg_mod.ApplicationConfig, appMgr *v1alpha1.ApplicationManager, err error) {
 
-	perms := make([]appcfg.ProviderPermission, 0)
+	perms = make([]appcfg.ProviderPermission, 0)
 	if !isNamespaceInjectable(namespace) {
 		return
 	}
@@ -254,6 +254,7 @@ func (wh *Webhook) MustInject(ctx context.Context, pod *corev1.Pod, namespace st
 		injectUpload = true
 	}
 	for _, p := range appCfg.Permission {
+		klog.Info("found permission: ", p)
 		if providerP, ok := p.([]interface{}); ok {
 			for _, v := range providerP {
 				provider := v.(map[string]interface{})

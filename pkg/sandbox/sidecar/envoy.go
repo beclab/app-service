@@ -1128,7 +1128,7 @@ func (ec *envoyConfig) WithProxyOutBound(appcfg *appcfg.ApplicationConfig, perms
 				rs = append(rs, &routev3.Route{
 					Match: &routev3.RouteMatch{
 						PathSpecifier: &routev3.RouteMatch_Prefix{
-							Prefix: p,
+							Prefix: strings.TrimSuffix(p, "*"),
 						},
 					},
 					Action: &routev3.Route_Route{
