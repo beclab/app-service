@@ -168,15 +168,27 @@ func (r *NodeAlertController) checkPressureStateChange(node *corev1.Node, pressu
 	if lastPressure != currentPressure {
 		if currentPressure {
 			// from available to pressure
-			return r.sendNodeAlert(node.Name, pressureType, conditionMessage, true)
+			err := r.sendNodeAlert(node.Name, pressureType, conditionMessage, true)
+			if err != nil {
+				klog.Errorf("failed to publish available to pressure, type: %s, err: %v", pressureType, err)
+				return err
+			}
 		} else {
 			// from pressure to available
-			return r.sendNodeAlert(node.Name, pressureType, conditionMessage, false)
+			err := r.sendNodeAlert(node.Name, pressureType, conditionMessage, false)
+			if err != nil {
+				klog.Errorf("failed to publish pressure to available, type: %s, err: %v", pressureType, err)
+				return err
+			}
 		}
 	} else if currentPressure {
 		// pressure persists
 		if r.shouldSendAlert(node.Name, pressureType) {
-			return r.sendNodeAlert(node.Name, pressureType, conditionMessage, true)
+			err := r.sendNodeAlert(node.Name, pressureType, conditionMessage, true)
+			if err != nil {
+				klog.Errorf("failed to publish persists pressure, type: %s, err: %v", pressureType, err)
+				return err
+			}
 		}
 	}
 	r.lastPressureState[key] = currentPressure
