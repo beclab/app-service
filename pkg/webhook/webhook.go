@@ -100,7 +100,7 @@ func (wh *Webhook) GetAppConfig(namespace string) (*v1alpha1.ApplicationManager,
 			return &a, &appconfig, nil
 		}
 	}
-	return nil, nil, errors.New("not found appmgr")
+	return nil, nil, api.ErrApplicationManagerNotFound
 }
 
 // GetAdmissionRequestBody returns admission request body.
@@ -238,8 +238,12 @@ func (wh *Webhook) MustInject(ctx context.Context, pod *corev1.Pod, namespace st
 
 	appMgr, appCfg, err = wh.GetAppConfig(namespace)
 	if err != nil {
-		klog.Errorf("Failed to get app config err=%v", err)
-		return
+		if errors.Is(err, api.ErrApplicationManagerNotFound) {
+			err = nil
+		} else {
+			klog.Errorf("Failed to get app config err=%v", err)
+			return
+		}
 	}
 
 	if appCfg == nil {
