@@ -2,6 +2,7 @@
 FROM golang:1.24.6-bullseye as builder
 
 WORKDIR /workspace
+RUN CGO_ENABLED=0 go install github.com/go-delve/delve/cmd/dlv@latest
 # Copy the Go Modules manifests
 COPY go.mod bytetrade.io/web3os/app-service/go.mod
 COPY go.sum bytetrade.io/web3os/app-service/go.sum
@@ -17,13 +18,14 @@ COPY pkg/ bytetrade.io/web3os/app-service/pkg/
 
 # Build
 RUN cd bytetrade.io/web3os/app-service && \
-    CGO_ENABLED=0 go build -ldflags="-s -w" -a -o app-service cmd/app-service/main.go
+    CGO_ENABLED=0 go build -gcflags "all=-l -N" -a -o app-service cmd/app-service/main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM gcr.io/distroless/static:debug
 WORKDIR /
 COPY --from=builder /workspace/bytetrade.io/web3os/app-service/app-service .
+COPY --from=builder /go/bin/dlv .
 
-ENTRYPOINT ["/app-service"]
+ENTRYPOINT ["/dlv", "exec", "/app-service", "-l", ":4321", "--api-version", "2", "--headless", "--accept-multiclient", "--continue"]
 USER 65532:65532

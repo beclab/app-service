@@ -1135,6 +1135,8 @@ func getCancelState(state v1alpha1.ApplicationManagerState) v1alpha1.Application
 		cancelState = v1alpha1.ResumingCanceling
 	case v1alpha1.Upgrading:
 		cancelState = v1alpha1.UpgradingCanceling
+	case v1alpha1.ApplyingEnv:
+		cancelState = v1alpha1.ApplyingEnvCanceling
 	}
 	return cancelState
 }

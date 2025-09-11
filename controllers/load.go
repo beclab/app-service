@@ -97,6 +97,8 @@ func LoadStatefulApp(ctx context.Context, appmgr *ApplicationManagerController, 
 			return appstate.NewSuspendingApp(appmgr, &am, 30*time.Minute)
 		case appv1alpha1.Upgrading:
 			return appstate.NewUpgradingApp(appmgr, &am, 30*time.Minute)
+		case appv1alpha1.ApplyingEnv:
+			return appstate.NewApplyingEnvApp(appmgr, &am, 30*time.Minute)
 		case appv1alpha1.Resuming:
 			return appstate.NewResumingApp(appmgr, &am, 60*time.Minute)
 		case appv1alpha1.PendingCanceling:
@@ -111,6 +113,8 @@ func LoadStatefulApp(ctx context.Context, appmgr *ApplicationManagerController, 
 			return appstate.NewResumingCancelingApp(appmgr, &am)
 		case appv1alpha1.UpgradingCanceling:
 			return appstate.NewUpgradingCancelingApp(appmgr, &am)
+		case appv1alpha1.ApplyingEnvCanceling:
+			return appstate.NewApplyingEnvCancelingApp(appmgr, &am)
 		case appv1alpha1.Uninstalling:
 			return appstate.NewUninstallingApp(appmgr, &am, 15*time.Minute)
 		case appv1alpha1.StopFailed:
@@ -119,14 +123,16 @@ func LoadStatefulApp(ctx context.Context, appmgr *ApplicationManagerController, 
 			return appstate.NewUninstallFailedApp(appmgr, &am)
 		case appv1alpha1.UpgradeFailed:
 			return appstate.NewUpgradeFailedApp(appmgr, &am)
+		case appv1alpha1.ApplyEnvFailed:
+			return appstate.NewApplyEnvFailedApp(appmgr, &am)
 		case appv1alpha1.ResumeFailed:
 			return appstate.NewResumeFailedApp(appmgr, &am)
 
 		case appv1alpha1.DownloadFailed,
 			appv1alpha1.PendingCanceled, appv1alpha1.DownloadingCanceled,
 			appv1alpha1.InstallingCanceled, appv1alpha1.InitializingCanceled,
-			appv1alpha1.UpgradingCanceled, appv1alpha1.ResumingCanceled,
-			appv1alpha1.Stopped:
+			appv1alpha1.UpgradingCanceled, appv1alpha1.ApplyingEnvCanceled,
+			appv1alpha1.ResumingCanceled, appv1alpha1.Stopped:
 			return appstate.NewDoNothingApp(appmgr, &am)
 		case appv1alpha1.InstallFailed:
 			return appstate.NewInstallFailedApp(appmgr, &am)
@@ -139,6 +145,8 @@ func LoadStatefulApp(ctx context.Context, appmgr *ApplicationManagerController, 
 			return appstate.NewInstallingCancelFailedApp(appmgr, &am)
 		case appv1alpha1.UpgradingCancelFailed:
 			return appstate.NewUpgradingCancelFailedApp(appmgr, &am)
+		case appv1alpha1.ApplyingEnvCancelFailed:
+			return appstate.NewApplyingEnvCancelFailedApp(appmgr, &am)
 		case appv1alpha1.Uninstalled:
 			return appstate.NewUninstalledApp(ctx, appmgr, &am)
 		}
