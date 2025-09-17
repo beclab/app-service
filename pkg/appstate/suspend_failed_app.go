@@ -4,9 +4,11 @@ import (
 	"context"
 	"time"
 
-	"k8s.io/klog/v2"
-
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/kubeblocks"
+
+	kbopv1alpha1 "github.com/apecloud/kubeblocks/apis/operations/v1alpha1"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -45,6 +47,15 @@ func (p *SuspendFailedApp) StateReconcile(ctx context.Context) error {
 	err := suspendOrResumeApp(ctx, p.client, p.manager, int32(0))
 	if err != nil {
 		klog.Errorf("stop-failed-app %s state reconcile failed %v", p.manager.Spec.AppName, err)
+		return err
+	}
+	if p.manager.Spec.Type == "middleware" {
+		op := kubeblocks.NewOperation(ctx, kbopv1alpha1.StopType, p.manager, p.client)
+		err = op.Stop()
+		if err != nil {
+			klog.Errorf("stop-failed-middleware %s state reconcile failed %v", p.manager.Spec.AppName, err)
+			return err
+		}
 	}
 	return err
 }

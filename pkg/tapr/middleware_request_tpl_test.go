@@ -18,7 +18,7 @@ func TestGenMiddleRequest(t *testing.T) {
 	databases := []Database{{Name: "mydb", Distributed: true,
 		Extensions: []string{"vectors", "postgis"}, Scripts: []string{"BEGIN", "COMMIT"}}}
 
-	result, err := GenMiddleRequest(middleware, appName, appNamespace, namespace, username, password, databases, nil, "")
+	result, err := GenMiddleRequest(middleware, appName, appNamespace, namespace, username, password, databases, nil, "", nil)
 	if err != nil {
 		t.Errorf("GenMiddleRequest returned an error: %v", err)
 	}
@@ -51,7 +51,7 @@ spec:
 
 	// test genRedisRequest function
 	middleware = "redis"
-	result, err = GenMiddleRequest(middleware, appName, appNamespace, namespace, username, password, databases, nil, "")
+	result, err = GenMiddleRequest(middleware, appName, appNamespace, namespace, username, password, databases, nil, "", nil)
 	if err != nil {
 		t.Errorf("GenMiddleRequest returned an error: %v", err)
 	}
@@ -75,7 +75,7 @@ spec:
 
 	// test genMongodbRequest function
 	middleware = "mongodb"
-	result, err = GenMiddleRequest(middleware, appName, appNamespace, namespace, username, password, databases, nil, "")
+	result, err = GenMiddleRequest(middleware, appName, appNamespace, namespace, username, password, databases, nil, "", nil)
 	if err != nil {
 		t.Errorf("GenMiddleRequest returned an error: %v", err)
 	}
@@ -136,7 +136,7 @@ spec:
 				},
 			},
 		},
-	}, "busty")
+	}, "busty", nil)
 	if err != nil {
 		t.Errorf("GenMiddleRequest returned an error: %v", err)
 	}

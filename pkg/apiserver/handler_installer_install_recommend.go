@@ -164,7 +164,7 @@ func (h *Handler) installRecommend(req *restful.Request, resp *restful.Response)
 		return
 	}
 
-	satisfied, err := apputils.CheckMiddlewareRequirement(req.Request.Context(), h.kubeConfig, workflowCfg.Cfg.Middleware)
+	satisfied, err := apputils.CheckMiddlewareRequirement(req.Request.Context(), h.ctrlClient, workflowCfg.Cfg.Middleware)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return

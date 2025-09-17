@@ -24,6 +24,7 @@ type AppMetaData struct {
 
 type AppConfiguration struct {
 	ConfigVersion string                 `yaml:"olaresManifest.version" json:"olaresManifest.version"`
+	ConfigType    string                 `yaml:"olaresManifest.type" json:"olaresManifest.type"`
 	APIVersion    string                 `yaml:"apiVersion" json:"apiVersion"`
 	Metadata      AppMetaData            `yaml:"metadata" json:"metadata"`
 	Entrances     []v1alpha1.Entrance    `yaml:"entrances" json:"entrances"`

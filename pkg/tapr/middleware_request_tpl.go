@@ -153,8 +153,34 @@ spec:
     {{- end }}
 `
 
+const minioRequest = `apiVersion: apr.bytetrade.io/v1alpha1
+kind: MiddlewareRequest
+metadata:
+  name: {{ .AppName }}-minio
+  namespace: {{ .Namespace }}
+spec:
+  app: {{ .AppName }}
+  appNamespace: {{ .AppNamespace }}
+  middleware: minio
+  minio:
+    buckets:
+    {{- range $k, $v := .Middleware.Buckets }}
+    - name: {{ $v.Name }}
+    {{- end }}
+    password:
+     {{- if not (eq .Middleware.Password "") }}
+      value: {{ .Middleware.Password }}
+     {{- else }}
+      valueFrom:
+        secretKeyRef:
+          name: {{ .AppName }}-{{ .Namespace }}-minio-password
+          key: "password"
+	 {{- end }}
+    user: {{ .Middleware.Username }}
+`
+
 func GenMiddleRequest(middleware MiddlewareType, appName, appNamespace, namespace, username, password string,
-	databases []Database, natsConfig *NatsConfig, ownerName string) ([]byte, error) {
+	databases []Database, natsConfig *NatsConfig, ownerName string, buckets []Bucket) ([]byte, error) {
 	switch middleware {
 	case TypePostgreSQL:
 		return genPostgresRequest(appName, appNamespace, namespace, username, password, databases)
@@ -164,6 +190,8 @@ func GenMiddleRequest(middleware MiddlewareType, appName, appNamespace, namespac
 		return genMongodbRequest(appName, appNamespace, namespace, username, password, databases)
 	case TypeNats:
 		return genNatsRequest(appName, appNamespace, namespace, username, password, natsConfig, ownerName)
+	case TypeMinio:
+		return genMinioRequest(appName, appNamespace, namespace, username, password, buckets)
 	default:
 		return []byte{}, nil
 	}
@@ -274,6 +302,34 @@ func genNatsRequest(appName, appNamespace, namespace, username, password string,
 		Middleware:   natsConfig,
 	}
 
+	err = tpl.Execute(&middlewareRequest, data)
+	if err != nil {
+		return []byte{}, err
+	}
+	return middlewareRequest.Bytes(), nil
+}
+
+func genMinioRequest(appName, appNamespace, namespace, username, password string, buckets []Bucket) ([]byte, error) {
+	tpl, err := template.New("minioRequest").Parse(minioRequest)
+	if err != nil {
+		return []byte{}, err
+	}
+	var middlewareRequest bytes.Buffer
+	data := struct {
+		AppName      string
+		AppNamespace string
+		Namespace    string
+		Middleware   *MinioConfig
+	}{
+		AppName:      appName,
+		AppNamespace: appNamespace,
+		Namespace:    namespace,
+		Middleware: &MinioConfig{
+			Username: username,
+			Password: password,
+			Buckets:  buckets,
+		},
+	}
 	err = tpl.Execute(&middlewareRequest, data)
 	if err != nil {
 		return []byte{}, err

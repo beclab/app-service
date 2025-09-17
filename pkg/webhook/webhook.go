@@ -92,7 +92,7 @@ func (wh *Webhook) GetAppConfig(namespace string) (*v1alpha1.ApplicationManager,
 
 	var appconfig appcfg.ApplicationConfig
 	for _, a := range sorted {
-		if a.Spec.AppNamespace == namespace && a.Spec.Type == v1alpha1.App {
+		if a.Spec.AppNamespace == namespace && (a.Spec.Type == v1alpha1.App || a.Spec.Type == v1alpha1.Middleware) {
 			err = json.Unmarshal([]byte(a.Spec.Config), &appconfig)
 			if err != nil {
 				return nil, nil, err
@@ -248,6 +248,9 @@ func (wh *Webhook) MustInject(ctx context.Context, pod *corev1.Pod, namespace st
 
 	if appCfg == nil {
 		klog.Infof("Unknown namespace=%s, do not inject", namespace)
+		return
+	}
+	if appCfg.IsMiddleware() {
 		return
 	}
 

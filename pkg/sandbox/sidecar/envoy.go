@@ -278,8 +278,8 @@ func getEnvoyConfigOnlyForOutBound(appcfg *appcfg.ApplicationConfig, perms []app
 }
 
 // GetInitContainerSpec returns init container spec.
-func GetInitContainerSpec(appcfg *appcfg.ApplicationConfig) corev1.Container {
-	iptablesInitCommand := generateIptablesCommands(appcfg)
+func GetInitContainerSpec(appCfg *appcfg.ApplicationConfig) corev1.Container {
+	iptablesInitCommand := generateIptablesCommands(appCfg)
 	enablePrivilegedInitContainer := true
 
 	return corev1.Container{
@@ -341,7 +341,7 @@ func generateIptablesCommands(appcfg *appcfg.ApplicationConfig) string {
 	cmd += fmt.Sprintf(`-A PROXY_INBOUND -p tcp -j PROXY_IN_REDIRECT
 -A PROXY_IN_REDIRECT -p tcp -j REDIRECT --to-port %d
 `, constants.EnvoyInboundListenerPort)
-	allowedPortSet := sets.NewInt(5432, 6379, 3306, 27017, 443, 4222)
+	allowedPortSet := sets.NewInt(5432, 6379, 3306, 27017, 443, 4222, 9000)
 	if appcfg != nil {
 		for _, port := range appcfg.AllowedOutboundPorts {
 			if allowedPortSet.Has(port) {
@@ -358,6 +358,7 @@ func generateIptablesCommands(appcfg *appcfg.ApplicationConfig) string {
 -A PROXY_OUTBOUND -p tcp --dport 27017 -j RETURN
 -A PROXY_OUTBOUND -p tcp --dport 443 -j RETURN
 -A PROXY_OUTBOUND -p tcp --dport 4222 -j RETURN
+-A PROXY_OUTBOUND -p tcp --dport 9000 -j RETURN
 -A PROXY_OUTBOUND -d ${POD_IP}/32 -j RETURN
 -A PROXY_OUTBOUND -o lo ! -d 127.0.0.1/32 -m owner --uid-owner 1555 -j PROXY_IN_REDIRECT
 -A PROXY_OUTBOUND -o lo -m owner ! --uid-owner 1555 -j RETURN

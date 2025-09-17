@@ -7,6 +7,10 @@ import (
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/constants"
+	"bytetrade.io/web3os/app-service/pkg/kubeblocks"
+	"bytetrade.io/web3os/app-service/pkg/users/userspace"
+
+	kbopv1alpha1 "github.com/apecloud/kubeblocks/apis/operations/v1alpha1"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -62,13 +66,30 @@ func (p *SuspendingApp) Exec(ctx context.Context) (StatefulInProgressApp, error)
 func (p *SuspendingApp) exec(ctx context.Context) error {
 	err := suspendOrResumeApp(ctx, p.client, p.manager, int32(0))
 	if err != nil {
-		klog.Errorf("suspend app %s failed %v", p.manager.Spec.AppName, err)
+		klog.Errorf("suspend %s %s failed %v", p.manager.Spec.Type, p.manager.Spec.AppName, err)
 		return fmt.Errorf("suspend app %s failed %w", p.manager.Spec.AppName, err)
+	}
+	if p.manager.Spec.Type == "middleware" && userspace.IsKbMiddlewares(p.manager.Spec.AppName) {
+		err = p.execMiddleware(ctx)
+		if err != nil {
+			klog.Errorf("suspend middleware %s failed %v", p.manager.Spec.AppName, err)
+			return err
+		}
 	}
 	return nil
 }
 
 func (p *SuspendingApp) Cancel(ctx context.Context) error {
 	// FIXME: cancel suspend operation if timeout
+	return nil
+}
+
+func (p *SuspendingApp) execMiddleware(ctx context.Context) error {
+	op := kubeblocks.NewOperation(ctx, kbopv1alpha1.StopType, p.manager, p.client)
+	err := op.Stop()
+	if err != nil {
+		klog.Errorf("failed to stop middleware %s,err=%v", p.manager.Spec.AppName, err)
+		return err
+	}
 	return nil
 }

@@ -27,6 +27,9 @@ const (
 	TypeRedis MiddlewareType = "redis"
 	// TypeNats indicates the middleware is nats
 	TypeNats MiddlewareType = "nats"
+
+	// TypeMinio indicates the middleware is minio
+	TypeMinio MiddlewareType = "minio"
 )
 
 func (mr MiddlewareType) String() string {
@@ -55,6 +58,7 @@ type MiddlewareRequestInfo struct {
 	Password  string     `json:"password"`
 	Type      string     `json:"type"`
 	Databases []Database `json:"databases,omitempty"`
+	Buckets   []Bucket   `json:"buckets,omitempty"`
 }
 
 type MiddlewareRequestResp struct {
@@ -63,6 +67,7 @@ type MiddlewareRequestResp struct {
 	Port      int32             `json:"port"`
 	Indexes   map[string]string `json:"indexes"`
 	Databases map[string]string `json:"databases"`
+	Buckets   map[string]string `json:"buckets"`
 	Subjects  map[string]string `json:"subjects"`
 	Refs      map[string]string `json:"refs"`
 }
@@ -124,7 +129,7 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 		username := fmt.Sprintf("%s_%s_%s", middleware.Postgres.Username, ownerName, appName)
 		username = strings.ReplaceAll(username, "-", "_")
 		err := process(kubeConfig, appName, appNamespace, namespace, username,
-			middleware.Postgres.Password, middleware.Postgres.Databases, TypePostgreSQL, nil, ownerName)
+			middleware.Postgres.Password, middleware.Postgres.Databases, TypePostgreSQL, nil, ownerName, nil)
 		if err != nil {
 			return err
 		}
@@ -144,7 +149,7 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 	if middleware.Redis != nil {
 		username := ""
 		err := process(kubeConfig, appName, appNamespace, namespace, username,
-			middleware.Redis.Password, []Database{{Name: middleware.Redis.Namespace}}, TypeRedis, nil, ownerName)
+			middleware.Redis.Password, []Database{{Name: middleware.Redis.Namespace}}, TypeRedis, nil, ownerName, nil)
 		if err != nil {
 			return err
 		}
@@ -163,7 +168,7 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 	if middleware.MongoDB != nil {
 		username := fmt.Sprintf("%s-%s-%s", middleware.MongoDB.Username, ownerName, appName)
 		err := process(kubeConfig, appName, appNamespace, namespace, username,
-			middleware.MongoDB.Password, middleware.MongoDB.Databases, TypeMongoDB, nil, ownerName)
+			middleware.MongoDB.Password, middleware.MongoDB.Databases, TypeMongoDB, nil, ownerName, nil)
 		if err != nil {
 			return err
 		}
@@ -179,11 +184,30 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 			"databases": resp.Databases,
 		}
 	}
+	if middleware.Minio != nil {
+		username := fmt.Sprintf("%s-%s-%s", middleware.Minio.Username, ownerName, appName)
+		err := process(kubeConfig, appName, appNamespace, namespace, username, middleware.Minio.Password,
+			nil, TypeMinio, nil, ownerName, middleware.Minio.Buckets)
+		if err != nil {
+			return err
+		}
+		resp, err := getMiddlewareRequest(TypeMinio)
+		if err != nil {
+			return err
+		}
+		vals["minio"] = map[string]interface{}{
+			"host":     resp.Host,
+			"port":     resp.Port,
+			"username": resp.UserName,
+			"password": resp.Password,
+			"buckets":  resp.Buckets,
+		}
+	}
 
 	if middleware.Nats != nil {
 		username := fmt.Sprintf("%s-%s", middleware.Nats.Username, appNamespace)
 		err := process(kubeConfig, appName, appNamespace, namespace, username,
-			"", []Database{}, TypeNats, middleware.Nats, ownerName)
+			"", []Database{}, TypeNats, middleware.Nats, ownerName, nil)
 		klog.Infof("middleware.Nats: %#v\n", middleware.Nats)
 		if err != nil {
 			return err
@@ -206,17 +230,17 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 }
 
 func process(kubeConfig *rest.Config, appName, appNamespace, namespace, username, password string,
-	databases []Database, middleware MiddlewareType, natsConfig *NatsConfig, ownerName string) error {
+	databases []Database, middleware MiddlewareType, natsConfig *NatsConfig, ownerName string, buckets []Bucket) error {
 	request, err := GenMiddleRequest(middleware, appName,
-		appNamespace, namespace, username, password, databases, natsConfig, ownerName)
+		appNamespace, namespace, username, password, databases, natsConfig, ownerName, buckets)
 	klog.Infof("nats: request: %s", string(request))
-	klog.Infof("natsCOnfig: %#v", natsConfig)
 	if err != nil {
 		klog.Errorf("Failed to generate middleware request from template middlewareType=%s err=%v", middleware, err)
 		return err
 	}
 	if len(password) == 0 {
 		err = CreateOrUpdateSecret(kubeConfig, appName, namespace, middleware)
+		klog.Errorf("create secret:appname: %s,namespace:%s, middleware:%s,err: %v", appName, namespace, middleware, err)
 		if err != nil {
 			return err
 		}
