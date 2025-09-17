@@ -146,6 +146,9 @@ func GetResourceListFromChart(chartPath string, values map[string]interface{}) (
 	values["mongodb"] = map[string]interface{}{
 		"databases": map[string]interface{}{},
 	}
+	values["minio"] = map[string]interface{}{
+		"buckets": map[string]interface{}{},
+	}
 	values["svcs"] = map[string]interface{}{}
 	values["nats"] = map[string]interface{}{
 		"subjects": map[string]interface{}{},

@@ -603,6 +603,12 @@ func GetAppConfig(ctx context.Context, options *ConfigOptions) (*appcfg.Applicat
 		namespace = fmt.Sprintf("%s-%s", options.App, options.Owner)
 	}
 
+	if appcfg.IsMiddleware() {
+		namespace = fmt.Sprintf("%s-%s", appcfg.AppName, "middleware")
+		klog.Infof("appcfg.IsMiddlewarew, set namespace=%s", namespace)
+
+	}
+
 	appcfg.Namespace = namespace
 	appcfg.OwnerName = options.Owner
 	appcfg.RepoURL = options.RepoURL
@@ -756,6 +762,7 @@ func toApplicationConfig(app, chart string, cfg *appcfg.AppConfiguration) (*appc
 		SubCharts:            cfg.Spec.SubCharts,
 		ServiceAccountName:   cfg.Permission.ServiceAccount,
 		Provider:             cfg.Provider,
+		Type:                 cfg.ConfigType,
 	}, chart, nil
 }
 

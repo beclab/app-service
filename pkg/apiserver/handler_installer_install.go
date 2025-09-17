@@ -278,7 +278,7 @@ func (h *installHandlerHelper) validate(isAdmin bool, installedApps []*v1alpha1.
 		return
 	}
 
-	satisfied, err := apputils.CheckMiddlewareRequirement(h.req.Request.Context(), h.h.kubeConfig, h.appConfig.Middleware)
+	satisfied, err := apputils.CheckMiddlewareRequirement(h.req.Request.Context(), h.h.ctrlClient, h.appConfig.Middleware)
 	if err != nil {
 		api.HandleError(h.resp, h.req, err)
 		return
@@ -417,7 +417,7 @@ func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opI
 			AppOwner:     h.owner,
 			Config:       string(config),
 			Source:       h.insReq.Source.String(),
-			Type:         v1alpha1.App,
+			Type:         v1alpha1.Type(h.appConfig.Type),
 			OpType:       v1alpha1.InstallOp,
 		},
 	}

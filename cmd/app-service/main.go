@@ -16,6 +16,8 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
 	"bytetrade.io/web3os/app-service/pkg/images"
 
+	kbappsv1 "github.com/apecloud/kubeblocks/apis/apps/v1"
+	kbopv1alphav1 "github.com/apecloud/kubeblocks/apis/operations/v1alpha1"
 	"k8s.io/client-go/dynamic"
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -43,6 +45,8 @@ func init() {
 	utilruntime.Must(appv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(sysv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(iamv1alpha2.AddToScheme(scheme))
+	utilruntime.Must(kbappsv1.AddToScheme(scheme))
+	utilruntime.Must(kbopv1alphav1.AddToScheme(scheme))
 
 	//+kubebuilder:scaffold:scheme
 }

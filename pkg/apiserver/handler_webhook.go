@@ -1274,7 +1274,7 @@ func (h *Handler) installOpValidate(ctx context.Context, appConfig *appcfg.Appli
 		return err
 	}
 
-	_, err = apputils.CheckMiddlewareRequirement(ctx, h.kubeConfig, appConfig.Middleware)
+	_, err = apputils.CheckMiddlewareRequirement(ctx, h.ctrlClient, appConfig.Middleware)
 	if err != nil {
 		return err
 	}

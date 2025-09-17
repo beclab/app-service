@@ -250,6 +250,9 @@ func (wh *Webhook) MustInject(ctx context.Context, pod *corev1.Pod, namespace st
 		klog.Infof("Unknown namespace=%s, do not inject", namespace)
 		return
 	}
+	if appCfg.IsMiddleware() {
+		return
+	}
 
 	if appCfg.WsConfig.URL != "" && appCfg.WsConfig.Port > 0 {
 		injectWs = true
