@@ -19,16 +19,24 @@ import (
 	"time"
 )
 
+var ErrUnPadding = errors.New("UnPadding error")
+
 func pKCS7Padding(ciphertext []byte, blockSize int) []byte {
 	padding := blockSize - len(ciphertext)%blockSize
 	padtext := bytes.Repeat([]byte{byte(padding)}, padding)
 	return append(ciphertext, padtext...)
 }
 
-func pKCS7UnPadding(origin []byte) []byte {
+func pKCS7UnPadding(origin []byte) ([]byte, error) {
 	length := len(origin)
+	if length == 0 {
+		return origin, ErrUnPadding
+	}
 	unpadding := int(origin[length-1])
-	return origin[:(length - unpadding)]
+	if length < unpadding {
+		return origin, ErrUnPadding
+	}
+	return origin[:(length - unpadding)], nil
 }
 
 // AesEncrypt encrypts the given plaintext using AES encryption with the specified key.
@@ -55,7 +63,10 @@ func AesDecrypt(crypted, key []byte) ([]byte, error) {
 	blockMode := cipher.NewCBCDecrypter(block, key[:blockSize])
 	origin := make([]byte, len(crypted))
 	blockMode.CryptBlocks(origin, crypted)
-	origin = pKCS7UnPadding(origin)
+	origin, err = pKCS7UnPadding(origin)
+	if err != nil {
+		return origin, err
+	}
 	return origin, nil
 }
 
