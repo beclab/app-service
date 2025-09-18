@@ -14,6 +14,7 @@ var All = []appv1alpha1.ApplicationManagerState{
 	appv1alpha1.Running,
 	appv1alpha1.Resuming,
 	appv1alpha1.Upgrading,
+	appv1alpha1.ApplyingEnv,
 	appv1alpha1.Stopping,
 	appv1alpha1.Uninstalling,
 
@@ -23,11 +24,13 @@ var All = []appv1alpha1.ApplicationManagerState{
 	appv1alpha1.InitializingCanceling,
 	appv1alpha1.ResumingCanceling,
 	appv1alpha1.UpgradingCanceling,
+	appv1alpha1.ApplyingEnvCanceling,
 
 	appv1alpha1.PendingCancelFailed,
 	appv1alpha1.DownloadingCancelFailed,
 	appv1alpha1.InstallingCancelFailed,
 	appv1alpha1.UpgradingCancelFailed,
+	appv1alpha1.ApplyingEnvCancelFailed,
 
 	appv1alpha1.PendingCanceled,
 	appv1alpha1.DownloadingCanceled,
@@ -39,6 +42,7 @@ var All = []appv1alpha1.ApplicationManagerState{
 	appv1alpha1.InstallFailed,
 	appv1alpha1.StopFailed,
 	appv1alpha1.UpgradeFailed,
+	appv1alpha1.ApplyEnvFailed,
 	appv1alpha1.ResumeFailed,
 	appv1alpha1.UninstallFailed,
 }
@@ -66,6 +70,7 @@ var StateTransitions = map[appv1alpha1.ApplicationManagerState][]appv1alpha1.App
 	appv1alpha1.Running: {
 		appv1alpha1.Stopping,
 		appv1alpha1.Upgrading,
+		appv1alpha1.ApplyingEnv,
 		appv1alpha1.Uninstalling,
 	},
 	appv1alpha1.Stopping: {
@@ -76,6 +81,11 @@ var StateTransitions = map[appv1alpha1.ApplicationManagerState][]appv1alpha1.App
 		appv1alpha1.Initializing,
 		appv1alpha1.UpgradeFailed,
 		appv1alpha1.UpgradingCanceling,
+	},
+	appv1alpha1.ApplyingEnv: {
+		appv1alpha1.Initializing,
+		appv1alpha1.ApplyEnvFailed,
+		appv1alpha1.ApplyingEnvCanceling,
 	},
 	appv1alpha1.Uninstalling: {
 		appv1alpha1.Uninstalled,
@@ -110,10 +120,14 @@ var StateTransitions = map[appv1alpha1.ApplicationManagerState][]appv1alpha1.App
 	appv1alpha1.UpgradingCanceling: {
 		appv1alpha1.Stopping,
 	},
+	appv1alpha1.ApplyingEnvCanceling: {
+		appv1alpha1.Stopping,
+	},
 	appv1alpha1.Stopped: {
 		appv1alpha1.Resuming,
 		appv1alpha1.Uninstalling,
 		appv1alpha1.Upgrading,
+		appv1alpha1.ApplyingEnv,
 	},
 
 	appv1alpha1.DownloadFailed: {
@@ -126,12 +140,18 @@ var StateTransitions = map[appv1alpha1.ApplicationManagerState][]appv1alpha1.App
 	appv1alpha1.StopFailed: {
 		appv1alpha1.Stopping,
 		appv1alpha1.Upgrading,
+		appv1alpha1.ApplyingEnv,
 		appv1alpha1.Uninstalling,
 	},
 
 	appv1alpha1.UpgradeFailed: {
 		appv1alpha1.Stopping,
 		appv1alpha1.Upgrading,
+		appv1alpha1.Uninstalling,
+	},
+	appv1alpha1.ApplyEnvFailed: {
+		appv1alpha1.Stopping,
+		appv1alpha1.ApplyingEnv,
 		appv1alpha1.Uninstalling,
 	},
 	appv1alpha1.ResumeFailed: {
@@ -172,6 +192,9 @@ var OperationAllowedInState = map[appv1alpha1.ApplicationManagerState]map[appv1a
 	appv1alpha1.Upgrading: {
 		appv1alpha1.CancelOp: true,
 	},
+	appv1alpha1.ApplyingEnv: {
+		appv1alpha1.CancelOp: true,
+	},
 	appv1alpha1.Resuming: {
 		appv1alpha1.CancelOp: true,
 	},
@@ -181,6 +204,7 @@ var OperationAllowedInState = map[appv1alpha1.ApplicationManagerState]map[appv1a
 	appv1alpha1.InstallingCanceling:   {},
 	appv1alpha1.InitializingCanceling: {},
 	appv1alpha1.UpgradingCanceling:    {},
+	appv1alpha1.ApplyingEnvCanceling:  {},
 	appv1alpha1.ResumingCanceling:     {},
 
 	appv1alpha1.PendingCanceled: {
@@ -229,6 +253,7 @@ var OperationAllowedInState = map[appv1alpha1.ApplicationManagerState]map[appv1a
 	appv1alpha1.ResumeFailed: {
 		appv1alpha1.ResumeOp:    true,
 		appv1alpha1.UpgradeOp:   true,
+		appv1alpha1.ApplyEnvOp:  true,
 		appv1alpha1.UninstallOp: true,
 	},
 	appv1alpha1.UninstallFailed: {
@@ -237,6 +262,10 @@ var OperationAllowedInState = map[appv1alpha1.ApplicationManagerState]map[appv1a
 	appv1alpha1.UpgradeFailed: {
 		appv1alpha1.UninstallOp: true,
 		appv1alpha1.UpgradeOp:   true,
+	},
+	appv1alpha1.ApplyEnvFailed: {
+		appv1alpha1.UninstallOp: true,
+		appv1alpha1.ApplyEnvOp:  true,
 	},
 	appv1alpha1.PendingCancelFailed: {
 		appv1alpha1.CancelOp: true,
@@ -253,14 +282,20 @@ var OperationAllowedInState = map[appv1alpha1.ApplicationManagerState]map[appv1a
 		appv1alpha1.CancelOp:    true,
 		appv1alpha1.UninstallOp: true,
 	},
+	appv1alpha1.ApplyingEnvCancelFailed: {
+		appv1alpha1.CancelOp:    true,
+		appv1alpha1.UninstallOp: true,
+	},
 	appv1alpha1.Running: {
 		appv1alpha1.UninstallOp: true,
 		appv1alpha1.UpgradeOp:   true,
+		appv1alpha1.ApplyEnvOp:  true,
 		appv1alpha1.StopOp:      true,
 	},
 	appv1alpha1.Stopped: {
 		appv1alpha1.UninstallOp: true,
 		appv1alpha1.UpgradeOp:   true,
+		appv1alpha1.ApplyEnvOp:  true,
 		appv1alpha1.ResumeOp:    true,
 	},
 }
@@ -272,6 +307,7 @@ var CancelableStates = map[appv1alpha1.ApplicationManagerState]bool{
 	appv1alpha1.Initializing: true,
 	appv1alpha1.Resuming:     true,
 	appv1alpha1.Upgrading:    true,
+	appv1alpha1.ApplyingEnv:  true,
 }
 
 var OperatingStates = map[appv1alpha1.ApplicationManagerState]bool{
@@ -281,6 +317,7 @@ var OperatingStates = map[appv1alpha1.ApplicationManagerState]bool{
 	appv1alpha1.Initializing: true,
 	appv1alpha1.Resuming:     true,
 	appv1alpha1.Upgrading:    true,
+	appv1alpha1.ApplyingEnv:  true,
 	appv1alpha1.Stopping:     true,
 
 	appv1alpha1.PendingCanceling:      true,
@@ -289,6 +326,7 @@ var OperatingStates = map[appv1alpha1.ApplicationManagerState]bool{
 	appv1alpha1.InitializingCanceling: true,
 	appv1alpha1.ResumingCanceling:     true,
 	appv1alpha1.UpgradingCanceling:    true,
+	appv1alpha1.ApplyingEnvCanceling:  true,
 
 	appv1alpha1.Uninstalling: true,
 }
@@ -300,6 +338,7 @@ var CancelingStates = map[appv1alpha1.ApplicationManagerState]bool{
 	appv1alpha1.InitializingCanceling: true,
 	appv1alpha1.ResumingCanceling:     true,
 	appv1alpha1.UpgradingCanceling:    true,
+	appv1alpha1.ApplyingEnvCanceling:  true,
 }
 
 var StateToDurationMap = map[appv1alpha1.ApplicationManagerState]time.Duration{
@@ -308,6 +347,7 @@ var StateToDurationMap = map[appv1alpha1.ApplicationManagerState]time.Duration{
 	appv1alpha1.Installing:   30 * time.Minute,
 	appv1alpha1.Initializing: time.Hour,
 	appv1alpha1.Upgrading:    time.Hour,
+	appv1alpha1.ApplyingEnv:  30 * time.Minute,
 }
 
 func IsOperationAllowed(curState appv1alpha1.ApplicationManagerState, op appv1alpha1.OpType) bool {

@@ -12,8 +12,20 @@ type FakeSysV1alpha1 struct {
 	*testing.Fake
 }
 
+func (c *FakeSysV1alpha1) AppEnvs(namespace string) v1alpha1.AppEnvInterface {
+	return &FakeAppEnvs{c, namespace}
+}
+
+func (c *FakeSysV1alpha1) SystemEnvs() v1alpha1.SystemEnvInterface {
+	return &FakeSystemEnvs{c}
+}
+
 func (c *FakeSysV1alpha1) Terminuses() v1alpha1.TerminusInterface {
 	return &FakeTerminuses{c}
+}
+
+func (c *FakeSysV1alpha1) UserEnvs(namespace string) v1alpha1.UserEnvInterface {
+	return &FakeUserEnvs{c, namespace}
 }
 
 // RESTClient returns a RESTClient that is used to communicate

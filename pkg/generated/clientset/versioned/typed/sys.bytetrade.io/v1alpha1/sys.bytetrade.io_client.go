@@ -12,7 +12,10 @@ import (
 
 type SysV1alpha1Interface interface {
 	RESTClient() rest.Interface
+	AppEnvsGetter
+	SystemEnvsGetter
 	TerminusesGetter
+	UserEnvsGetter
 }
 
 // SysV1alpha1Client is used to interact with features provided by the sys.bytetrade.io group.
@@ -20,8 +23,20 @@ type SysV1alpha1Client struct {
 	restClient rest.Interface
 }
 
+func (c *SysV1alpha1Client) AppEnvs(namespace string) AppEnvInterface {
+	return newAppEnvs(c, namespace)
+}
+
+func (c *SysV1alpha1Client) SystemEnvs() SystemEnvInterface {
+	return newSystemEnvs(c)
+}
+
 func (c *SysV1alpha1Client) Terminuses() TerminusInterface {
 	return newTerminuses(c)
+}
+
+func (c *SysV1alpha1Client) UserEnvs(namespace string) UserEnvInterface {
+	return newUserEnvs(c, namespace)
 }
 
 // NewForConfig creates a new SysV1alpha1Client for the given config.

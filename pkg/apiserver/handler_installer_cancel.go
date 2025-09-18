@@ -57,6 +57,8 @@ func (h *Handler) cancel(req *restful.Request, resp *restful.Response) {
 		cancelState = v1alpha1.ResumingCanceling
 	case v1alpha1.Upgrading:
 		cancelState = v1alpha1.UpgradingCanceling
+	case v1alpha1.ApplyingEnv:
+		cancelState = v1alpha1.ApplyingEnvCanceling
 	}
 	opID := strconv.FormatInt(time.Now().Unix(), 10)
 	am.Spec.OpType = v1alpha1.CancelOp
