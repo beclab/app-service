@@ -67,6 +67,10 @@ func (d *Deleter) DeleteUserResource(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	err = d.clearLauncher(fmt.Sprintf("launcher-%s", d.user))
+	if err != nil {
+		return err
+	}
 
 	err = d.deleteNamespace(ctx)
 	if err != nil {
@@ -123,15 +127,11 @@ func (d *Deleter) deleteNamespace(ctx context.Context) error {
 	return nil
 }
 
-func (d *Deleter) clearLauncher(ctx context.Context, launchername, userspace string) error {
+func (d *Deleter) clearLauncher(launchername string) error {
 
 	err := helm.UninstallCharts(d.helmCfg.ActionCfg, launchername)
 	if err != nil && !errors.Is(err, driver.ErrReleaseNotFound) {
 		klog.Errorf("failed to uninstall %s", launchername)
-		return err
-	}
-
-	if _, err := d.checkLauncher(ctx, userspace, checkLauncherNoExists); err != nil {
 		return err
 	}
 
