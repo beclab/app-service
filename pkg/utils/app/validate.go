@@ -16,7 +16,6 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned/scheme"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
-	"bytetrade.io/web3os/app-service/pkg/middlewareinstaller"
 	"bytetrade.io/web3os/app-service/pkg/prometheus"
 	"bytetrade.io/web3os/app-service/pkg/tapr"
 	"bytetrade.io/web3os/app-service/pkg/upgrade"
@@ -25,10 +24,9 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
@@ -440,31 +438,31 @@ func CheckUserResRequirement(ctx context.Context, appConfig *appcfg.ApplicationC
 	return "", nil
 }
 
-func CheckMiddlewareRequirement(ctx context.Context, kubeConfig *rest.Config, middleware *tapr.Middleware) (bool, error) {
-	if middleware != nil && middleware.MongoDB != nil {
-		dConfig, err := dynamic.NewForConfig(kubeConfig)
-		if err != nil {
-			return false, err
-		}
-		dClient, err := middlewareinstaller.NewMiddlewareMongodb(dConfig)
-		if err != nil {
-			return false, err
-		}
-		u, err := dClient.Get(ctx, "os-platform", "mongo-cluster", metav1.GetOptions{})
-		if err != nil && !apierrors.IsNotFound(err) {
-			return false, err
-		}
-		if u == nil {
+func CheckMiddlewareRequirement(ctx context.Context, ctrlClient client.Client, middleware *tapr.Middleware) (bool, error) {
+	if middleware != nil {
+		if middleware.MongoDB != nil {
+			var am v1alpha1.ApplicationManager
+			err := ctrlClient.Get(ctx, types.NamespacedName{Name: "mongodb-middleware-mongodb"}, &am)
+			if err != nil {
+				return false, err
+			}
+			if am.Status.State == "running" {
+				return true, nil
+			}
 			return false, nil
 		}
-		state, _, err := unstructured.NestedString(u.Object, "status", "state")
-		if err != nil {
-			return false, err
+		if middleware.Minio != nil {
+			var am v1alpha1.ApplicationManager
+			err := ctrlClient.Get(ctx, types.NamespacedName{Name: "minio-middleware-minio"}, &am)
+			if err != nil {
+				return false, err
+			}
+			if am.Status.State == "running" {
+				return true, nil
+			}
+			return false, nil
 		}
-		if state == "ready" {
-			return true, nil
-		}
-		return false, nil
+		return true, nil
 	}
 	return true, nil
 }

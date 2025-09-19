@@ -45,6 +45,7 @@ var (
 		tapr.TypeMongoDB.String(),
 		tapr.TypeRedis.String(),
 		tapr.TypeNats.String(),
+		tapr.TypeMinio.String(),
 	}
 )
 

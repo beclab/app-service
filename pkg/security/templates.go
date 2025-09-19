@@ -8,12 +8,13 @@ import (
 )
 
 const (
-	NamespaceTypeLabel   = "bytetrade.io/ns-type"
-	NamespaceOwnerLabel  = "bytetrade.io/ns-owner"
-	NamespaceSharedLabel = "bytetrade.io/ns-shared"
-	System               = "system"
-	Network              = "network"
-	Internal             = "user-internal"
+	NamespaceTypeLabel       = "bytetrade.io/ns-type"
+	NamespaceOwnerLabel      = "bytetrade.io/ns-owner"
+	NamespaceSharedLabel     = "bytetrade.io/ns-shared"
+	NamespaceMiddlewareLabel = "bytetrade.io/ns-middleware"
+	System                   = "system"
+	Network                  = "network"
+	Internal                 = "user-internal"
 )
 
 var (
@@ -25,6 +26,20 @@ var (
 			Ingress:     []netv1.NetworkPolicyIngressRule{},
 		},
 	} // end NPDenyAll
+
+	// NPAllowAll is a network policy template deny all ingress.
+	NPAllowAll = netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{},
+			Ingress: []netv1.NetworkPolicyIngressRule{
+				{},
+			},
+			PolicyTypes: []netv1.PolicyType{
+				netv1.PolicyTypeIngress,
+			},
+		},
+	} // end NPAllowAll
 
 	// NPUnderLayerSystem is a network policy template for under layer system.
 	NPUnderLayerSystem = netv1.NetworkPolicy{
