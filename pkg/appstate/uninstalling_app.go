@@ -118,6 +118,50 @@ func (p *UninstallingApp) waitForDeleteNamespace(ctx context.Context) error {
 	return err
 }
 
+func (p *UninstallingApp) waitForDeleteSharedNamespaces(ctx context.Context, appCfg *appcfg.ApplicationConfig) error {
+	if !appCfg.IsV2() || !appCfg.HasClusterSharedCharts() {
+		return nil
+	}
+
+	var sharedNamespaces []string
+	for _, chart := range appCfg.SubCharts {
+		if chart.Shared {
+			sharedNamespace := chart.Namespace(appCfg.OwnerName)
+			if !apputils.IsProtectedNamespace(sharedNamespace) {
+				sharedNamespaces = append(sharedNamespaces, sharedNamespace)
+			}
+		}
+	}
+
+	if len(sharedNamespaces) == 0 {
+		return nil
+	}
+
+	for _, nsName := range sharedNamespaces {
+		klog.Infof("waiting for shared namespace %s to be deleted for v2 app %s", nsName, appCfg.AppName)
+		err := utilwait.PollImmediate(time.Second, 15*time.Minute, func() (done bool, err error) {
+			klog.Infof("checking if shared namespace %s is deleted", nsName)
+			var ns corev1.Namespace
+			err = p.client.Get(ctx, types.NamespacedName{Name: nsName}, &ns)
+			if err != nil && !apierrors.IsNotFound(err) {
+				klog.Error(err)
+				return false, err
+			}
+			if apierrors.IsNotFound(err) {
+				klog.Infof("shared namespace %s has been deleted", nsName)
+				return true, nil
+			}
+			return false, nil
+		})
+		if err != nil {
+			klog.Errorf("waiting for shared namespace %s to be deleted failed: %v", nsName, err)
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (p *UninstallingApp) exec(ctx context.Context) error {
 	var err error
 	token := p.manager.Annotations[api.AppTokenKey]
@@ -154,6 +198,16 @@ func (p *UninstallingApp) exec(ctx context.Context) error {
 		klog.Errorf("waiting app %s namespace %s being deleted failed", p.manager.Spec.AppName, p.manager.Spec.AppNamespace)
 		return err
 	}
+
+	// For v2 apps, also wait for shared namespaces to be deleted
+	if uninstallAll == "true" {
+		err = p.waitForDeleteSharedNamespaces(ctx, appCfg)
+		if err != nil {
+			klog.Errorf("waiting for shared namespaces to be deleted failed for app %s: %v", p.manager.Spec.AppName, err)
+			return err
+		}
+	}
+
 	return nil
 }
 
