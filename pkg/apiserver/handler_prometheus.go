@@ -1,15 +1,16 @@
 package apiserver
 
 import (
+	"encoding/json"
 	"time"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/prometheus"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
 	"github.com/emicklei/go-restful/v3"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 func (h *Handler) userMetrics(req *restful.Request, resp *restful.Response) {
@@ -53,17 +54,18 @@ func (h *Handler) clusterResource(req *restful.Request, resp *restful.Response) 
 		if am.Spec.Type != v1alpha1.Middleware {
 			continue
 		}
-		s, err := getMiddlewareStatus(req.Request.Context(), h.kubeConfig, am.Spec.AppName, am.Spec.AppOwner)
-		if err != nil && !apierrors.IsNotFound(err) {
+		var appCfg appcfg.ApplicationConfig
+		err := json.Unmarshal([]byte(am.Spec.Config), &appCfg)
+		if err != nil {
 			api.HandleError(resp, req, err)
 			return
 		}
 		apps = append(apps, App{
-			Title:   s.Title,
+			Title:   appCfg.Title,
 			Name:    am.Spec.AppName,
 			Type:    am.Spec.Type.String(),
 			Version: am.Status.Payload["version"],
-			State:   s.ResourceStatus,
+			State:   am.Status.State.String(),
 		})
 
 	}

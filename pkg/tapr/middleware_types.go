@@ -5,7 +5,8 @@ type Middleware struct {
 	Postgres *PostgresConfig `yaml:"postgres,omitempty"`
 	Redis    *RedisConfig    `yaml:"redis,omitempty"`
 	MongoDB  *MongodbConfig  `yaml:"mongodb,omitempty"`
-	Nats     *NatsConfig     `json:"nats,omitempty"`
+	Nats     *NatsConfig     `yaml:"nats,omitempty"`
+	Minio    *MinioConfig    `yaml:"minio"`
 }
 
 // Database specify database name and if distributed.
@@ -21,6 +22,16 @@ type PostgresConfig struct {
 	Username  string     `yaml:"username" json:"username"`
 	Password  string     `yaml:"password,omitempty" json:"password,omitempty"`
 	Databases []Database `yaml:"databases" json:"databases"`
+}
+
+type MinioConfig struct {
+	Username string   `yaml:"username" json:"username"`
+	Password string   `yaml:"password" json:"password"`
+	Buckets  []Bucket `yaml:"buckets" json:"buckets"`
+}
+
+type Bucket struct {
+	Name string `json:"name"`
 }
 
 // RedisConfig contains fields for redis config.

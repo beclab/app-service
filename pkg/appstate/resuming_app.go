@@ -7,6 +7,10 @@ import (
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/constants"
+	"bytetrade.io/web3os/app-service/pkg/kubeblocks"
+	"bytetrade.io/web3os/app-service/pkg/users/userspace"
+
+	kbopv1alpha1 "github.com/apecloud/kubeblocks/apis/operations/v1alpha1"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -55,8 +59,15 @@ func (p *ResumingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
 func (p *ResumingApp) exec(ctx context.Context) error {
 	err := suspendOrResumeApp(ctx, p.client, p.manager, int32(1))
 	if err != nil {
-		klog.Errorf("resume app %s failed %v", p.manager.Spec.AppName, err)
+		klog.Errorf("resume %s %s failed %v", p.manager.Spec.Type, p.manager.Spec.AppName, err)
 		return fmt.Errorf("resume app %s failed %w", p.manager.Spec.AppName, err)
+	}
+	if p.manager.Spec.Type == "middleware" && userspace.IsKbMiddlewares(p.manager.Spec.AppName) {
+		err = p.execMiddleware(ctx)
+		if err != nil {
+			klog.Errorf("failed to resume middleware %s,err=%v", p.manager.Spec.AppName, err)
+			return err
+		}
 	}
 	return nil
 }
@@ -133,4 +144,14 @@ func (p *resumingInProgressApp) IsStartUp(ctx context.Context) bool {
 			return false
 		}
 	}
+}
+
+func (p *ResumingApp) execMiddleware(ctx context.Context) error {
+	op := kubeblocks.NewOperation(ctx, kbopv1alpha1.StartType, p.manager, p.client)
+	err := op.Start()
+	if err != nil {
+		klog.Errorf("failed to resume middleware %s,err=%v", p.manager.Spec.AppName, err)
+		return err
+	}
+	return nil
 }

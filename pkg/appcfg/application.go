@@ -88,6 +88,11 @@ type ApplicationConfig struct {
 	SubCharts            []Chart
 	ServiceAccountName   *string
 	Provider             []Provider
+	Type                 string
+}
+
+func (c *ApplicationConfig) IsMiddleware() bool {
+	return c.Type == "middleware"
 }
 
 func (c *ApplicationConfig) IsV2() bool {

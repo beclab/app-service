@@ -5,10 +5,26 @@ import (
 	"strings"
 )
 
-// GetSysApps get all system apps from appsRoot dir
+// GetSysApps get all system apps from env
 func GetSysApps() []string {
 	sysAppsEnv := os.Getenv("SYS_APPS")
 	return strings.Split(sysAppsEnv, ",")
+}
+
+// GetKbMiddlewares from env
+func GetKbMiddlewares() []string {
+	kbMiddlewaresEnv := os.Getenv("KB_MIDDLEWARES")
+	return strings.Split(kbMiddlewaresEnv, ",")
+}
+
+func IsKbMiddlewares(middleware string) bool {
+	kbMiddlewares := GetKbMiddlewares()
+	for _, name := range kbMiddlewares {
+		if name == middleware {
+			return true
+		}
+	}
+	return false
 }
 
 // IsSysApp returns true if app is system app, false otherwise.

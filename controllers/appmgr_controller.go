@@ -85,7 +85,7 @@ func (r *ApplicationManagerController) ReconcileAll() {
 	}
 
 	for _, appmgr := range appManagerList.Items {
-		if appmgr.Spec.Type != appv1alpha1.App {
+		if appmgr.Spec.Type != appv1alpha1.App && appmgr.Spec.Type != appv1alpha1.Middleware {
 			continue
 		}
 		_, err := r.Reconcile(ctx, ctrl.Request{
@@ -154,7 +154,7 @@ func (r *ApplicationManagerController) Reconcile(ctx context.Context, req ctrl.R
 
 func (r *ApplicationManagerController) preEnqueueCheckForCreate(obj client.Object) bool {
 	am, _ := obj.(*appv1alpha1.ApplicationManager)
-	if am.Spec.Type != appv1alpha1.App {
+	if am.Spec.Type != appv1alpha1.App && am.Spec.Type != appv1alpha1.Middleware {
 		return false
 	}
 	return am.Status.State != ""
@@ -164,7 +164,7 @@ func (r *ApplicationManagerController) preEnqueueCheckForUpdate(old, new client.
 	oldAppMgr, _ := old.(*appv1alpha1.ApplicationManager)
 	curAppMgr, _ := new.(*appv1alpha1.ApplicationManager)
 
-	if curAppMgr.Spec.Type != appv1alpha1.App {
+	if curAppMgr.Spec.Type != appv1alpha1.App && curAppMgr.Spec.Type != appv1alpha1.Middleware {
 		return false
 	}
 	if curAppMgr.Status.OpGeneration <= oldAppMgr.Status.OpGeneration {
