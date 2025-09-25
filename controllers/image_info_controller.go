@@ -245,9 +245,16 @@ func (r *AppImageInfoController) GetManifest(ctx context.Context, instance *appv
 		return r.getManifestViaNetwork(ctx, imageName)
 	}
 	var archManifest *api.ImageManifest
-	imageRef, _ := refdocker.ParseDockerRef(imageName)
+	imageRef, err := refdocker.ParseDockerRef(imageName)
+	if err != nil {
+		klog.Errorf("invalid docker ref %s %v", imageName, err)
+		return nil, err
+	}
 	for _, imageInfo := range imageInfoReq.Images {
-		name, _ := refdocker.ParseDockerRef(imageInfo.ImageName)
+		name, err := refdocker.ParseDockerRef(imageInfo.ImageName)
+		if err != nil {
+			return nil, err
+		}
 		if name.String() == imageRef.String() && imageInfo.ArchManifest != nil {
 			archManifest = imageInfo.ArchManifest[fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH)]
 			break
@@ -282,7 +289,12 @@ func (r *AppImageInfoController) GetImageInfo(ctx context.Context, instance *app
 			defer wg.Done()
 			tokens <- struct{}{}
 			defer func() { <-tokens }()
-			name, _ := refdocker.ParseDockerRef(originRef)
+			name, err := refdocker.ParseDockerRef(originRef)
+			if err != nil {
+				klog.Errorf("invalid image ref %s %v", originRef, err)
+				results <- imageInfoResult{err: err}
+				return
+			}
 			manifest, err := r.GetManifest(ctx, instance, originRef)
 			if err != nil {
 				klog.Infof("get image %s manifest failed %v", name.String(), err)
@@ -373,14 +385,17 @@ func (r *AppImageInfoController) buildImageInspectFromManifest(manifest *api.Ima
 
 func (r *AppImageInfoController) getManifestViaNetwork(ctx context.Context, originRef string) (*imagetypes.ImageInspectInfo, error) {
 
-	name, _ := refdocker.ParseDockerRef(originRef)
+	name, err := refdocker.ParseDockerRef(originRef)
+	if err != nil {
+		return nil, err
+	}
 	replacedRef, _ := utils.ReplacedImageRef(registry.GetMirrors(), name.String(), false)
 
 	var src imagetypes.ImageSource
 	srcImageName := "docker://" + replacedRef
 	sysCtx := newSystemContext()
 	fmt.Printf("imageName: %s\n", replacedRef)
-	src, err := parseImageSource(ctx, srcImageName)
+	src, err = parseImageSource(ctx, srcImageName)
 	if err != nil {
 		klog.Infof("parse Image Source: %v", err)
 		return nil, err
