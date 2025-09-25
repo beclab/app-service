@@ -184,7 +184,10 @@ func (is *imageService) Progress(ctx context.Context, ref string, opts PullOptio
 }
 
 func (is *imageService) GetExistsImage(ref string) (string, error) {
-	name, _ := refdocker.ParseDockerRef(ref)
+	name, err := refdocker.ParseDockerRef(ref)
+	if err != nil {
+		return "", err
+	}
 	image, err := is.client.GetImage(context.TODO(), name.String())
 	if err != nil {
 		return "", err

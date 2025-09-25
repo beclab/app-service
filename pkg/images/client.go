@@ -125,7 +125,10 @@ func (imc *ImageManagerClient) PollDownloadProgress(ctx context.Context, am *app
 		klog.Errorf("failed unmarshal to images %v", err)
 	}
 	for i, ref := range imageList {
-		name, _ := refdocker.ParseDockerRef(ref.Name)
+		name, err := refdocker.ParseDockerRef(ref.Name)
+		if err != nil {
+			continue
+		}
 		imageList[i].Name = name.String()
 	}
 
