@@ -928,6 +928,15 @@ func (h *Handler) oamValues(req *restful.Request, resp *restful.Response) {
 	values["postgres"] = map[string]interface{}{
 		"databases": map[string]interface{}{},
 	}
+	values["minio"] = map[string]interface{}{
+		"buckets": map[string]interface{}{},
+	}
+	values["rabbitmq"] = map[string]interface{}{
+		"vhosts": map[string]interface{}{},
+	}
+	values["elasticsearch"] = map[string]interface{}{
+		"indexes": map[string]interface{}{},
+	}
 	values["redis"] = map[string]interface{}{}
 	values["mongodb"] = map[string]interface{}{
 		"databases": map[string]interface{}{},

@@ -46,6 +46,8 @@ var (
 		tapr.TypeRedis.String(),
 		tapr.TypeNats.String(),
 		tapr.TypeMinio.String(),
+		tapr.TypeRabbitMQ.String(),
+		tapr.TypeElasticsearch.String(),
 	}
 )
 

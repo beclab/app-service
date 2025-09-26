@@ -2,11 +2,13 @@ package tapr
 
 // Middleware describe middleware config.
 type Middleware struct {
-	Postgres *PostgresConfig `yaml:"postgres,omitempty"`
-	Redis    *RedisConfig    `yaml:"redis,omitempty"`
-	MongoDB  *MongodbConfig  `yaml:"mongodb,omitempty"`
-	Nats     *NatsConfig     `yaml:"nats,omitempty"`
-	Minio    *MinioConfig    `yaml:"minio"`
+	Postgres      *PostgresConfig      `yaml:"postgres,omitempty"`
+	Redis         *RedisConfig         `yaml:"redis,omitempty"`
+	MongoDB       *MongodbConfig       `yaml:"mongodb,omitempty"`
+	Nats          *NatsConfig          `yaml:"nats,omitempty"`
+	Minio         *MinioConfig         `yaml:"minio,omitempty"`
+	RabbitMQ      *RabbitMQConfig      `yaml:"rabbitmq,omitempty"`
+	Elasticsearch *ElasticsearchConfig `yaml:"elasticsearch,omitempty"`
 }
 
 // Database specify database name and if distributed.
@@ -31,6 +33,26 @@ type MinioConfig struct {
 }
 
 type Bucket struct {
+	Name string `json:"name"`
+}
+
+type RabbitMQConfig struct {
+	Username string  `yaml:"username" json:"username"`
+	Password string  `yaml:"password" json:"password"`
+	VHosts   []VHost `yaml:"vhosts" json:"vhosts"`
+}
+
+type VHost struct {
+	Name string `json:"name"`
+}
+
+type ElasticsearchConfig struct {
+	Username string  `yaml:"username" json:"username"`
+	Password string  `yaml:"password" json:"password"`
+	Indexes  []Index `yaml:"indexes" json:"indexes"`
+}
+
+type Index struct {
 	Name string `json:"name"`
 }
 

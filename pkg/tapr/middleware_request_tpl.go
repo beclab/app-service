@@ -179,8 +179,60 @@ spec:
     user: {{ .Middleware.Username }}
 `
 
+const rabbitmqRequest = `apiVersion: apr.bytetrade.io/v1alpha1
+kind: MiddlewareRequest
+metadata:
+  name: {{ .AppName }}-rabbitmq
+  namespace: {{ .Namespace }}
+spec:
+  app: {{ .AppName }}
+  appNamespace: {{ .AppNamespace }}
+  middleware: rabbitmq
+  rabbitmq:
+    vhosts:
+    {{- range $k, $v := .Middleware.VHosts }}
+    - name: {{ $v.Name }}
+    {{- end }}
+    password:
+     {{- if not (eq .Middleware.Password "") }}
+      value: {{ .Middleware.Password }}
+     {{- else }}
+      valueFrom:
+        secretKeyRef:
+          name: {{ .AppName }}-{{ .Namespace }}-rabbitmq-password
+          key: "password"
+     {{- end }}
+    user: {{ .Middleware.Username }}
+`
+
+const elasticsearchRequest = `apiVersion: apr.bytetrade.io/v1alpha1
+kind: MiddlewareRequest
+metadata:
+  name: {{ .AppName }}-elasticsearch
+  namespace: {{ .Namespace }}
+spec:
+  app: {{ .AppName }}
+  appNamespace: {{ .AppNamespace }}
+  middleware: elasticsearch
+  elasticsearch:
+    indexes:
+    {{- range $k, $v := .Middleware.Indexes }}
+    - name: {{ $v.Name }}
+    {{- end }}
+    password:
+     {{- if not (eq .Middleware.Password "") }}
+      value: {{ .Middleware.Password }}
+     {{- else }}
+      valueFrom:
+        secretKeyRef:
+          name: {{ .AppName }}-{{ .Namespace }}-elasticsearch-password
+          key: "password"
+     {{- end }}
+    user: {{ .Middleware.Username }}
+`
+
 func GenMiddleRequest(middleware MiddlewareType, appName, appNamespace, namespace, username, password string,
-	databases []Database, natsConfig *NatsConfig, ownerName string, buckets []Bucket) ([]byte, error) {
+	databases []Database, natsConfig *NatsConfig, ownerName string, buckets []Bucket, vhosts []VHost, indexes []Index) ([]byte, error) {
 	switch middleware {
 	case TypePostgreSQL:
 		return genPostgresRequest(appName, appNamespace, namespace, username, password, databases)
@@ -192,6 +244,10 @@ func GenMiddleRequest(middleware MiddlewareType, appName, appNamespace, namespac
 		return genNatsRequest(appName, appNamespace, namespace, username, password, natsConfig, ownerName)
 	case TypeMinio:
 		return genMinioRequest(appName, appNamespace, namespace, username, password, buckets)
+	case TypeRabbitMQ:
+		return genRabbitMQRequest(appName, appNamespace, namespace, username, password, vhosts)
+	case TypeElasticsearch:
+		return genElasticsearchRequest(appName, appNamespace, namespace, username, password, indexes)
 	default:
 		return []byte{}, nil
 	}
@@ -328,6 +384,62 @@ func genMinioRequest(appName, appNamespace, namespace, username, password string
 			Username: username,
 			Password: password,
 			Buckets:  buckets,
+		},
+	}
+	err = tpl.Execute(&middlewareRequest, data)
+	if err != nil {
+		return []byte{}, err
+	}
+	return middlewareRequest.Bytes(), nil
+}
+
+func genRabbitMQRequest(appName, appNamespace, namespace, username, password string, vhosts []VHost) ([]byte, error) {
+	tpl, err := template.New("rabbitmqRequest").Parse(rabbitmqRequest)
+	if err != nil {
+		return []byte{}, err
+	}
+	var middlewareRequest bytes.Buffer
+	data := struct {
+		AppName      string
+		AppNamespace string
+		Namespace    string
+		Middleware   *RabbitMQConfig
+	}{
+		AppName:      appName,
+		AppNamespace: appNamespace,
+		Namespace:    namespace,
+		Middleware: &RabbitMQConfig{
+			Username: username,
+			Password: password,
+			VHosts:   vhosts,
+		},
+	}
+	err = tpl.Execute(&middlewareRequest, data)
+	if err != nil {
+		return []byte{}, err
+	}
+	return middlewareRequest.Bytes(), nil
+}
+
+func genElasticsearchRequest(appName, appNamespace, namespace, username, password string, indexes []Index) ([]byte, error) {
+	tpl, err := template.New("elasticsearchRequest").Parse(elasticsearchRequest)
+	if err != nil {
+		return []byte{}, err
+	}
+	var middlewareRequest bytes.Buffer
+	data := struct {
+		AppName      string
+		AppNamespace string
+		Namespace    string
+		Middleware   *ElasticsearchConfig
+	}{
+		AppName:      appName,
+		AppNamespace: appNamespace,
+		Namespace:    namespace,
+		Middleware: &ElasticsearchConfig{
+			Username: username,
+			Password: password,
+			Indexes:  indexes,
 		},
 	}
 	err = tpl.Execute(&middlewareRequest, data)
