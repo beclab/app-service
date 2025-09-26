@@ -8,8 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/util/sets"
-
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/utils"
@@ -341,28 +339,13 @@ func generateIptablesCommands(appCfg *appcfg.ApplicationConfig) string {
 	cmd += fmt.Sprintf(`-A PROXY_INBOUND -p tcp -j PROXY_IN_REDIRECT
 -A PROXY_IN_REDIRECT -p tcp -j REDIRECT --to-port %d
 `, constants.EnvoyInboundListenerPort)
-	allowedPortSet := sets.NewInt(5432, 6379, 3306, 27017, 443, 4222)
-	allowedOutboundPorts := getAllowedOutboundPorts(appCfg)
-	for _, port := range allowedOutboundPorts {
-		if allowedPortSet.Has(port) {
-			continue
-		}
-		cmd += fmt.Sprintf("-A PROXY_OUTBOUND -p tcp --dport %d -j RETURN\n", port)
-		allowedPortSet.Insert(port)
-	}
 
-	cmd += fmt.Sprintf(`-A PROXY_OUTBOUND -p tcp --dport 5432 -j RETURN
--A PROXY_OUTBOUND -p tcp --dport 6379 -j RETURN
--A PROXY_OUTBOUND -p tcp --dport 3306 -j RETURN
--A PROXY_OUTBOUND -p tcp --dport 27017 -j RETURN
--A PROXY_OUTBOUND -p tcp --dport 443 -j RETURN
--A PROXY_OUTBOUND -p tcp --dport 4222 -j RETURN
--A PROXY_OUTBOUND -d ${POD_IP}/32 -j RETURN
+	cmd += fmt.Sprintf(`-A PROXY_OUTBOUND -d ${POD_IP}/32 -j RETURN
 -A PROXY_OUTBOUND -o lo ! -d 127.0.0.1/32 -m owner --uid-owner 1555 -j PROXY_IN_REDIRECT
 -A PROXY_OUTBOUND -o lo -m owner ! --uid-owner 1555 -j RETURN
 -A PROXY_OUTBOUND -m owner --uid-owner 1555 -j RETURN
 -A PROXY_OUTBOUND -d 127.0.0.1/32 -j RETURN
-
+-A PROXY_OUTBOUND -p tcp -m multiport ! --dports 80,8080 -j RETURN
 -A PROXY_OUTBOUND -j PROXY_OUT_REDIRECT
 -A PROXY_OUT_REDIRECT -p tcp -j REDIRECT --to-port %d
 
@@ -375,25 +358,6 @@ EOF
 	return cmd
 }
 
-func getAllowedOutboundPorts(appCfg *appcfg.ApplicationConfig) []int {
-	if appCfg == nil {
-		return []int{}
-	}
-	if appCfg.Middleware == nil {
-		return appCfg.AllowedOutboundPorts
-	}
-	allowedOutboundPorts := appCfg.AllowedOutboundPorts
-	if appCfg.Middleware.Minio != nil {
-		allowedOutboundPorts = append(allowedOutboundPorts, 9000)
-	}
-	if appCfg.Middleware.RabbitMQ != nil {
-		allowedOutboundPorts = append(allowedOutboundPorts, 5672)
-	}
-	if appCfg.Middleware.Elasticsearch != nil {
-		allowedOutboundPorts = append(allowedOutboundPorts, 9200)
-	}
-	return allowedOutboundPorts
-}
 
 // GetWebSocketSideCarContainerSpec returns the container specification for the WebSocket sidecar.
 func GetWebSocketSideCarContainerSpec(wsConfig *appcfg.WsConfig) corev1.Container {
