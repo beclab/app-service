@@ -789,13 +789,8 @@ func checkVersionFormat(constraint string) error {
 
 // GetIndexAndDownloadChart download a chart and returns download chart path.
 func GetIndexAndDownloadChart(ctx context.Context, options *ConfigOptions) (string, error) {
-	terminusNonce, err := utils.GenTerminusNonce()
-	if err != nil {
-		return "", err
-	}
 	client := resty.New().SetTimeout(10*time.Second).
 		SetAuthToken(options.Token).
-		SetHeader("Terminus-Nonce", terminusNonce).
 		SetHeader(constants.MarketUser, options.Owner).
 		SetHeader(constants.MarketSource, options.MarketSource)
 	indexFileURL := options.RepoURL
