@@ -15,6 +15,7 @@ const (
 	System                   = "system"
 	Network                  = "network"
 	Internal                 = "user-internal"
+	Protected                = "protected"
 )
 
 var (
@@ -70,6 +71,13 @@ var (
 							NamespaceSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{
 									NamespaceTypeLabel: System,
+								},
+							},
+						},
+						{
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									NamespaceTypeLabel: Protected,
 								},
 							},
 						},
@@ -161,7 +169,28 @@ var (
 				},
 			},
 		},
-	} // end NPOSSystem
+	} // end NPOSNetwork
+
+	// NPOSProtected is a network policy template for os-protected.
+	NPOSProtected = netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{},
+			Ingress: []netv1.NetworkPolicyIngressRule{
+				{
+					From: []netv1.NetworkPolicyPeer{
+						{
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									NamespaceTypeLabel: Internal,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	} // end NPOSProtected
 
 	// NPUserSystem is a network policy template for user-system namespace.
 	NPUserSystem = netv1.NetworkPolicy{

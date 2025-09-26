@@ -191,6 +191,12 @@ func (r *SecurityReconciler) reconcileNamespaceLabels(ctx context.Context, ns *c
 			ns.Labels[security.NamespaceTypeLabel] = security.Network
 			updated = true
 		}
+	} else if security.IsOSProtectedNamespace(ns.Name) {
+		// make os protected namespace can access other namespaces' network
+		if label, ok := ns.Labels[security.NamespaceTypeLabel]; !ok || label != security.Protected {
+			ns.Labels[security.NamespaceTypeLabel] = security.Protected
+			updated = true
+		}
 	} else if ok, owner := security.IsUserInternalNamespaces(ns.Name); ok {
 		if label, ok := ns.Labels[security.NamespaceTypeLabel]; !ok || label != security.Internal {
 			ns.Labels[security.NamespaceTypeLabel] = security.Internal
@@ -345,6 +351,10 @@ func (r *SecurityReconciler) reconcileNetworkPolicy(ctx context.Context, ns *cor
 		} else if security.IsOSSystemNamespace(ns.Name) {
 			npName = "os-system-np"
 			networkPolicy = security.NPOSSystem.DeepCopy()
+			npFix = nil
+		} else if security.IsOSProtectedNamespace(ns.Name) {
+			npName = "os-protected-np"
+			networkPolicy = security.NPOSProtected.DeepCopy()
 			npFix = nil
 		} else if security.IsOSNetworkNamespace(ns.Name) {
 			npName = "os-network-np"
