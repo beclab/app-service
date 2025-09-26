@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"k8s.io/apimachinery/pkg/api/errors"
+
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/constants"
@@ -248,6 +250,11 @@ func (h *HelmOps) SetValues() (values map[string]interface{}, err error) {
 		return values, err
 	}
 	values["sysVersion"] = terminus.Spec.Version
+	if err := h.addEnvironmentVariables(values); err != nil {
+		klog.Errorf("Failed to add environment variables: %v", err)
+		return values, err
+	}
+
 	return values, err
 }
 
@@ -281,4 +288,23 @@ func (h *HelmOps) getInstalledApps(ctx context.Context) (installed bool, app []*
 	}
 
 	return
+}
+
+func (h *HelmOps) addEnvironmentVariables(values map[string]interface{}) error {
+	values[constants.OlaresEnvHelmValuesKey] = make(map[string]interface{})
+	appEnv, err := h.client.AppClient.SysV1alpha1().AppEnvs(h.app.Namespace).Get(h.ctx, apputils.FormatAppEnvName(h.app.AppName, h.app.OwnerName), metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	for _, env := range appEnv.Envs {
+		values[constants.OlaresEnvHelmValuesKey].(map[string]interface{})[env.EnvName] = env.GetEffectiveValue()
+	}
+
+	klog.Infof("Added environment variables to Helm values: %+v", values[constants.OlaresEnvHelmValuesKey])
+
+	return nil
 }

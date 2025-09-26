@@ -1,6 +1,9 @@
 package api
 
-import "bytetrade.io/web3os/app-service/pkg/constants"
+import (
+	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/constants"
+)
 
 const (
 	AppTokenKey         = "bytetrade.io/token"
@@ -119,11 +122,12 @@ type UpgradeRequest struct {
 
 // InstallRequest represents a request to install an application.
 type InstallRequest struct {
-	Dev     bool      `json:"devMode"`
-	RepoURL string    `json:"repoUrl"`
-	CfgURL  string    `json:"cfgUrl"`
-	Source  AppSource `json:"source"`
-	Images  []Image   `json:"images"`
+	Dev     bool                    `json:"devMode"`
+	RepoURL string                  `json:"repoUrl"`
+	CfgURL  string                  `json:"cfgUrl"`
+	Source  AppSource               `json:"source"`
+	Images  []Image                 `json:"images"`
+	Envs    []sysv1alpha1.AppEnvVar `json:"envs"`
 }
 
 type Image struct {
@@ -214,4 +218,24 @@ type ManifestList struct {
 	SchemaVersion int            `json:"schemaVersion"`
 	MediaType     string         `json:"mediaType"`
 	Manifests     []ManifestItem `json:"manifests"`
+}
+
+var (
+	CheckTypeAppEnv = "appenv"
+)
+
+type FailedCheckResponse struct {
+	Code int                     `json:"code"`
+	Data FailedCheckResponseData `json:"data"`
+}
+
+type FailedCheckResponseData struct {
+	Type string `json:"type"`
+	Data any    `json:",inline"`
+}
+
+type AppEnvCheckResult struct {
+	MissingValues []sysv1alpha1.AppEnvVar `json:"missingValues"`
+	MissingRefs   []sysv1alpha1.AppEnvVar `json:"missingRefs"`
+	InvalidValues []sysv1alpha1.AppEnvVar `json:"invalidValues"`
 }

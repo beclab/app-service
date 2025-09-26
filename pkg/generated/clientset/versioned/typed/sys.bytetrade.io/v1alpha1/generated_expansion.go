@@ -2,4 +2,10 @@
 
 package v1alpha1
 
+type AppEnvExpansion interface{}
+
+type SystemEnvExpansion interface{}
+
 type TerminusExpansion interface{}
+
+type UserEnvExpansion interface{}

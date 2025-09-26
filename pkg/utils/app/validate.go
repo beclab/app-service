@@ -1,12 +1,14 @@
 package app
 
 import (
+	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
@@ -465,4 +467,53 @@ func CheckMiddlewareRequirement(ctx context.Context, ctrlClient client.Client, m
 		return true, nil
 	}
 	return true, nil
+}
+
+func CheckAppEnvs(ctx context.Context, ctrlClient client.Client, envs []sysv1alpha1.AppEnvVar, owner string) (*api.AppEnvCheckResult, error) {
+	if len(envs) == 0 {
+		return nil, nil
+	}
+	result := new(api.AppEnvCheckResult)
+	referencedEnvs := make(map[string]string)
+	var once sync.Once
+	for _, env := range envs {
+		if env.ValueFrom != nil && env.ValueFrom.EnvName != "" {
+			var listErr error
+			once.Do(func() {
+				sysenvs := new(sysv1alpha1.SystemEnvList)
+				listErr = ctrlClient.List(ctx, sysenvs)
+				if listErr != nil {
+					return
+				}
+				userenvs := new(sysv1alpha1.UserEnvList)
+				listErr = ctrlClient.List(ctx, userenvs, client.InNamespace(utils.UserspaceName(owner)))
+				for _, sysenv := range sysenvs.Items {
+					referencedEnvs[sysenv.EnvName] = sysenv.GetEffectiveValue()
+				}
+				for _, userenv := range userenvs.Items {
+					referencedEnvs[userenv.EnvName] = userenv.GetEffectiveValue()
+				}
+			})
+			if listErr != nil {
+				return nil, fmt.Errorf("failed to list referenced envs: %s", listErr)
+			}
+			if value, ok := referencedEnvs[env.ValueFrom.EnvName]; !ok || value == "" {
+				result.MissingRefs = append(result.MissingRefs, env)
+			}
+			continue
+		}
+		effectiveValue := env.GetEffectiveValue()
+		if env.Required && effectiveValue == "" {
+			result.MissingValues = append(result.MissingValues, env)
+			continue
+		}
+		if err := utils.CheckEnvValueByType(effectiveValue, env.Type); err != nil {
+			result.InvalidValues = append(result.InvalidValues, env)
+		}
+	}
+	if len(result.MissingValues) > 0 || len(result.InvalidValues) > 0 || len(result.MissingRefs) > 0 {
+		return result, nil
+	}
+	return nil, nil
+
 }

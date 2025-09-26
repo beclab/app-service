@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 
+	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
+
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/tapr"
 )
@@ -23,18 +25,19 @@ type AppMetaData struct {
 }
 
 type AppConfiguration struct {
-	ConfigVersion string                 `yaml:"olaresManifest.version" json:"olaresManifest.version"`
-	ConfigType    string                 `yaml:"olaresManifest.type" json:"olaresManifest.type"`
-	APIVersion    string                 `yaml:"apiVersion" json:"apiVersion"`
-	Metadata      AppMetaData            `yaml:"metadata" json:"metadata"`
-	Entrances     []v1alpha1.Entrance    `yaml:"entrances" json:"entrances"`
-	Ports         []v1alpha1.ServicePort `yaml:"ports" json:"ports"`
-	TailScale     v1alpha1.TailScale     `yaml:"tailscale" json:"tailscale"`
-	Spec          AppSpec                `yaml:"spec" json:"spec"`
-	Permission    Permission             `yaml:"permission" json:"permission" description:"app permission request"`
-	Middleware    *tapr.Middleware       `yaml:"middleware" json:"middleware" description:"app middleware request"`
-	Options       Options                `yaml:"options" json:"options" description:"app options"`
-	Provider      []Provider             `yaml:"provider,omitempty" json:"provider,omitempty" description:"app provider information"`
+	ConfigVersion string                  `yaml:"olaresManifest.version" json:"olaresManifest.version"`
+	ConfigType    string                  `yaml:"olaresManifest.type" json:"olaresManifest.type"`
+	APIVersion    string                  `yaml:"apiVersion" json:"apiVersion"`
+	Metadata      AppMetaData             `yaml:"metadata" json:"metadata"`
+	Entrances     []v1alpha1.Entrance     `yaml:"entrances" json:"entrances"`
+	Ports         []v1alpha1.ServicePort  `yaml:"ports" json:"ports"`
+	TailScale     v1alpha1.TailScale      `yaml:"tailscale" json:"tailscale"`
+	Spec          AppSpec                 `yaml:"spec" json:"spec"`
+	Permission    Permission              `yaml:"permission" json:"permission" description:"app permission request"`
+	Middleware    *tapr.Middleware        `yaml:"middleware" json:"middleware" description:"app middleware request"`
+	Options       Options                 `yaml:"options" json:"options" description:"app options"`
+	Provider      []Provider              `yaml:"provider,omitempty" json:"provider,omitempty" description:"app provider information"`
+	Envs          []sysv1alpha1.AppEnvVar `yaml:"envs,omitempty" json:"envs,omitempty"`
 }
 
 type AppSpec struct {

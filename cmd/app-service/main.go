@@ -8,6 +8,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	iamv1alpha2 "github.com/beclab/api/iam/v1alpha2"
+
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/controllers"
@@ -19,12 +21,13 @@ import (
 	kbappsv1 "github.com/apecloud/kubeblocks/apis/apps/v1"
 	kbopv1alphav1 "github.com/apecloud/kubeblocks/apis/operations/v1alpha1"
 	"k8s.io/client-go/dynamic"
+
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
-	iamv1alpha2 "github.com/beclab/api/iam/v1alpha2"
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+
 	//"k8s.io/client-go/dynamic"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -176,6 +179,38 @@ func main() {
 		KubeConfig: config,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Unable to create controller", "controller", "NodeAlert")
+		os.Exit(1)
+	}
+
+	if err = (&controllers.SystemEnvController{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Unable to create controller", "controller", "SystemEnv")
+		os.Exit(1)
+	}
+
+	if err = (&controllers.UserEnvController{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Unable to create controller", "controller", "UserEnv")
+		os.Exit(1)
+	}
+
+	if err = (&controllers.UserEnvSyncController{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Unable to create controller", "controller", "UserEnvSync")
+		os.Exit(1)
+	}
+
+	if err = (&controllers.AppEnvController{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Unable to create controller", "controller", "AppEnv")
 		os.Exit(1)
 	}
 

@@ -551,3 +551,8 @@ func NewListResult[T any](items []T) ListResult {
 	}
 	return ListResult{Code: 200, Data: vs, Totals: len(items)}
 }
+
+// getCurrentUser extracts the current user from the request context
+func getCurrentUser(req *restful.Request) string {
+	return req.Attribute(constants.UserContextAttribute).(string)
+}

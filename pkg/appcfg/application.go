@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/tapr"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 
@@ -89,6 +90,7 @@ type ApplicationConfig struct {
 	ServiceAccountName   *string
 	Provider             []Provider
 	Type                 string
+	Envs                 []sysv1alpha1.AppEnvVar
 }
 
 func (c *ApplicationConfig) IsMiddleware() bool {
