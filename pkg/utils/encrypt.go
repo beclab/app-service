@@ -10,11 +10,9 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"os"
 	"strconv"
 	"time"
 )
@@ -165,17 +163,4 @@ func CheckSSLCertificate(cert, key []byte, hostname string) error {
 	}
 
 	return nil
-}
-
-// GenTerminusNonce generates a random nonce for auth.
-func GenTerminusNonce() (string, error) {
-	randomKey := os.Getenv("APP_RANDOM_KEY")
-	timestamp := getTimestamp()
-	cipherText, err := AesEncrypt([]byte(timestamp), []byte(randomKey))
-	if err != nil {
-		return "", err
-	}
-	b64CipherText := base64.StdEncoding.EncodeToString(cipherText)
-	terminusNonce := "appservice:" + b64CipherText
-	return terminusNonce, nil
 }

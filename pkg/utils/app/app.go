@@ -789,13 +789,8 @@ func checkVersionFormat(constraint string) error {
 
 // GetIndexAndDownloadChart download a chart and returns download chart path.
 func GetIndexAndDownloadChart(ctx context.Context, options *ConfigOptions) (string, error) {
-	terminusNonce, err := utils.GenTerminusNonce()
-	if err != nil {
-		return "", err
-	}
 	client := resty.New().SetTimeout(10*time.Second).
 		SetAuthToken(options.Token).
-		SetHeader("Terminus-Nonce", terminusNonce).
 		SetHeader(constants.MarketUser, options.Owner).
 		SetHeader(constants.MarketSource, options.MarketSource)
 	indexFileURL := options.RepoURL
@@ -850,19 +845,18 @@ func GetIndexAndDownloadChart(ctx context.Context, options *ConfigOptions) (stri
 			return "", err
 		}
 	}
-	_, err = downloadAndUnpack(ctx, url, options.Token, terminusNonce, options.Owner, options.MarketSource)
+	_, err = downloadAndUnpack(ctx, url, options.Token, options.Owner, options.MarketSource)
 	if err != nil {
 		return "", err
 	}
 	return chartPath, nil
 }
 
-func downloadAndUnpack(ctx context.Context, tgz *url.URL, token, terminusNonce, owner, marketSource string) (string, error) {
+func downloadAndUnpack(ctx context.Context, tgz *url.URL, token, owner, marketSource string) (string, error) {
 	dst := appcfg.ChartsPath
 	g := new(getter.HttpGetter)
 	g.Header = make(http.Header)
 	g.Header.Set("Authorization", "Bearer "+token)
-	g.Header.Set("Terminus-Nonce", terminusNonce)
 	g.Header.Set(constants.MarketUser, owner)
 	g.Header.Set(constants.MarketSource, marketSource)
 
