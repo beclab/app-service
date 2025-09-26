@@ -12,6 +12,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/helm"
 	"bytetrade.io/web3os/app-service/pkg/tapr"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
+
 	"github.com/emicklei/go-restful/v3"
 	"github.com/go-resty/resty/v2"
 	"helm.sh/helm/v3/pkg/action"
@@ -22,7 +23,7 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// Uninstall do a uninstall operation for release.
+// UninstallAll do a uninstall operation for release.
 func (h *HelmOps) UninstallAll() error {
 	client, err := kubernetes.NewForConfig(h.kubeConfig)
 	if err != nil {
