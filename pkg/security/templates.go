@@ -119,6 +119,13 @@ var (
 						{
 							NamespaceSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{
+									NamespaceTypeLabel: Protected,
+								},
+							},
+						},
+						{
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
 									"kubesphere.io/namespace": "kube-system",
 								},
 							},
