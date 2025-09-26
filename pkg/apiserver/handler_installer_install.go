@@ -1,12 +1,15 @@
 package apiserver
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"slices"
 	"strconv"
+
+	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
@@ -36,6 +39,8 @@ type installHelperIntf interface {
 	getInstalledApps() (installed bool, app []*v1alpha1.Application, err error)
 	getAppConfig(adminUsers []string, marketSource string, isAdmin, appInstalled bool, installedApps []*v1alpha1.Application) (err error)
 	validate(bool, []*v1alpha1.Application) error
+	setAppEnv(overrides []sysv1alpha1.AppEnvVar) error
+	applyAppEnv(ctx context.Context) error
 	applyApplicationManager(marketSource string) (opID string, err error)
 }
 
@@ -164,9 +169,21 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
+	err = helper.setAppEnv(insReq.Envs)
+	if err != nil {
+		klog.Errorf("Failed to set app env err=%v", err)
+		return
+	}
+
 	err = helper.validate(isAdmin, installedApps)
 	if err != nil {
 		klog.Errorf("Failed to validate app install request err=%v", err)
+		return
+	}
+
+	err = helper.applyAppEnv(req.Request.Context())
+	if err != nil {
+		klog.Errorf("Failed to apply app env err=%v", err)
 		return
 	}
 
@@ -291,6 +308,16 @@ func (h *installHandlerHelper) validate(isAdmin bool, installedApps []*v1alpha1.
 			Message:  "middleware requirement can not be satisfied",
 		})
 		return
+	}
+	ret, err := apputils.CheckAppEnvs(h.req.Request.Context(), h.h.ctrlClient, h.appConfig.Envs, h.owner)
+	if err != nil {
+		klog.Errorf("Failed to check app environment config err=%v", err)
+		api.HandleInternalError(h.resp, h.req, err)
+		return
+	}
+	if ret != nil {
+		api.HandleFailedCheck(h.resp, api.CheckTypeAppEnv, ret)
+		return fmt.Errorf("Invalid appenv config, check result: %#v", ret)
 	}
 
 	return
@@ -469,6 +496,7 @@ func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opI
 		}
 
 	}
+
 	opID = strconv.FormatInt(time.Now().Unix(), 10)
 
 	now := metav1.Now()
@@ -490,6 +518,44 @@ func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opI
 	}
 
 	utils.PublishAppEvent(a.Spec.AppOwner, a.Spec.AppName, string(a.Status.OpType), opID, v1alpha1.Pending.String(), "", nil)
+	return
+}
+
+func (h *installHandlerHelper) setAppEnv(overrides []sysv1alpha1.AppEnvVar) (err error) {
+	defer func() {
+		if err != nil {
+			api.HandleBadRequest(h.resp, h.req, err)
+		}
+	}()
+	if len(overrides) == 0 {
+		return nil
+	}
+	if h.appConfig == nil {
+		return fmt.Errorf("refuse to set app env on nil appconfig")
+	}
+	if len(h.appConfig.Envs) == 0 {
+		return fmt.Errorf("refuse to set app env on app: %s with no declared envs", h.appConfig.AppName)
+	}
+	for _, override := range overrides {
+		var found bool
+		for i := range h.appConfig.Envs {
+			if h.appConfig.Envs[i].EnvName == override.EnvName {
+				found = true
+				h.appConfig.Envs[i].Value = override.Value
+			}
+		}
+		if !found {
+			return fmt.Errorf("app env '%s' not found in app config", override.EnvName)
+		}
+	}
+	return nil
+}
+
+func (h *installHandlerHelper) applyAppEnv(ctx context.Context) (err error) {
+	_, err = apputils.ApplyAppEnv(ctx, h.h.ctrlClient, h.appConfig)
+	if err != nil {
+		api.HandleError(h.resp, h.req, err)
+	}
 	return
 }
 

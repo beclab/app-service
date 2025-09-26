@@ -179,5 +179,6 @@ func getAppConfigFromConfigurationFile(app, chart, owner string) (*ApplicationCo
 		RequiredGPU:          cfg.Spec.RequiredGPU,
 		Internal:             cfg.Spec.RunAsInternal,
 		Type:                 cfg.ConfigType,
+		Envs:                 cfg.Envs,
 	}, nil
 }

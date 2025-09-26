@@ -20,6 +20,8 @@ const (
 	// Upgrading means that the upgrade operation is underway.
 	Upgrading ApplicationManagerState = "upgrading"
 
+	ApplyingEnv ApplicationManagerState = "applyingEnv"
+
 	Stopping ApplicationManagerState = "stopping"
 
 	Stopped ApplicationManagerState = "stopped"
@@ -35,6 +37,8 @@ const (
 	ResumeFailed ApplicationManagerState = "resumeFailed"
 
 	UpgradeFailed ApplicationManagerState = "upgradeFailed"
+
+	ApplyEnvFailed ApplicationManagerState = "applyEnvFailed"
 
 	StopFailed ApplicationManagerState = "stopFailed"
 
@@ -52,6 +56,7 @@ const (
 	InstallingCanceled   ApplicationManagerState = "installingCanceled"
 	InitializingCanceled ApplicationManagerState = "initializingCanceled"
 	UpgradingCanceled    ApplicationManagerState = "upgradingCanceled"
+	ApplyingEnvCanceled  ApplicationManagerState = "applyingEnvCanceled"
 	ResumingCanceled     ApplicationManagerState = "resumingCanceled"
 
 	// PendingCanceling means that the installation operation is under canceling operation.
@@ -60,6 +65,7 @@ const (
 	InstallingCanceling   ApplicationManagerState = "installingCanceling"
 	InitializingCanceling ApplicationManagerState = "initializingCanceling"
 	UpgradingCanceling    ApplicationManagerState = "upgradingCanceling"
+	ApplyingEnvCanceling  ApplicationManagerState = "applyingEnvCanceling"
 	ResumingCanceling     ApplicationManagerState = "resumingCanceling"
 	//SuspendingCanceling   ApplicationManagerState = "suspendingCanceling"
 
@@ -67,8 +73,9 @@ const (
 	DownloadingCancelFailed ApplicationManagerState = "downloadingCancelFailed"
 	InstallingCancelFailed  ApplicationManagerState = "installingCancelFailed"
 	//InitializingCancelFailed ApplicationManagerState = "initializingCancelFailed"
-	UpgradingCancelFailed ApplicationManagerState = "upgradingCancelFailed"
-	ResumingCancelFailed  ApplicationManagerState = "resumingCancelFailed"
+	UpgradingCancelFailed   ApplicationManagerState = "upgradingCancelFailed"
+	ApplyingEnvCancelFailed ApplicationManagerState = "applyingEnvCancelFailed"
+	ResumingCancelFailed    ApplicationManagerState = "resumingCancelFailed"
 
 	//SuspendingCancelFailed ApplicationManagerState = "suspendingCancelFailed"
 
@@ -97,6 +104,8 @@ const (
 	ResumeOp OpType = "resume"
 	// CancelOp means a cancel operation that operation can cancel an operation at pending or installing.
 	CancelOp OpType = "cancel"
+	// ApplyEnvOp means applying environment variables
+	ApplyEnvOp OpType = "applyEnv"
 )
 
 // Type means the entity that system support.

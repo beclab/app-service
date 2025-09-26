@@ -1,0 +1,225 @@
+package controllers
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+	"time"
+
+	"bytetrade.io/web3os/app-service/pkg/constants"
+	"bytetrade.io/web3os/app-service/pkg/utils"
+
+	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/appstate"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/klog/v2"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+type AppEnvController struct {
+	client.Client
+	Scheme *runtime.Scheme
+}
+
+//+kubebuilder:rbac:groups=sys.bytetrade.io,resources=appenvs,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=sys.bytetrade.io,resources=appenvs/status,verbs=get;update;patch
+//+kubebuilder:groups=app.bytetrade.io,resources=applicationmanagers,verbs=get;list;watch;update;patch
+//+kubebuilder:rbac:groups=app.bytetrade.io,resources=applicationmanagers/status,verbs=get;update;patch
+
+func (r *AppEnvController) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&sysv1alpha1.AppEnv{}).
+		Complete(r)
+}
+
+func (r *AppEnvController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	klog.Infof("Reconciling AppEnv: %s", req.NamespacedName)
+
+	var appEnv sysv1alpha1.AppEnv
+	if err := r.Get(ctx, req.NamespacedName, &appEnv); err != nil {
+		//todo: more detailed logic
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	return r.reconcileAppEnv(ctx, &appEnv)
+}
+
+func (r *AppEnvController) reconcileAppEnv(ctx context.Context, appEnv *sysv1alpha1.AppEnv) (ctrl.Result, error) {
+	klog.Infof("Processing AppEnv change: %s/%s", appEnv.Namespace, appEnv.Name)
+
+	// Check if this AppEnv was triggered by an environment variable change
+	if appEnv.Annotations != nil && appEnv.Annotations[constants.AppEnvSyncAnnotation] != "" {
+		klog.Infof("AppEnv %s/%s triggered by environment variable change: %s",
+			appEnv.Namespace, appEnv.Name, appEnv.Annotations[constants.AppEnvSyncAnnotation])
+
+		// Clear the annotation immediately - the update will trigger another reconcile
+		if err := r.clearSyncAnnotation(ctx, appEnv); err != nil {
+			klog.Errorf("Failed to clear sync annotation for AppEnv %s/%s: %v", appEnv.Namespace, appEnv.Name, err)
+			return ctrl.Result{}, err
+		}
+
+		// Return immediately - the annotation update will trigger another reconcile
+		return ctrl.Result{}, nil
+	}
+
+	// This reconcile is not triggered by annotation, proceed with normal sync
+	if err := r.syncEnvValues(ctx, appEnv); err != nil {
+		klog.Errorf("Failed to sync environment values for AppEnv %s/%s: %v", appEnv.Namespace, appEnv.Name, err)
+		return ctrl.Result{}, err
+	}
+
+	if appEnv.NeedApply {
+		if err := r.triggerApplyEnv(ctx, appEnv); err != nil {
+			klog.Errorf("Failed to trigger ApplyEnv for AppEnv %s/%s: %v", appEnv.Namespace, appEnv.Name, err)
+			return ctrl.Result{}, err
+		}
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func (r *AppEnvController) syncEnvValues(ctx context.Context, appEnv *sysv1alpha1.AppEnv) error {
+	original := appEnv.DeepCopy()
+
+	// Get SystemEnv values
+	var systemEnvList sysv1alpha1.SystemEnvList
+	if err := r.List(ctx, &systemEnvList); err != nil {
+		return fmt.Errorf("failed to list SystemEnvs: %v", err)
+	}
+	systemEnvMap := make(map[string]string)
+	for _, sysEnv := range systemEnvList.Items {
+		systemEnvMap[sysEnv.EnvName] = sysEnv.GetEffectiveValue()
+	}
+
+	// Get UserEnv values from user-space-{appOwner} namespace
+	var userEnvList sysv1alpha1.UserEnvList
+	userNamespace := utils.UserspaceName(appEnv.AppOwner)
+	if err := r.List(ctx, &userEnvList, client.InNamespace(userNamespace)); err != nil {
+		return fmt.Errorf("failed to list UserEnvs in namespace %s: %v", userNamespace, err)
+	}
+	userEnvMap := make(map[string]string)
+	for _, userEnv := range userEnvList.Items {
+		userEnvMap[userEnv.EnvName] = userEnv.GetEffectiveValue()
+	}
+
+	updated := false
+	for i := range appEnv.Envs {
+		envVar := &appEnv.Envs[i]
+		if envVar.ValueFrom != nil {
+			var value string
+			var exists bool
+			var source string
+
+			// Check if both UserEnv and SystemEnv exist with the same name
+			userEnvExists := false
+			systemEnvExists := false
+			if _, userEnvExists = userEnvMap[envVar.ValueFrom.EnvName]; userEnvExists {
+				value = userEnvMap[envVar.ValueFrom.EnvName]
+				source = "UserEnv"
+			}
+			if _, systemEnvExists = systemEnvMap[envVar.ValueFrom.EnvName]; systemEnvExists {
+				if userEnvExists {
+					// Both exist - this is unexpected, log a warning
+					klog.Warningf("AppEnv %s/%s references environment variable %s which exists in both UserEnv and SystemEnv. UserEnv value will be used.",
+						appEnv.Namespace, appEnv.Name, envVar.ValueFrom.EnvName)
+				} else {
+					value = systemEnvMap[envVar.ValueFrom.EnvName]
+					source = "SystemEnv"
+				}
+			}
+
+			exists = userEnvExists || systemEnvExists
+			if exists {
+				if envVar.Value != value || envVar.ValueFrom.Status != constants.EnvRefStatusSynced {
+					envVar.Value = value
+					envVar.ValueFrom.Status = constants.EnvRefStatusSynced
+					updated = true
+					if envVar.ApplyOnChange {
+						appEnv.NeedApply = true
+					}
+					klog.V(4).Infof("AppEnv %s/%s environment variable %s synced from %s with value: %s",
+						appEnv.Namespace, appEnv.Name, envVar.ValueFrom.EnvName, source, value)
+				}
+			} else {
+				if envVar.ValueFrom.Status != constants.EnvRefStatusNotFound {
+					envVar.ValueFrom.Status = constants.EnvRefStatusNotFound
+					updated = true
+				}
+			}
+		}
+	}
+
+	if updated {
+		if err := r.Patch(ctx, appEnv, client.MergeFrom(original)); err != nil {
+			return fmt.Errorf("failed to update AppEnv %s/%s: %v", appEnv.Namespace, appEnv.Name, err)
+		}
+	}
+
+	return nil
+}
+
+func (r *AppEnvController) triggerApplyEnv(ctx context.Context, appEnv *sysv1alpha1.AppEnv) error {
+	klog.Infof("Triggering ApplyEnv for app: %s owner: %s", appEnv.AppName, appEnv.AppOwner)
+
+	appMgrName, err := apputils.FmtAppMgrName(appEnv.AppName, appEnv.AppOwner, appEnv.Namespace)
+	if err != nil {
+		return fmt.Errorf("failed to format app manager name: %v", err)
+	}
+
+	var targetAppMgr appv1alpha1.ApplicationManager
+	if err := r.Get(ctx, types.NamespacedName{Name: appMgrName}, &targetAppMgr); err != nil {
+		return fmt.Errorf("failed to get ApplicationManager %s: %v", appMgrName, err)
+	}
+
+	state := targetAppMgr.Status.State
+	if !appstate.IsOperationAllowed(state, appv1alpha1.ApplyEnvOp) {
+		// trigger backoff retry and this is the expected behaviour
+		return fmt.Errorf("app %s is currently in state %s, applyEnv not allowed", appEnv.AppName, state)
+	}
+
+	appMgrCopy := targetAppMgr.DeepCopy()
+	appMgrCopy.Spec.OpType = appv1alpha1.ApplyEnvOp
+
+	if err := r.Patch(ctx, appMgrCopy, client.MergeFrom(&targetAppMgr)); err != nil {
+		return fmt.Errorf("failed to update ApplicationManager Spec.OpType: %v", err)
+	}
+
+	now := metav1.Now()
+	opID := strconv.FormatInt(time.Now().Unix(), 10)
+
+	status := appv1alpha1.ApplicationManagerStatus{
+		OpType:     appv1alpha1.ApplyEnvOp,
+		State:      appv1alpha1.ApplyingEnv,
+		OpID:       opID,
+		Message:    "waiting for applying env",
+		StatusTime: &now,
+		UpdateTime: &now,
+	}
+
+	// todo: should we consider an apply attempt applied, and set needApply back to false here, or should we keep retrying every time a new reconcile is trigger?
+	am, err := apputils.UpdateAppMgrStatus(targetAppMgr.Name, status)
+	if err != nil {
+		return fmt.Errorf("failed to update ApplicationManager Status: %v", err)
+	}
+	utils.PublishAppEvent(am.Spec.AppOwner, am.Spec.AppName, string(am.Status.OpType), opID, appv1alpha1.ApplyingEnv.String(), "", nil)
+
+	klog.Infof("Successfully triggered ApplyEnv for app: %s owner: %s", appEnv.AppName, appEnv.AppOwner)
+	return nil
+}
+
+func (r *AppEnvController) clearSyncAnnotation(ctx context.Context, appEnv *sysv1alpha1.AppEnv) error {
+	if appEnv.Annotations == nil || appEnv.Annotations[constants.AppEnvSyncAnnotation] == "" {
+		return nil
+	}
+
+	original := appEnv.DeepCopy()
+	delete(appEnv.Annotations, constants.AppEnvSyncAnnotation)
+
+	klog.Infof("Clearing environment sync annotation from AppEnv %s/%s", appEnv.Namespace, appEnv.Name)
+	return r.Patch(ctx, appEnv, client.MergeFrom(original))
+}

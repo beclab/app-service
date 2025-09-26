@@ -95,6 +95,18 @@ const (
 	OIDCSecret = "oidc-secret"
 
 	AppMarketSourceKey = "bytetrade.io/market-source"
+
+	// EnvRefStatus* constants for AppEnvVar.ValueFrom.Status (used for both SystemEnv and UserEnv references)
+	EnvRefStatusPending  = "pending"
+	EnvRefStatusSynced   = "synced"
+	EnvRefStatusNotFound = "notfound"
+
+	OlaresEnvHelmValuesKey = "olaresEnv"
+	SystemEnvHelmValuesKey = "system"
+	AppEnvHelmValuesKey    = "app"
+
+	// AppEnvSyncAnnotation triggers AppEnvController to sync environment values from SystemEnv or UserEnv changes
+	AppEnvSyncAnnotation = "appenv.bytetrade.io/sync-triggered-by"
 )
 
 var (
