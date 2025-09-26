@@ -15,9 +15,11 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/appinstaller/versioned"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
+	"bytetrade.io/web3os/app-service/pkg/helm"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/provider"
 	"bytetrade.io/web3os/app-service/pkg/tapr"
+	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 
 	"github.com/emicklei/go-restful/v3"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -225,24 +227,42 @@ func (h *Handler) setupAppEntranceDomain(req *restful.Request, resp *restful.Res
 			api.HandleError(resp, req, err)
 			return
 		}
-
 		var appCfg *appcfg.ApplicationConfig
-		err = json.Unmarshal([]byte(appMgr.Spec.Config), &appCfg)
-		if err != nil {
-			api.HandleError(resp, req, err)
-			return
-		}
 
-		ops, err := versioned.NewHelmOps(req.Request.Context(), h.kubeConfig, appCfg, token,
-			appinstaller.Opt{Source: app.Spec.Settings["source"], MarketSource: appMgr.GetMarketSource()})
-		if err != nil {
-			api.HandleError(resp, req, err)
-			return
-		}
-		err = ops.Upgrade()
-		if err != nil {
-			api.HandleError(resp, req, err)
-			return
+		if userspace.IsSysApp(appUpdated.Spec.Name) {
+			chartName := fmt.Sprintf("./userapps/apps/%s", appUpdated.Spec.Name)
+			appName := appUpdated.Spec.Name
+			if appName == "olares-app" {
+				appName = "system-apps"
+				chartName = fmt.Sprintf("./userapps/apps/%s", appName)
+			}
+			actionConfig, envSettings, err := helm.InitConfig(h.kubeConfig, appUpdated.Spec.Namespace)
+			if err != nil {
+				api.HandleError(resp, req, err)
+				return
+			}
+			err = helm.UpgradeCharts(req.Request.Context(), actionConfig, envSettings, appName, chartName, "", appUpdated.Spec.Namespace, nil, true)
+			if err != nil {
+				api.HandleError(resp, req, err)
+				return
+			}
+		} else {
+			err = json.Unmarshal([]byte(appMgr.Spec.Config), &appCfg)
+			if err != nil {
+				api.HandleError(resp, req, err)
+				return
+			}
+			ops, err := versioned.NewHelmOps(req.Request.Context(), h.kubeConfig, appCfg, token,
+				appinstaller.Opt{Source: app.Spec.Settings["source"], MarketSource: appMgr.GetMarketSource()})
+			if err != nil {
+				api.HandleError(resp, req, err)
+				return
+			}
+			err = ops.Upgrade()
+			if err != nil {
+				api.HandleError(resp, req, err)
+				return
+			}
 		}
 	}
 	resp.WriteAsJson(appUpdated.Spec.Settings)
