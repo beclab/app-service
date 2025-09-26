@@ -33,6 +33,10 @@ var (
 	OSNetworkNamespaces = []string{
 		"os-network",
 	}
+
+	OSProtectedNamespaces = []string{
+		"os-protected",
+	}
 )
 
 // IsUserInternalNamespaces returns true if namespace is user level namespace for a user application, false otherwise.
@@ -88,9 +92,9 @@ func IsOSGpuNamespace(ns string) bool {
 }
 
 func IsPublicNamespace(ns string) bool {
-	if funk.Contains(GPUSystemNamespaces, ns) {
-		return true
-	}
+	return funk.Contains(GPUSystemNamespaces, ns)
+}
 
-	return false
+func IsOSProtectedNamespace(ns string) bool {
+	return funk.Contains(OSProtectedNamespaces, ns)
 }
