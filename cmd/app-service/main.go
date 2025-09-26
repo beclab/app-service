@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	iamv1alpha2 "github.com/beclab/api/iam/v1alpha2"
 
@@ -103,6 +104,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	// initialize process environment variables from existing SystemEnv CRs
+	initEnvClient, initEnvErr := client.New(config, client.Options{Scheme: scheme})
+	if initEnvErr != nil {
+		setupLog.Error(initEnvErr, "Unable to create uncached client for SystemEnv initialization")
+		os.Exit(1)
+	}
+	initEnvCtx, cancelInitEnvCtx := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelInitEnvCtx()
+	if initEnvErr := controllers.InitializeSystemEnvProcessEnv(initEnvCtx, initEnvClient); initEnvErr != nil {
+		setupLog.Error(initEnvErr, "Failed to initialize process env from SystemEnv")
+		os.Exit(1)
+	}
+
 	appClient := versioned.NewForConfigOrDie(config)
 	ictx, cancelFunc := context.WithCancel(context.Background())
 
@@ -187,6 +201,14 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Unable to create controller", "controller", "SystemEnv")
+		os.Exit(1)
+	}
+
+	if err = (&controllers.SystemEnvProcessEnvController{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Unable to create controller", "controller", "SystemEnvProcessEnv")
 		os.Exit(1)
 	}
 
