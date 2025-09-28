@@ -177,6 +177,7 @@ func getAppConfigFromConfigurationFile(app, chart, owner string) (*ApplicationCo
 		ApiTimeout:           cfg.Options.ApiTimeout,
 		AllowedOutboundPorts: cfg.Options.AllowedOutboundPorts,
 		RequiredGPU:          cfg.Spec.RequiredGPU,
+		PodGPUConsumePolicy:  cfg.Spec.PodGPUConsumePolicy,
 		Internal:             cfg.Spec.RunAsInternal,
 		Type:                 cfg.ConfigType,
 		Envs:                 cfg.Envs,

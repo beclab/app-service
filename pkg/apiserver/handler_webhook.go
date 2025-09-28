@@ -745,6 +745,13 @@ func makePatches(req *admissionv1.AdmissionRequest, appCfg *appcfg.ApplicationCo
 	original := req.Object.Raw
 	var patchBytes []byte
 	var tpl *corev1.PodTemplateSpec
+	var gpuPolicy string
+	if strings.TrimSpace(appCfg.RequiredGPU) != "" {
+		if p := strings.TrimSpace(appCfg.PodGPUConsumePolicy); p == "all" || p == "single" {
+			gpuPolicy = p
+		}
+	}
+
 	switch req.Kind.Kind {
 	case "Deployment":
 		var deploy *appsv1.Deployment
@@ -759,6 +766,9 @@ func makePatches(req *admissionv1.AdmissionRequest, appCfg *appcfg.ApplicationCo
 		tpl.ObjectMeta.Labels["io.bytetrade.app"] = "true"
 		tpl.ObjectMeta.Labels[constants.ApplicationNameLabel] = appCfg.AppName
 		tpl.ObjectMeta.Labels[constants.ApplicationOwnerLabel] = appCfg.OwnerName
+		if gpuPolicy != "" {
+			tpl.ObjectMeta.Labels[constants.AppPodGPUConsumePolicy] = gpuPolicy
+		}
 		current, err := json.Marshal(deploy)
 		if err != nil {
 			return []byte{}, err
@@ -781,6 +791,9 @@ func makePatches(req *admissionv1.AdmissionRequest, appCfg *appcfg.ApplicationCo
 		tpl.ObjectMeta.Labels["io.bytetrade.app"] = "true"
 		tpl.ObjectMeta.Labels[constants.ApplicationNameLabel] = appCfg.AppName
 		tpl.ObjectMeta.Labels[constants.ApplicationOwnerLabel] = appCfg.OwnerName
+		if gpuPolicy != "" {
+			tpl.ObjectMeta.Labels[constants.AppPodGPUConsumePolicy] = gpuPolicy
+		}
 		current, err := json.Marshal(sts)
 		if err != nil {
 			return []byte{}, err
