@@ -83,6 +83,7 @@ type ApplicationConfig struct {
 	RunAsUser            bool
 	AllowedOutboundPorts []int
 	RequiredGPU          string
+	PodGPUConsumePolicy  string
 	Release              []string
 	ClusterRelease       []string
 	Internal             bool

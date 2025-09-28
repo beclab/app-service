@@ -41,23 +41,24 @@ type AppConfiguration struct {
 }
 
 type AppSpec struct {
-	Namespace          string        `yaml:"namespace,omitempty" json:"namespace,omitempty"`
-	OnlyAdmin          bool          `yaml:"onlyAdmin,omitempty" json:"onlyAdmin,omitempty"`
-	VersionName        string        `yaml:"versionName" json:"versionName"`
-	FullDescription    string        `yaml:"fullDescription" json:"fullDescription"`
-	UpgradeDescription string        `yaml:"upgradeDescription" json:"upgradeDescription"`
-	PromoteImage       []string      `yaml:"promoteImage" json:"promoteImage"`
-	PromoteVideo       string        `yaml:"promoteVideo" json:"promoteVideo"`
-	SubCategory        string        `yaml:"subCategory" json:"subCategory"`
-	Developer          string        `yaml:"developer" json:"developer"`
-	RequiredMemory     string        `yaml:"requiredMemory" json:"requiredMemory"`
-	RequiredDisk       string        `yaml:"requiredDisk" json:"requiredDisk"`
-	SupportClient      SupportClient `yaml:"supportClient" json:"supportClient"`
-	RequiredGPU        string        `yaml:"requiredGpu" json:"requiredGpu"`
-	RequiredCPU        string        `yaml:"requiredCpu" json:"requiredCpu"`
-	RunAsUser          bool          `yaml:"runAsUser" json:"runAsUser"`
-	RunAsInternal      bool          `yaml:"runAsInternal" json:"runAsInternal"`
-	SubCharts          []Chart       `yaml:"subCharts" json:"subCharts"`
+	Namespace           string        `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+	OnlyAdmin           bool          `yaml:"onlyAdmin,omitempty" json:"onlyAdmin,omitempty"`
+	VersionName         string        `yaml:"versionName" json:"versionName"`
+	FullDescription     string        `yaml:"fullDescription" json:"fullDescription"`
+	UpgradeDescription  string        `yaml:"upgradeDescription" json:"upgradeDescription"`
+	PromoteImage        []string      `yaml:"promoteImage" json:"promoteImage"`
+	PromoteVideo        string        `yaml:"promoteVideo" json:"promoteVideo"`
+	SubCategory         string        `yaml:"subCategory" json:"subCategory"`
+	Developer           string        `yaml:"developer" json:"developer"`
+	RequiredMemory      string        `yaml:"requiredMemory" json:"requiredMemory"`
+	RequiredDisk        string        `yaml:"requiredDisk" json:"requiredDisk"`
+	SupportClient       SupportClient `yaml:"supportClient" json:"supportClient"`
+	RequiredGPU         string        `yaml:"requiredGpu" json:"requiredGpu"`
+	RequiredCPU         string        `yaml:"requiredCpu" json:"requiredCpu"`
+	RunAsUser           bool          `yaml:"runAsUser" json:"runAsUser"`
+	RunAsInternal       bool          `yaml:"runAsInternal" json:"runAsInternal"`
+	PodGPUConsumePolicy string        `yaml:"podGpuConsumePolicy" json:"podGpuConsumePolicy"`
+	SubCharts           []Chart       `yaml:"subCharts" json:"subCharts"`
 }
 
 type SupportClient struct {
