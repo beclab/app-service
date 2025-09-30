@@ -9,6 +9,7 @@ type Middleware struct {
 	Minio         *MinioConfig         `yaml:"minio,omitempty"`
 	RabbitMQ      *RabbitMQConfig      `yaml:"rabbitmq,omitempty"`
 	Elasticsearch *ElasticsearchConfig `yaml:"elasticsearch,omitempty"`
+	MariaDB       *MariaDBConfig       `yaml:"mariadb,omitempty"`
 }
 
 // Database specify database name and if distributed.
@@ -64,6 +65,13 @@ type RedisConfig struct {
 
 // MongodbConfig contains fields for mongodb config.
 type MongodbConfig struct {
+	Username  string     `yaml:"username" json:"username"`
+	Password  string     `yaml:"password,omitempty" json:"password"`
+	Databases []Database `yaml:"databases" json:"databases"`
+}
+
+// MariaDBConfig contains fields for mariadb config.
+type MariaDBConfig struct {
 	Username  string     `yaml:"username" json:"username"`
 	Password  string     `yaml:"password,omitempty" json:"password"`
 	Databases []Database `yaml:"databases" json:"databases"`

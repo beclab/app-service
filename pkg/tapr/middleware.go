@@ -36,6 +36,9 @@ const (
 
 	// TypeElasticsearch indicates the middleware is elasticsearch
 	TypeElasticsearch MiddlewareType = "elasticsearch"
+
+	// TypeMariaDB indicates the middleware is mariadb
+	TypeMariaDB MiddlewareType = "mariadb"
 )
 
 func (mr MiddlewareType) String() string {
@@ -198,6 +201,26 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 		if err != nil {
 			return err
 		}
+
+		if middleware.MariaDB != nil {
+			username := fmt.Sprintf("%s-%s-%s", middleware.MariaDB.Username, ownerName, appName)
+			err := process(kubeConfig, appName, appNamespace, namespace, username,
+				middleware.MariaDB.Password, middleware.MariaDB.Databases, TypeMariaDB, nil, ownerName, nil, nil, nil)
+			if err != nil {
+				return err
+			}
+			resp, err := getMiddlewareRequest(TypeMariaDB)
+			if err != nil {
+				return err
+			}
+			vals["mariadb"] = map[string]interface{}{
+				"host":      resp.Host,
+				"port":      resp.Port,
+				"username":  resp.UserName,
+				"password":  resp.Password,
+				"databases": resp.Databases,
+			}
+		}
 		resp, err := getMiddlewareRequest(TypeMinio)
 		if err != nil {
 			return err
@@ -275,6 +298,29 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 			"refs":     resp.Refs,
 		}
 		klog.Infof("vals[nats]: %v", vals["nats"])
+	}
+
+	if middleware.MariaDB != nil {
+		klog.Infof("middleware.MariaDB: %#v", middleware.MariaDB)
+		username := fmt.Sprintf("%s-%s-%s", middleware.MariaDB.Username, ownerName, appName)
+		err := process(kubeConfig, appName, appNamespace, namespace, username, middleware.MariaDB.Password,
+			middleware.MariaDB.Databases, TypeMariaDB, nil, ownerName, nil, nil, nil)
+		if err != nil {
+			return err
+		}
+		resp, err := getMiddlewareRequest(TypeMariaDB)
+		if err != nil {
+			klog.Errorf("failed to get mariadb middleware request info %v", err)
+			return err
+		}
+		vals["mariadb"] = map[string]interface{}{
+			"host":      resp.Host,
+			"port":      resp.Port,
+			"username":  resp.UserName,
+			"password":  resp.Password,
+			"databases": resp.Databases,
+		}
+		klog.Infof("values.mariadb: %v", vals["mariadb"])
 	}
 	return nil
 }
