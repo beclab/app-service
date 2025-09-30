@@ -88,6 +88,13 @@ var (
 								},
 							},
 						},
+						{
+							PodSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"tier": "bfl",
+								},
+							},
+						},
 					},
 				},
 			},
@@ -330,6 +337,32 @@ var (
 			},
 		},
 	} // end NPSharedSpace
+
+	NSFilesPolicy = netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "files-np",
+		},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": "files",
+				},
+			},
+			Ingress: []netv1.NetworkPolicyIngressRule{
+				{
+					From: []netv1.NetworkPolicyPeer{
+						{
+							PodSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"tier": "bfl",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	} // end NSFilesPolicy
 )
 
 // NodeTunnelRule returns node tunnel rule.
@@ -345,4 +378,20 @@ func NodeTunnelRule() []netv1.NetworkPolicyPeer {
 	}
 
 	return rules
+}
+
+type NetworkPolicies []*netv1.NetworkPolicy
+
+func (n NetworkPolicies) Main() *netv1.NetworkPolicy {
+	if len(n) > 0 {
+		return n[0]
+	}
+	return nil
+}
+
+func (n NetworkPolicies) Additional() []*netv1.NetworkPolicy {
+	if len(n) > 1 {
+		return n[1:]
+	}
+	return nil
 }
