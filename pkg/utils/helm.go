@@ -142,6 +142,9 @@ func GetResourceListFromChart(chartPath string, values map[string]interface{}) (
 	values["postgres"] = map[string]interface{}{
 		"databases": map[string]interface{}{},
 	}
+	values["mariadb"] = map[string]interface{}{
+		"databases": map[string]interface{}{},
+	}
 	values["redis"] = map[string]interface{}{}
 	values["mongodb"] = map[string]interface{}{
 		"databases": map[string]interface{}{},

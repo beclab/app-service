@@ -48,6 +48,7 @@ var (
 		tapr.TypeMinio.String(),
 		tapr.TypeRabbitMQ.String(),
 		tapr.TypeElasticsearch.String(),
+		tapr.TypeMariaDB.String(),
 	}
 )
 

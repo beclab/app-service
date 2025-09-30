@@ -98,6 +98,33 @@ spec:
 	 {{- end }}
     user: {{ .Middleware.Username }}
 `
+
+const mariadbRequest = `apiVersion: apr.bytetrade.io/v1alpha1
+kind: MiddlewareRequest
+metadata:
+  name: {{ .AppName }}-mariadb
+  namespace: {{ .Namespace }}
+spec:
+  app: {{ .AppName }}
+  appNamespace: {{ .AppNamespace }}
+  middleware: mariadb
+  mariadb:
+    databases:
+    {{- range $k, $v := .Middleware.Databases }}
+    - name: {{ $v.Name }}
+    {{- end }}
+    password:
+     {{- if not (eq .Middleware.Password "") }}
+      value: {{ .Middleware.Password }}
+     {{- else }}
+      valueFrom:
+        secretKeyRef:
+          name: {{ .AppName }}-{{ .Namespace }}-mariadb-password
+          key: "password"
+     {{- end }}
+    user: {{ .Middleware.Username }}
+`
+
 const natsRequest = `apiVersion: apr.bytetrade.io/v1alpha1
 kind: MiddlewareRequest
 metadata:
@@ -248,6 +275,8 @@ func GenMiddleRequest(middleware MiddlewareType, appName, appNamespace, namespac
 		return genRabbitMQRequest(appName, appNamespace, namespace, username, password, vhosts)
 	case TypeElasticsearch:
 		return genElasticsearchRequest(appName, appNamespace, namespace, username, password, indexes)
+	case TypeMariaDB:
+		return genMariadbRequest(appName, appNamespace, namespace, username, password, databases)
 	default:
 		return []byte{}, nil
 	}
@@ -324,6 +353,34 @@ func genMongodbRequest(appName, appNamespace, namespace, username, password stri
 		AppNamespace: appNamespace,
 		Namespace:    namespace,
 		Middleware: &MongodbConfig{
+			Username:  username,
+			Password:  password,
+			Databases: databases,
+		},
+	}
+	err = tpl.Execute(&middlewareRequest, data)
+	if err != nil {
+		return []byte{}, err
+	}
+	return middlewareRequest.Bytes(), nil
+}
+
+func genMariadbRequest(appName, appNamespace, namespace, username, password string, databases []Database) ([]byte, error) {
+	tpl, err := template.New("mariadbRequest").Parse(mariadbRequest)
+	if err != nil {
+		return []byte{}, err
+	}
+	var middlewareRequest bytes.Buffer
+	data := struct {
+		AppName      string
+		AppNamespace string
+		Namespace    string
+		Middleware   *MariaDBConfig
+	}{
+		AppName:      appName,
+		AppNamespace: appNamespace,
+		Namespace:    namespace,
+		Middleware: &MariaDBConfig{
 			Username:  username,
 			Password:  password,
 			Databases: databases,

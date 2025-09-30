@@ -358,7 +358,6 @@ EOF
 	return cmd
 }
 
-
 // GetWebSocketSideCarContainerSpec returns the container specification for the WebSocket sidecar.
 func GetWebSocketSideCarContainerSpec(wsConfig *appcfg.WsConfig) corev1.Container {
 	return corev1.Container{
