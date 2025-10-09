@@ -285,17 +285,16 @@ func (r *SecurityReconciler) reconcileNamespaceLabels(ctx context.Context, ns *c
 }
 
 func (r *SecurityReconciler) createOrUpdateNetworkPolicy(ctx context.Context,
-	ns *corev1.Namespace,
-	npName string,
 	networkPolicy *netv1.NetworkPolicy,
 	networkPolicyFix func(np *netv1.NetworkPolicy),
+	namespaceNetworkPolicies *security.NetworkPolicies,
 ) error {
 	var nps netv1.NetworkPolicyList
 	key := client.ObjectKey{
-		Namespace: ns.Name,
-		Name:      npName,
+		Namespace: networkPolicy.Namespace,
+		Name:      networkPolicy.Name,
 	}
-	err := r.List(ctx, &nps, client.InNamespace(ns.Name))
+	err := r.List(ctx, &nps, client.InNamespace(networkPolicy.Namespace))
 	if err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
@@ -312,16 +311,16 @@ func (r *SecurityReconciler) createOrUpdateNetworkPolicy(ctx context.Context,
 			}
 			found = true
 		} else {
-			if err := r.Delete(ctx, &np); err != nil {
-				return err
+			if namespaceNetworkPolicies != nil && !namespaceNetworkPolicies.Contains(&np) {
+				if err := r.Delete(ctx, &np); err != nil {
+					return err
+				}
 			}
 		}
 	}
 
 	if apierrors.IsNotFound(err) || !found {
 		np := *networkPolicy.DeepCopy()
-		np.Name = npName
-		np.Namespace = ns.Name
 		if networkPolicyFix != nil {
 			networkPolicyFix(&np)
 		}
@@ -351,60 +350,67 @@ func (r *SecurityReconciler) reconcileNetworkPolicy(ctx context.Context, ns *cor
 			}
 		}
 
-		npName := ""
 		var networkPolicy security.NetworkPolicies
 		var npFix func(np *netv1.NetworkPolicy)
 		if security.IsUnderLayerNamespace(ns.Name) {
-			npName = "underlayer-system-np"
 			networkPolicy = security.NetworkPolicies{security.NPUnderLayerSystem.DeepCopy()}
+			networkPolicy.SetName("underlayer-system-np")
+			networkPolicy.SetNamespace(ns.Name)
 			npFix = nil
 		} else if security.IsOSSystemNamespace(ns.Name) {
-			npName = "os-system-np"
 			networkPolicy = security.NetworkPolicies{security.NPOSSystem.DeepCopy(), &security.NSFilesPolicy}
+			networkPolicy.SetName("os-system-np")
+			networkPolicy.SetNamespace(ns.Name)
 			npFix = nil
 		} else if security.IsOSProtectedNamespace(ns.Name) {
-			npName = "os-protected-np"
 			networkPolicy = security.NetworkPolicies{security.NPOSProtected.DeepCopy()}
+			networkPolicy.SetName("os-protected-np")
+			networkPolicy.SetNamespace(ns.Name)
 			npFix = nil
 		} else if security.IsOSNetworkNamespace(ns.Name) {
-			npName = "os-network-np"
 			networkPolicy = security.NetworkPolicies{security.NPOSNetwork.DeepCopy()}
+			networkPolicy.SetName("os-network-np")
+			networkPolicy.SetNamespace(ns.Name)
 			npFix = func(np *netv1.NetworkPolicy) {
 				np.Spec.Ingress = append(np.Spec.Ingress, netv1.NetworkPolicyIngressRule{
 					From: security.NodeTunnelRule(),
 				})
 			}
 		} else if security.IsUserSystemNamespaces(ns.Name) {
-			npName = "user-system-np"
 			networkPolicy = security.NetworkPolicies{security.NPUserSystem.DeepCopy()}
+			networkPolicy.SetName("user-system-np")
+			networkPolicy.SetNamespace(ns.Name)
 			npFix = func(np *netv1.NetworkPolicy) {
 				owner := ns.Labels[security.NamespaceOwnerLabel]
-				logger.Info("update network policy", "name", npName, "owner", owner)
+				logger.Info("update network policy", "name", networkPolicy.Name(), "owner", owner)
 				np.Spec.Ingress[0].From[0].NamespaceSelector.MatchLabels[security.NamespaceOwnerLabel] = owner
 			}
 		} else if security.IsUserSpaceNamespaces(ns.Name) {
-			npName = "user-space-np"
 			networkPolicy = security.NetworkPolicies{security.NPUserSpace.DeepCopy()}
+			networkPolicy.SetName("user-space-np")
+			networkPolicy.SetNamespace(ns.Name)
 			npFix = func(np *netv1.NetworkPolicy) {
 				owner := ns.Labels[security.NamespaceOwnerLabel]
-				logger.Info("update network policy", "name", npName, "owner", owner)
+				logger.Info("update network policy", "name", networkPolicy.Name(), "owner", owner)
 				np.Spec.Ingress[0].From[0].NamespaceSelector.MatchLabels[security.NamespaceOwnerLabel] = owner
 				np.Spec.Ingress = append(np.Spec.Ingress, netv1.NetworkPolicyIngressRule{
 					From: security.NodeTunnelRule(),
 				})
 			}
 		} else if isMiddleware, ok := ns.Labels[security.NamespaceMiddlewareLabel]; ok && isMiddleware == "true" {
-			npName = "middleware-np"
 			networkPolicy = security.NetworkPolicies{security.NPAllowAll.DeepCopy()}
+			networkPolicy.SetName("middleware-np")
+			networkPolicy.SetNamespace(ns.Name)
 			npFix = func(np *netv1.NetworkPolicy) {
-				logger.Info("Update network policy", "name", npName)
+				logger.Info("Update network policy", "name", networkPolicy.Name())
 			}
 		} else if owner, ok := ns.Labels[security.NamespaceOwnerLabel]; ok && owner != "" {
 			// app namespace networkpolicy
-			npName = "app-np"
 			networkPolicy = security.NetworkPolicies{security.NPAppSpace.DeepCopy()}
+			networkPolicy.SetName("app-np")
+			networkPolicy.SetNamespace(ns.Name)
 			npFix = func(np *netv1.NetworkPolicy) {
-				logger.Info("Update network policy", "name", npName, "owner", owner)
+				logger.Info("Update network policy", "name", networkPolicy.Name(), "owner", owner)
 				np.Spec.Ingress[0].From[0].NamespaceSelector.MatchLabels[security.NamespaceOwnerLabel] = owner
 
 				// get app name from np namespace
@@ -444,10 +450,11 @@ func (r *SecurityReconciler) reconcileNetworkPolicy(ctx context.Context, ns *cor
 			}
 		} else if shared, ok := ns.Labels[security.NamespaceSharedLabel]; ok && shared != "false" {
 			// shared namespace networkpolicy
-			npName = "shared-np"
 			networkPolicy = security.NetworkPolicies{security.NPSharedSpace.DeepCopy()}
+			networkPolicy.SetName("shared-np")
+			networkPolicy.SetNamespace(ns.Name)
 			npFix = func(np *netv1.NetworkPolicy) {
-				logger.Info("Update network policy", "name", npName)
+				logger.Info("Update network policy", "name", networkPolicy.Name())
 				// get app name from np namespace
 				sharedRefAppName := ns.Labels[constants.ApplicationNameLabel]
 				if sharedRefAppName == "" {
@@ -506,10 +513,11 @@ func (r *SecurityReconciler) reconcileNetworkPolicy(ctx context.Context, ns *cor
 			} // end of func npFix
 
 		} else {
-			npName = "others-np"
 			networkPolicy = security.NetworkPolicies{security.NPDenyAll.DeepCopy()}
+			networkPolicy.SetName("others-np")
+			networkPolicy.SetNamespace(ns.Name)
 			npFix = func(np *netv1.NetworkPolicy) {
-				logger.Info("Update network policy", "name", npName)
+				logger.Info("Update network policy", "name", networkPolicy.Name())
 			}
 		}
 
@@ -525,7 +533,7 @@ func (r *SecurityReconciler) reconcileNetworkPolicy(ctx context.Context, ns *cor
 			})
 		}
 
-		if r.namespaceMustAdd(networkPolicy.Main(), ns) && npName != "middleware-np" {
+		if r.namespaceMustAdd(networkPolicy.Main(), ns) && networkPolicy.Name() != "middleware-np" {
 			networkPolicy.Main().Spec.Ingress[0].From = append(networkPolicy.Main().Spec.Ingress[0].From, netv1.NetworkPolicyPeer{
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
@@ -538,10 +546,9 @@ func (r *SecurityReconciler) reconcileNetworkPolicy(ctx context.Context, ns *cor
 
 		if err := r.createOrUpdateNetworkPolicy(
 			ctx,
-			ns,
-			npName,
 			networkPolicy.Main(),
 			npFix,
+			&networkPolicy,
 		); err != nil {
 			return err
 		}
@@ -549,10 +556,9 @@ func (r *SecurityReconciler) reconcileNetworkPolicy(ctx context.Context, ns *cor
 		for _, np := range networkPolicy.Additional() {
 			if err := r.createOrUpdateNetworkPolicy(
 				ctx,
-				ns,
-				np.Name,
 				np,
 				nil,
+				&networkPolicy,
 			); err != nil {
 				return err
 			}

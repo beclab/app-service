@@ -406,3 +406,39 @@ func (n NetworkPolicies) Additional() []*netv1.NetworkPolicy {
 	}
 	return nil
 }
+
+func (n NetworkPolicies) Contains(np *netv1.NetworkPolicy) bool {
+	for _, item := range n {
+		if item.Name == np.Name && item.Namespace == np.Namespace {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (n NetworkPolicies) Name() string {
+	if main := n.Main(); main != nil {
+		return main.Name
+	}
+	return ""
+}
+
+func (n NetworkPolicies) SetName(name string) {
+	if main := n.Main(); main != nil {
+		main.Name = name
+	}
+}
+
+func (n NetworkPolicies) SetNamespace(namespace string) {
+	for _, np := range n {
+		np.Namespace = namespace
+	}
+}
+
+func (n NetworkPolicies) Namespace() string {
+	if main := n.Main(); main != nil {
+		return main.Namespace
+	}
+	return ""
+}
