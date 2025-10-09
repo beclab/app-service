@@ -206,6 +206,13 @@ func (r *SecurityReconciler) reconcileNamespaceLabels(ctx context.Context, ns *c
 			}
 		}
 
+		if security.IsUserSpaceNamespaces(ns.Name) {
+			if label, ok := ns.Labels[security.NamespaceTypeLabel]; !ok || label != security.UserSpace {
+				ns.Labels[security.NamespaceTypeLabel] = security.UserSpace
+				updated = true
+			}
+		}
+
 		if label, ok := ns.Labels[security.NamespaceOwnerLabel]; !ok || label != owner {
 			ns.Labels[security.NamespaceOwnerLabel] = owner
 			updated = true

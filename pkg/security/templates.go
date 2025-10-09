@@ -16,6 +16,7 @@ const (
 	Network                  = "network"
 	Internal                 = "user-internal"
 	Protected                = "protected"
+	UserSpace                = "user-space"
 )
 
 var (
@@ -92,6 +93,11 @@ var (
 							PodSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{
 									"tier": "bfl",
+								},
+							},
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									NamespaceTypeLabel: UserSpace,
 								},
 							},
 						},
@@ -355,6 +361,11 @@ var (
 							PodSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{
 									"tier": "bfl",
+								},
+							},
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									NamespaceTypeLabel: UserSpace,
 								},
 							},
 						},
