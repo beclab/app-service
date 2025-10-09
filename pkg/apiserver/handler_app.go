@@ -931,6 +931,9 @@ func (h *Handler) oamValues(req *restful.Request, resp *restful.Response) {
 	values["mariadb"] = map[string]interface{}{
 		"databases": map[string]interface{}{},
 	}
+	values["mysql"] = map[string]interface{}{
+		"databases": map[string]interface{}{},
+	}
 	values["minio"] = map[string]interface{}{
 		"buckets": map[string]interface{}{},
 	}

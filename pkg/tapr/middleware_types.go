@@ -10,6 +10,7 @@ type Middleware struct {
 	RabbitMQ      *RabbitMQConfig      `yaml:"rabbitmq,omitempty"`
 	Elasticsearch *ElasticsearchConfig `yaml:"elasticsearch,omitempty"`
 	MariaDB       *MariaDBConfig       `yaml:"mariadb,omitempty"`
+	MySQL         *MySQLConfig         `yaml:"mysql,omitempty"`
 }
 
 // Database specify database name and if distributed.
@@ -72,6 +73,13 @@ type MongodbConfig struct {
 
 // MariaDBConfig contains fields for mariadb config.
 type MariaDBConfig struct {
+	Username  string     `yaml:"username" json:"username"`
+	Password  string     `yaml:"password,omitempty" json:"password"`
+	Databases []Database `yaml:"databases" json:"databases"`
+}
+
+// MySQLConfig contains fields for mysql config.
+type MySQLConfig struct {
 	Username  string     `yaml:"username" json:"username"`
 	Password  string     `yaml:"password,omitempty" json:"password"`
 	Databases []Database `yaml:"databases" json:"databases"`

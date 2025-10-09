@@ -49,6 +49,7 @@ var (
 		tapr.TypeRabbitMQ.String(),
 		tapr.TypeElasticsearch.String(),
 		tapr.TypeMariaDB.String(),
+		tapr.TypeMySQL.String(),
 	}
 )
 

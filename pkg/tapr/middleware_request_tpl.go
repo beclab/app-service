@@ -125,6 +125,32 @@ spec:
     user: {{ .Middleware.Username }}
 `
 
+const mysqlRequest = `apiVersion: apr.bytetrade.io/v1alpha1
+kind: MiddlewareRequest
+metadata:
+  name: {{ .AppName }}-mysql
+  namespace: {{ .Namespace }}
+spec:
+  app: {{ .AppName }}
+  appNamespace: {{ .AppNamespace }}
+  middleware: mysql
+  mysql:
+    databases:
+    {{- range $k, $v := .Middleware.Databases }}
+    - name: {{ $v.Name }}
+    {{- end }}
+    password:
+     {{- if not (eq .Middleware.Password "") }}
+      value: {{ .Middleware.Password }}
+     {{- else }}
+      valueFrom:
+        secretKeyRef:
+          name: {{ .AppName }}-{{ .Namespace }}-mysql-password
+          key: "password"
+     {{- end }}
+    user: {{ .Middleware.Username }}
+`
+
 const natsRequest = `apiVersion: apr.bytetrade.io/v1alpha1
 kind: MiddlewareRequest
 metadata:
@@ -277,6 +303,8 @@ func GenMiddleRequest(middleware MiddlewareType, appName, appNamespace, namespac
 		return genElasticsearchRequest(appName, appNamespace, namespace, username, password, indexes)
 	case TypeMariaDB:
 		return genMariadbRequest(appName, appNamespace, namespace, username, password, databases)
+	case TypeMySQL:
+		return genMysqlRequest(appName, appNamespace, namespace, username, password, databases)
 	default:
 		return []byte{}, nil
 	}
@@ -381,6 +409,34 @@ func genMariadbRequest(appName, appNamespace, namespace, username, password stri
 		AppNamespace: appNamespace,
 		Namespace:    namespace,
 		Middleware: &MariaDBConfig{
+			Username:  username,
+			Password:  password,
+			Databases: databases,
+		},
+	}
+	err = tpl.Execute(&middlewareRequest, data)
+	if err != nil {
+		return []byte{}, err
+	}
+	return middlewareRequest.Bytes(), nil
+}
+
+func genMysqlRequest(appName, appNamespace, namespace, username, password string, databases []Database) ([]byte, error) {
+	tpl, err := template.New("mysqlRequest").Parse(mysqlRequest)
+	if err != nil {
+		return []byte{}, err
+	}
+	var middlewareRequest bytes.Buffer
+	data := struct {
+		AppName      string
+		AppNamespace string
+		Namespace    string
+		Middleware   *MySQLConfig
+	}{
+		AppName:      appName,
+		AppNamespace: appNamespace,
+		Namespace:    namespace,
+		Middleware: &MySQLConfig{
 			Username:  username,
 			Password:  password,
 			Databases: databases,
