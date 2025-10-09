@@ -39,6 +39,9 @@ const (
 
 	// TypeMariaDB indicates the middleware is mariadb
 	TypeMariaDB MiddlewareType = "mariadb"
+
+	// TypeMySQL indicates the middleware is mysql
+	TypeMySQL MiddlewareType = "mysql"
 )
 
 func (mr MiddlewareType) String() string {
@@ -202,25 +205,6 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 			return err
 		}
 
-		if middleware.MariaDB != nil {
-			username := fmt.Sprintf("%s-%s-%s", middleware.MariaDB.Username, ownerName, appName)
-			err := process(kubeConfig, appName, appNamespace, namespace, username,
-				middleware.MariaDB.Password, middleware.MariaDB.Databases, TypeMariaDB, nil, ownerName, nil, nil, nil)
-			if err != nil {
-				return err
-			}
-			resp, err := getMiddlewareRequest(TypeMariaDB)
-			if err != nil {
-				return err
-			}
-			vals["mariadb"] = map[string]interface{}{
-				"host":      resp.Host,
-				"port":      resp.Port,
-				"username":  resp.UserName,
-				"password":  resp.Password,
-				"databases": resp.Databases,
-			}
-		}
 		resp, err := getMiddlewareRequest(TypeMinio)
 		if err != nil {
 			return err
@@ -321,6 +305,29 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 			"databases": resp.Databases,
 		}
 		klog.Infof("values.mariadb: %v", vals["mariadb"])
+	}
+
+	if middleware.MySQL != nil {
+		klog.Errorf("middleware.mYSQL: %#v", middleware.MySQL)
+		username := fmt.Sprintf("%s-%s-%s", middleware.MySQL.Username, ownerName, appName)
+		err := process(kubeConfig, appName, appNamespace, namespace, username, middleware.MySQL.Password,
+			middleware.MySQL.Databases, TypeMySQL, nil, ownerName, nil, nil, nil)
+		if err != nil {
+			return err
+		}
+		resp, err := getMiddlewareRequest(TypeMySQL)
+		if err != nil {
+			klog.Errorf("failed to get mysql middleware request info %v", err)
+			return err
+		}
+		vals["mysql"] = map[string]interface{}{
+			"host":      resp.Host,
+			"port":      resp.Port,
+			"username":  resp.UserName,
+			"password":  resp.Password,
+			"databases": resp.Databases,
+		}
+		klog.Infof("values.mysql: %v", vals["mysql"])
 	}
 	return nil
 }
