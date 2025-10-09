@@ -496,6 +496,117 @@ func (h *Handler) cronWorkflowInject(req *restful.Request, resp *restful.Respons
 	klog.Infof("Done cron workflow injection admission request with uuid=%s, namespace=%s", proxyUUID, requestForNamespace)
 }
 
+// argoResourcesValidate validates that certain Argo Workflow resources are only created in
+// allowed namespaces
+func (h *Handler) argoResourcesValidate(req *restful.Request, resp *restful.Response) {
+	klog.Infof("Received argo resources validating webhook request: Method=%v, URL=%v", req.Request.Method, req.Request.URL)
+	admissionReqBody, ok := h.sidecarWebhook.GetAdmissionRequestBody(req, resp)
+	if !ok {
+		return
+	}
+	var admissionReq, admissionResp admissionv1.AdmissionReview
+	proxyUUID := uuid.New()
+	if _, _, err := webhook.Deserializer.Decode(admissionReqBody, nil, &admissionReq); err != nil {
+		klog.Errorf("Failed to decoding admission request body err=%v", err)
+		admissionResp.Response = h.sidecarWebhook.AdmissionError("", err)
+	} else {
+		admissionResp.Response = h.validateArgoResources(req.Request.Context(), admissionReq.Request, proxyUUID)
+	}
+	admissionResp.TypeMeta = admissionReq.TypeMeta
+	admissionResp.Kind = admissionReq.Kind
+
+	requestForNamespace := "unknown"
+	if admissionReq.Request != nil {
+		requestForNamespace = admissionReq.Request.Namespace
+	}
+	err := resp.WriteAsJson(&admissionResp)
+	if err != nil {
+		klog.Errorf("Failed to write response for argo resources validating admission in namespace=%s err=%v", requestForNamespace, err)
+		return
+	}
+	klog.Infof("Done responding to argo resources validating admission with uuid=%s namespace=%s", proxyUUID, requestForNamespace)
+}
+
+func (h *Handler) validateArgoResources(ctx context.Context, req *admissionv1.AdmissionRequest, proxyUUID uuid.UUID) *admissionv1.AdmissionResponse {
+	if req == nil {
+		klog.Error("Failed to get admission request err=admission request is nil")
+		return h.sidecarWebhook.AdmissionError("", errNilAdmissionRequest)
+	}
+	klog.Infof("Enter argo resources validate logic namespace=%s name=%s, kind=%s", req.Namespace, req.Name, req.Kind.Kind)
+
+	resp := &admissionv1.AdmissionResponse{
+		Allowed: true,
+		UID:     req.UID,
+	}
+
+	// Only validate for these Argo Workflow related kinds
+	kinds := map[string]struct{}{
+		"CronWorkflow":           {},
+		"WorkflowArtifactGCTask": {},
+		"WorkflowEventBinding":   {},
+		"Workflow":               {},
+		"WorkflowTaskResult":     {},
+		"WorkflowTaskSet":        {},
+		"WorkflowTemplate":       {},
+	}
+	if _, ok := kinds[req.Kind.Kind]; !ok {
+		return resp
+	}
+
+	// Only validate on create operations
+	if req.Operation != admissionv1.Create {
+		return resp
+	}
+
+	// Decode the Object spec from the request.
+	object := struct {
+		metav1.ObjectMeta `json:"metadata,omitempty"`
+	}{}
+	raw := req.Object.Raw
+	err := json.Unmarshal(raw, &object)
+	if err != nil {
+		klog.Errorf("Failed to unmarshal request object raw with uuid=%s namespace=%s", proxyUUID, req.Namespace)
+		return h.sidecarWebhook.AdmissionError(req.UID, err)
+	}
+
+	labels := object.GetLabels()
+	if labels != nil && labels[constants.ApplicationAuthorLabel] == constants.ByteTradeAuthor {
+		return resp
+	}
+
+	appNamespace := req.Namespace
+	if strings.HasSuffix(req.Namespace, "-shared") {
+		var ns corev1.Namespace
+		err := h.ctrlClient.Get(ctx, types.NamespacedName{Name: req.Namespace}, &ns)
+		if err != nil {
+			klog.Errorf("failed to get ns %s %v", req.Namespace, err)
+			return h.sidecarWebhook.AdmissionError(req.UID, err)
+		}
+		if ns.Labels != nil {
+			installUser := ns.Labels[constants.ApplicationInstallUserLabel]
+			appName := ns.Labels[constants.ApplicationNameLabel]
+			appNamespace = fmt.Sprintf("%s-%s", appName, installUser)
+		}
+	}
+
+	// Ensure the namespace matches some ApplicationManager.Spec.AppNamespace
+	var amList v1alpha1.ApplicationManagerList
+	if err := h.ctrlClient.List(ctx, &amList, &client.ListOptions{}); err != nil {
+		klog.Errorf("Failed to list application managers for argo resources validation err=%v", err)
+		return h.sidecarWebhook.AdmissionError(req.UID, err)
+	}
+	for _, am := range amList.Items {
+		if am.Spec.AppNamespace == appNamespace {
+			return resp
+		}
+	}
+
+	resp.Allowed = false
+	resp.Result = &metav1.Status{Message: "namespace " + req.Namespace + " is not allowed for " + req.Kind.Kind}
+	klog.Errorf("Argo resource validation failed for uid=%s namespace=%s kind=%s", proxyUUID, req.Namespace, req.Kind.Kind)
+	return resp
+}
+
 func (h *Handler) cronWorkflowMutate(ctx context.Context, req *admissionv1.AdmissionRequest, proxyUUID uuid.UUID) *admissionv1.AdmissionResponse {
 	if req == nil {
 		klog.Error("Failed to get admission request err=admission request is nil")

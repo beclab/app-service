@@ -295,6 +295,13 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Returns(http.StatusOK, "cron workflow inject success", nil)).
 		Consumes(restful.MIME_JSON)
 
+	ws.Route(ws.POST("/workflow/validate").
+		To(handler.argoResourcesValidate).
+		Doc("validating webhook for argo workflow resources namespace").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Returns(http.StatusOK, "argo workflow resources validate success", nil)).
+		Consumes(restful.MIME_JSON)
+
 	ws.Route(ws.POST("/gpulimit/inject").
 		To(handler.gpuLimitInject).
 		Doc("add resources limits for deployment/statefulset").
