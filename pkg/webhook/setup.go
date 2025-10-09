@@ -38,8 +38,10 @@ const (
 
 	applicationManagerMutatingWebhookName   = "applicationmanager-mutating-webhook"
 	applicationManagerValidatingWebhookName = "applicationmanager-validating-webhook"
+	argoResourceValidatingWebhookName       = "argo-resource-validating-webhook"
 	mutatingWebhookApplicationManagerName   = "applicationmanager-inject-webhook.bytetrade.io"
 	validatingWebhookApplicationManagerName = "applicationmanager-validating-webhook.bytetrade.io"
+	validatingWebhookArgoResourceName       = "argo-resource-validating-webhook.bytetrade.io"
 )
 
 // CreateOrUpdateSandboxMutatingWebhook creates or updates the sandbox mutating webhook.
@@ -916,6 +918,90 @@ func (wh *Webhook) CreateOrUpdateApplicationManagerValidatingWebhook() error {
 		}
 	}
 	klog.Infof("Finished creating ApplicationManager ValidatingWebhookConfiguration")
+
+	return nil
+}
+
+// CreateOrUpdateArgoResourceValidatingWebhook creates or updates the argo resource validating webhook.
+func (wh *Webhook) CreateOrUpdateArgoResourceValidatingWebhook() error {
+	webhookPath := "/app-service/v1/workflow/validate"
+	port, err := strconv.Atoi(strings.Split(constants.WebhookServerListenAddress, ":")[1])
+	if err != nil {
+		return err
+	}
+	webhookPort := int32(port)
+	failurePolicy := admissionregv1.Fail
+	matchPolicy := admissionregv1.Exact
+	webhookTimeout := int32(30)
+	vwcLabels := map[string]string{}
+
+	caBundle, err := ioutil.ReadFile(defaultCaPath)
+	if err != nil {
+		return err
+	}
+
+	vwc := admissionregv1.ValidatingWebhookConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   argoResourceValidatingWebhookName,
+			Labels: vwcLabels,
+		},
+		Webhooks: []admissionregv1.ValidatingWebhook{
+			{
+				Name: validatingWebhookArgoResourceName,
+				ClientConfig: admissionregv1.WebhookClientConfig{
+					CABundle: caBundle,
+					Service: &admissionregv1.ServiceReference{
+						Namespace: webhookServiceNamespace,
+						Name:      webhookServiceName,
+						Path:      &webhookPath,
+						Port:      &webhookPort,
+					},
+				},
+				FailurePolicy: &failurePolicy,
+				MatchPolicy:   &matchPolicy,
+				Rules: []admissionregv1.RuleWithOperations{
+					{
+						Operations: []admissionregv1.OperationType{
+							admissionregv1.Create,
+						},
+						Rule: admissionregv1.Rule{
+							APIGroups:   []string{"argoproj.io"},
+							APIVersions: []string{"v1alpha1"},
+							Resources: []string{"cronworkflows", "workflowartifactgctasks", "workfloweventbindings",
+								"workflows", "workflowtaskresults", "workflowtasksets", "workflowtemplates"},
+						},
+					},
+				},
+				SideEffects: func() *admissionregv1.SideEffectClass {
+					sideEffect := admissionregv1.SideEffectClassNoneOnDryRun
+					return &sideEffect
+				}(),
+				TimeoutSeconds:          &webhookTimeout,
+				AdmissionReviewVersions: []string{"v1"},
+			},
+		},
+	}
+
+	if _, err = wh.kubeClient.AdmissionregistrationV1().ValidatingWebhookConfigurations().Create(context.Background(), &vwc, metav1.CreateOptions{}); err != nil {
+		if apierrors.IsAlreadyExists(err) {
+			existing, err := wh.kubeClient.AdmissionregistrationV1().ValidatingWebhookConfigurations().Get(context.Background(), vwc.Name, metav1.GetOptions{})
+			if err != nil {
+				klog.Errorf("Failed to get ValidatingWebhookConfiguration name=%s err=%v", vwc.Name, err)
+				return err
+			}
+			vwc.ObjectMeta = existing.ObjectMeta
+			if _, err := wh.kubeClient.AdmissionregistrationV1().ValidatingWebhookConfigurations().Update(context.Background(), &vwc, metav1.UpdateOptions{}); err != nil {
+				if !apierrors.IsConflict(err) {
+					klog.Errorf("Failed to update ValidatingWebhookConfiguration name=%s err=%v", vwc.Name, err)
+					return err
+				}
+			}
+		} else {
+			klog.Errorf("Failed to create ValidatingWebhookConfiguration name=%s err=%v", vwc.Name, err)
+			return err
+		}
+	}
+	klog.Infof("Finished creating Argo Resource ValidatingWebhookConfiguration")
 
 	return nil
 }
