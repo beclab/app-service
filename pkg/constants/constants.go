@@ -130,6 +130,8 @@ var (
 	KubeSphereAPIHost string
 
 	CHART_REPO_URL string = "http://chart-repo-service.os-framework:82/"
+
+	OLARES_APP_NAME = "olares-app"
 )
 
 func init() {

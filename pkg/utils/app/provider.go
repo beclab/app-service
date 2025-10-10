@@ -15,6 +15,7 @@ import (
 )
 
 type ProviderPermissionHelper appcfg.ProviderPermission
+type OlaresAppProviderPermissionHelper appcfg.ProviderPermission
 type ProviderPermissionsConvertor []appcfg.ProviderPermission
 type ProviderHelper struct {
 	appcfg.Provider
@@ -26,6 +27,43 @@ func (c ProviderPermissionsConvertor) ToPermissionCfg(ctx context.Context, owner
 		return nil, nil
 	}
 
+	appCfgMap := make(map[string]*appcfg.ApplicationConfig)
+
+	for _, p := range c {
+		// if the requested provider is the olares app
+		if p.AppName == constants.OLARES_APP_NAME {
+		} else {
+			appCfg, ok := appCfgMap[p.AppName]
+			if !ok {
+				appCfg, err = c.findProviderInMarket(ctx, owner, p.AppName, marksetSrouce)
+				if err != nil {
+					klog.Errorf("Failed to find provider %s in market: %v", p.AppName, err)
+					return nil, err
+				}
+			}
+
+			if appCfg == nil {
+				continue
+			}
+
+			appCfgMap[p.AppName] = appCfg
+			pc, err := ProviderPermissionHelper(p).GetPermissionCfg(ctx, appCfg)
+			if err != nil {
+				klog.Errorf("Failed to get permission config for %s: %v", p.AppName, err)
+				if errors.Is(err, ErrProviderNotFound) {
+					continue
+				}
+				return nil, err
+			}
+			cfg = append(cfg, *pc)
+		}
+
+	} // end of for loop
+
+	return cfg, nil
+}
+
+func (c ProviderPermissionsConvertor) findProviderInMarket(ctx context.Context, owner string, appName string, marksetSrouce string) (*appcfg.ApplicationConfig, error) {
 	config, err := ctrl.GetConfig()
 	if err != nil {
 		klog.Errorf("Failed to get kube config: %v", err)
@@ -44,8 +82,6 @@ func (c ProviderPermissionsConvertor) ToPermissionCfg(ctx context.Context, owner
 		return nil, err
 	}
 
-	appCfgMap := make(map[string]*appcfg.ApplicationConfig)
-
 	const defaultMarketSource = "market.olares"
 	var marketSources []string
 	if marksetSrouce != "" && marksetSrouce != defaultMarketSource {
@@ -53,53 +89,38 @@ func (c ProviderPermissionsConvertor) ToPermissionCfg(ctx context.Context, owner
 	}
 	marketSources = append(marketSources, defaultMarketSource)
 	klog.Info("try to find provider from market source, ", marketSources)
-	for _, p := range c {
-		appCfg, ok := appCfgMap[p.AppName]
-		if !ok {
-			for _, m := range marketSources {
-				o := ConfigOptions{
-					App:          p.AppName,
-					RepoURL:      constants.CHART_REPO_URL,
-					Owner:        owner,
-					Version:      "",
-					Token:        token,
-					Admin:        owner,
-					MarketSource: m,
-					IsAdmin:      false,
-				}
-				appCfg, _, err = GetAppConfig(ctx, &o)
-				if err != nil {
-					klog.Errorf("Failed to get app config for %s: %v", p.AppName, err)
-					if errors.Is(err, ErrAppNotFoundInChartRepo) {
-						continue
-					}
-					return nil, err
-				}
 
-				if appCfg != nil {
-					break
-				}
-			}
-
-			if appCfg == nil {
-				continue
-			}
-
-			appCfgMap[p.AppName] = appCfg
+	var appCfg *appcfg.ApplicationConfig
+	for _, m := range marketSources {
+		o := ConfigOptions{
+			App:          appName,
+			RepoURL:      constants.CHART_REPO_URL,
+			Owner:        owner,
+			Version:      "",
+			Token:        token,
+			Admin:        owner,
+			MarketSource: m,
+			IsAdmin:      false,
 		}
-
-		pc, err := ProviderPermissionHelper(p).GetPermissionCfg(ctx, appCfg)
+		appCfg, _, err = GetAppConfig(ctx, &o)
 		if err != nil {
-			klog.Errorf("Failed to get permission config for %s: %v", p.AppName, err)
-			if errors.Is(err, ErrProviderNotFound) {
+			klog.Errorf("Failed to get app config for %s: %v", appName, err)
+			if errors.Is(err, ErrAppNotFoundInChartRepo) {
 				continue
 			}
 			return nil, err
 		}
-		cfg = append(cfg, *pc)
-	} // end of for loop
 
-	return cfg, nil
+		if appCfg != nil {
+			break
+		}
+	}
+
+	return appCfg, nil
+}
+
+func (c OlaresAppProviderPermissionHelper) GetPermissionCfg(ctx context.Context, owner string) (cfg *appcfg.PermissionCfg, err error) {
+	return nil, nil
 }
 
 func (h ProviderPermissionHelper) GetPermissionCfg(ctx context.Context, appCfg *appcfg.ApplicationConfig) (*appcfg.PermissionCfg, error) {
