@@ -411,7 +411,15 @@ func (r *SecurityReconciler) reconcileNetworkPolicy(ctx context.Context, ns *cor
 			networkPolicy.SetNamespace(ns.Name)
 			npFix = func(np *netv1.NetworkPolicy) {
 				logger.Info("Update network policy", "name", networkPolicy.Name(), "owner", owner)
-				np.Spec.Ingress[0].From[0].NamespaceSelector.MatchLabels[security.NamespaceOwnerLabel] = owner
+				for i := range np.Spec.Ingress[0].From {
+					if np.Spec.Ingress[0].From[i].NamespaceSelector != nil &&
+						np.Spec.Ingress[0].From[i].NamespaceSelector.MatchLabels != nil {
+
+						if _, ok := np.Spec.Ingress[0].From[i].NamespaceSelector.MatchLabels[security.NamespaceOwnerLabel]; ok {
+							np.Spec.Ingress[0].From[i].NamespaceSelector.MatchLabels[security.NamespaceOwnerLabel] = owner
+						}
+					}
+				}
 
 				// get app name from np namespace
 				depApp, err := r.getAppInNs(np.Namespace, owner)

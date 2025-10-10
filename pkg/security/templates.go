@@ -310,6 +310,19 @@ var (
 								},
 							},
 						},
+						{
+							PodSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"tier": "bfl",
+								},
+							},
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									NamespaceOwnerLabel: "",
+									NamespaceTypeLabel:  UserSpace,
+								},
+							},
+						},
 					},
 				},
 			},
