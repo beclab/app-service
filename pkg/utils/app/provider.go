@@ -7,9 +7,12 @@ import (
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
+	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
+	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/utils"
-	"k8s.io/client-go/kubernetes"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
@@ -27,15 +30,40 @@ func (c ProviderPermissionsConvertor) ToPermissionCfg(ctx context.Context, owner
 		return nil, nil
 	}
 
+	config, err := ctrl.GetConfig()
+	if err != nil {
+		klog.Errorf("Failed to get kube config: %v", err)
+		return nil, err
+	}
+
+	kubeClient, err := clientset.New(config)
+	if err != nil {
+		klog.Errorf("Failed to create kube client: %v", err)
+		return nil, err
+	}
+
 	appCfgMap := make(map[string]*appcfg.ApplicationConfig)
 
 	for _, p := range c {
 		// if the requested provider is the olares app
 		if p.AppName == constants.OLARES_APP_NAME {
+			if p.Namespace == "" {
+				p.Namespace = "user-space"
+			}
+
+			pc, err := OlaresAppProviderPermissionHelper(p).GetPermissionCfg(ctx, kubeClient, owner)
+			if err != nil {
+				klog.Errorf("Failed to get permission config for olares app %s: %v", p.AppName, err)
+				return nil, err
+			}
+			if pc != nil {
+				cfg = append(cfg, *pc)
+			}
+
 		} else {
 			appCfg, ok := appCfgMap[p.AppName]
 			if !ok {
-				appCfg, err = c.findProviderInMarket(ctx, owner, p.AppName, marksetSrouce)
+				appCfg, err = c.findProviderInMarket(ctx, kubeClient, owner, p.AppName, marksetSrouce)
 				if err != nil {
 					klog.Errorf("Failed to find provider %s in market: %v", p.AppName, err)
 					return nil, err
@@ -63,20 +91,9 @@ func (c ProviderPermissionsConvertor) ToPermissionCfg(ctx context.Context, owner
 	return cfg, nil
 }
 
-func (c ProviderPermissionsConvertor) findProviderInMarket(ctx context.Context, owner string, appName string, marksetSrouce string) (*appcfg.ApplicationConfig, error) {
-	config, err := ctrl.GetConfig()
-	if err != nil {
-		klog.Errorf("Failed to get kube config: %v", err)
-		return nil, err
-	}
+func (c ProviderPermissionsConvertor) findProviderInMarket(ctx context.Context, kubeClient *clientset.ClientSet, owner string, appName string, marksetSrouce string) (*appcfg.ApplicationConfig, error) {
 
-	kubeClient, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		klog.Errorf("Failed to create kube client: %v", err)
-		return nil, err
-	}
-
-	token, err := utils.GetUserServiceAccountToken(ctx, kubeClient, owner)
+	token, err := utils.GetUserServiceAccountToken(ctx, kubeClient.KubeClient.Kubernetes(), owner)
 	if err != nil {
 		klog.Errorf("Failed to get service account token: %v", err)
 		return nil, err
@@ -119,7 +136,73 @@ func (c ProviderPermissionsConvertor) findProviderInMarket(ctx context.Context, 
 	return appCfg, nil
 }
 
-func (c OlaresAppProviderPermissionHelper) GetPermissionCfg(ctx context.Context, owner string) (cfg *appcfg.PermissionCfg, err error) {
+func (c OlaresAppProviderPermissionHelper) GetPermissionCfg(ctx context.Context, kubeClient *clientset.ClientSet, owner string) (cfg *appcfg.PermissionCfg, err error) {
+	olaresAppName := v1alpha1.AppResourceName(c.AppName, (*appcfg.ProviderPermission)(&c).GetNamespace(owner))
+
+	olaresApp, err := kubeClient.AppClient.AppV1alpha1().Applications().Get(ctx, olaresAppName, metav1.GetOptions{})
+	if err != nil {
+		klog.Errorf("Failed to get olares app %s: %v", olaresAppName, err)
+		return nil, err
+	}
+
+	entrances, err := olaresApp.GenEntranceURL(ctx)
+	if err != nil {
+		klog.Errorf("Failed to get entrance for olares app %s: %v", olaresAppName, err)
+		return nil, err
+	}
+
+	// append non-app resource urls for olares app provider
+	// desktop-provider
+	zone, err := kubesphere.GetUserZone(ctx, owner)
+	if err != nil {
+		klog.Errorf("failed to get user zone: %v", err)
+	}
+	if len(zone) > 0 {
+		entrances = append(entrances, v1alpha1.Entrance{
+			Name: "desktop",
+			URL:  fmt.Sprintf("desktop.%s", zone),
+			Host: "edge-desktop",
+			Port: 80,
+		})
+	}
+
+	if len(entrances) > 0 {
+		for _, e := range entrances {
+			entranceProviderName := e.Name
+			if entranceProviderName == c.ProviderName {
+				klog.Info("try to get entrance provider for olares app, ", entranceProviderName, ", ", olaresAppName)
+				providerClusterRoleName := fmt.Sprintf("%s:%s", owner, entranceProviderName)
+				clusterRole, err := kubeClient.KubeClient.Kubernetes().RbacV1().ClusterRoles().Get(ctx, providerClusterRoleName, metav1.GetOptions{})
+				if err != nil {
+					if apierrors.IsNotFound(err) {
+						continue
+					}
+					klog.Errorf("Failed to get cluster role %s: %v", providerClusterRoleName, err)
+					return nil, err
+				}
+
+				if len(clusterRole.Rules) == 0 {
+					continue
+				}
+
+				var paths []string
+				for _, rule := range clusterRole.Rules {
+					if len(rule.NonResourceURLs) > 0 {
+						paths = append(paths, rule.NonResourceURLs...)
+					}
+				}
+
+				return &appcfg.PermissionCfg{
+					ProviderPermission: (*appcfg.ProviderPermission)(&c),
+					Port:               int(e.Port),
+					Svc:                e.Host,
+					Domain:             e.URL,
+					Paths:              paths,
+				}, nil
+			}
+		}
+	}
+
 	return nil, nil
 }
 
