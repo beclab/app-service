@@ -97,7 +97,9 @@ func (h *HelmOps) upgrade() error {
 		klog.Errorf("Failed to register app provider err=%v", err)
 		return err
 	}
-
+	if h.app.Type == appv1alpha1.Middleware.String() {
+		return nil
+	}
 	ok, err := h.WaitForStartUp()
 	if !ok {
 		// canceled

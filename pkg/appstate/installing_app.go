@@ -128,6 +128,33 @@ func (p *InstallingApp) Exec(ctx context.Context) (StatefulInProgressApp, error)
 					}
 
 				}
+				if p.manager.Spec.Type == appsv1.Middleware {
+					ok, err := ops.WaitForLaunch()
+					if !ok {
+						klog.Errorf("wait for middleware %s launch failed %v", p.manager.Spec.AppName, err)
+						if err != nil {
+							p.finally = func() {
+								klog.Info("update app manager status to installing canceling, ", p.manager.Name)
+								updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.InstallingCanceling, nil, appsv1.InstallingCanceling.String())
+								if updateErr != nil {
+									klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.InstallingCanceling, updateErr)
+									return
+								}
+
+							}
+						}
+						return
+					}
+					p.finally = func() {
+						message := fmt.Sprintf(constants.InstallOperationCompletedTpl, p.manager.Spec.Type.String(), p.manager.Spec.AppName)
+						opRecord := makeRecord(p.manager, appsv1.Running, message)
+						updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.Running, opRecord, appsv1.Running.String())
+						if updateErr != nil {
+							klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.Running, updateErr)
+							return
+						}
+					}
+				}
 			}()
 
 			return &in, nil

@@ -181,5 +181,6 @@ func getAppConfigFromConfigurationFile(app, chart, owner string) (*ApplicationCo
 		Internal:             cfg.Spec.RunAsInternal,
 		Type:                 cfg.ConfigType,
 		Envs:                 cfg.Envs,
+		Images:               cfg.Options.Images,
 	}, nil
 }

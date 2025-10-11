@@ -704,6 +704,28 @@ func (r *SecurityReconciler) findOwnerOfNamespace(ctx context.Context, ns *corev
 		}
 	}
 
+	gvr = schema.GroupVersionResource{
+		Group:    "apps.kubeblocks.io",
+		Version:  "v1",
+		Resource: "clusters",
+	}
+	if middlewares, err := r.DynamicClient.Resource(gvr).Namespace(ns.Name).List(ctx, metav1.ListOptions{}); err == nil {
+		for _, w := range middlewares.Items {
+			if w.GetLabels() == nil {
+				continue
+			}
+
+			owner, ok := w.GetLabels()[constants.ApplicationOwnerLabel]
+			if ok && owner != "" {
+				runAsInternal, system, shared, isMiddleware, err := appIsInternal(w.GetLabels(), owner)
+				if err != nil {
+					return "", false, false, false, false, err
+				}
+				return owner, runAsInternal, system, shared, isMiddleware, nil
+			}
+		}
+	}
+
 	klog.Infof("No owner found in workload for namespace %s", ns.Name)
 	if appName, ok := ns.Labels[constants.ApplicationNameLabel]; ok && appName != "" {
 		// if the namespace is labeled with application name,

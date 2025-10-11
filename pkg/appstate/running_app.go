@@ -46,7 +46,7 @@ func NewRunningApp(ctx context.Context, c client.Client,
 		return sapp, serr
 	}
 
-	if apierrors.IsNotFound(err) {
+	if apierrors.IsNotFound(err) && manager.Spec.Type == appsv1.App {
 		klog.Infof("application %s not found, force delete app", manager.Name)
 
 		return nil, NewErrorUnknownState(func() func(ctx context.Context) error {

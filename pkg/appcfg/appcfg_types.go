@@ -121,6 +121,7 @@ type Options struct {
 	OIDC                 OIDC                     `yaml:"oidc" json:"oidc"`
 	ApiTimeout           *int64                   `yaml:"apiTimeout" json:"apiTimeout"`
 	AllowedOutboundPorts []int                    `yaml:"allowedOutboundPorts" json:"AllowedOutboundPorts"`
+	Images               []string                 `yaml:"images" json:"images"`
 }
 
 type ResetCookie struct {

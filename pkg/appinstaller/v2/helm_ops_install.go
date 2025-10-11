@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 
+	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
+
 	v1 "bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/errcode"
@@ -112,7 +114,9 @@ func (h *HelmOpsV2) Install() error {
 		clear()
 		return err
 	}
-
+	if h.App().Type == appv1alpha1.Middleware.String() {
+		return nil
+	}
 	ok, err := h.WaitForStartUp()
 	if err != nil && errors.Is(err, errcode.ErrPodPending) {
 		klog.Errorf("App %s is pending, err=%v", h.App().AppName, err)
@@ -123,6 +127,7 @@ func (h *HelmOpsV2) Install() error {
 		clear()
 		return err
 	}
+
 	return nil
 }
 

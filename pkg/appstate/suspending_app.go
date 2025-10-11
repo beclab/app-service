@@ -69,7 +69,7 @@ func (p *SuspendingApp) exec(ctx context.Context) error {
 		klog.Errorf("suspend %s %s failed %v", p.manager.Spec.Type, p.manager.Spec.AppName, err)
 		return fmt.Errorf("suspend app %s failed %w", p.manager.Spec.AppName, err)
 	}
-	if p.manager.Spec.Type == "middleware" && userspace.IsKbMiddlewares(p.manager.Spec.AppName) {
+	if p.manager.Spec.Type == appsv1.Middleware && userspace.IsKbMiddlewares(p.manager.Spec.AppName) {
 		err = p.execMiddleware(ctx)
 		if err != nil {
 			klog.Errorf("suspend middleware %s failed %v", p.manager.Spec.AppName, err)

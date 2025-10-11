@@ -10,12 +10,11 @@ import (
 	"strconv"
 	"time"
 
-	"bytetrade.io/web3os/app-service/pkg/appcfg"
-	"bytetrade.io/web3os/app-service/pkg/errcode"
-
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
+	"bytetrade.io/web3os/app-service/pkg/errcode"
 	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
 	"bytetrade.io/web3os/app-service/pkg/helm"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
@@ -32,7 +31,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
@@ -131,7 +132,7 @@ func NewHelmOps(ctx context.Context, kubeConfig *rest.Config, app *appcfg.Applic
 	return ops, nil
 }
 
-// addApplicationLabelsToDeployment add application label to deployment or statefulset
+// AddApplicationLabelsToDeployment add application label to deployment or statefulset
 func (h *HelmOps) AddApplicationLabelsToDeployment() error {
 	k8s, err := kubernetes.NewForConfig(h.kubeConfig)
 	if err != nil {
@@ -147,6 +148,13 @@ func (h *HelmOps) AddApplicationLabelsToDeployment() error {
 		klog.Errorf("patch namespace %s error %v", h.app.Namespace, err)
 		return err
 	}
+	if h.app.Type == appv1alpha1.Middleware.String() {
+		err = h.tryToAddApplicationLabelsToCluster()
+		if err != nil {
+			return err
+		}
+	}
+
 	services := ToEntrancesLabel(h.app.Entrances)
 	ports := ToAppTCPUDPPorts(h.app.Ports)
 
@@ -159,6 +167,12 @@ func (h *HelmOps) AddApplicationLabelsToDeployment() error {
 				constants.ApplicationOwnerLabel:     h.app.OwnerName,
 				constants.ApplicationTargetLabel:    h.app.Target,
 				constants.ApplicationRunAsUserLabel: strconv.FormatBool(h.app.RunAsUser),
+				constants.ApplicationMiddlewareLabel: func() string {
+					if h.app.Type == appv1alpha1.Middleware.String() {
+						return "true"
+					}
+					return "false"
+				}(),
 			},
 			"annotations": map[string]string{
 				constants.ApplicationIconLabel:    h.app.Icon,
@@ -200,8 +214,64 @@ func (h *HelmOps) AddApplicationLabelsToDeployment() error {
 
 	if err != nil {
 		klog.Errorf("Failed to patch deployment %s in namespace %s: %v", h.app.AppName, h.app.Namespace, err)
+		return err
 	}
-	return err
+	return nil
+}
+
+func (h *HelmOps) tryToAddApplicationLabelsToCluster() error {
+	// try to get kubeblocks cluster
+	gvr := schema.GroupVersionResource{
+		Group:    "apps.kubeblocks.io",
+		Version:  "v1",
+		Resource: "clusters",
+	}
+
+	patchData := map[string]interface{}{
+		"metadata": map[string]interface{}{
+			"labels": map[string]string{
+				constants.ApplicationNameLabel:   h.app.AppName,
+				constants.ApplicationOwnerLabel:  h.app.OwnerName,
+				constants.ApplicationTargetLabel: h.app.Target,
+			},
+			"annotations": map[string]string{
+				constants.ApplicationIconLabel:    h.app.Icon,
+				constants.ApplicationTitleLabel:   h.app.Title,
+				constants.ApplicationVersionLabel: h.app.Version,
+				constants.ApplicationSourceLabel:  h.options.Source,
+			},
+		},
+	}
+
+	patchBytes, err := json.Marshal(patchData)
+	if err != nil {
+		klog.Errorf("Failed to marshal patch data for cluster %s in namespace %s: %v", h.app.AppName, h.app.Namespace, err)
+		return err
+	}
+
+	dyClient, err := dynamic.NewForConfig(h.kubeConfig)
+	if err != nil {
+		klog.Errorf("Failed to create dynamic client: %v", err)
+		return err
+	}
+
+	// check whether the cluster exists first
+	_, err = dyClient.Resource(gvr).Namespace(h.app.Namespace).Get(h.ctx, h.app.AppName, metav1.GetOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		klog.Errorf("Failed to get cluster %s in namespace %s: %v", h.app.AppName, h.app.Namespace, err)
+		return err
+	}
+
+	_, err = dyClient.Resource(gvr).Namespace(h.app.Namespace).Patch(h.ctx, h.app.AppName, types.MergePatchType, patchBytes, metav1.PatchOptions{})
+	if err != nil {
+		klog.Errorf("Failed to patch cluster %s in namespace %s: %v", h.app.AppName, h.app.Namespace, err)
+		return err
+	}
+
+	return nil
 }
 
 func (h *HelmOps) tryToAddApplicationLabelsToStatefulSet(k8s *kubernetes.Clientset, patch string) error {
@@ -498,6 +568,14 @@ func (h *HelmOps) WaitForStartUp() (bool, error) {
 }
 
 func (h *HelmOps) isStartUp() (bool, error) {
+	pods, err := h.findAppSelectedPods()
+	if err != nil {
+		return false, err
+	}
+	return checkIfStartup(pods)
+}
+
+func (h *HelmOps) findAppSelectedPods() (*corev1.PodList, error) {
 	var labelSelector string
 	deployment, err := h.client.KubeClient.Kubernetes().AppsV1().Deployments(h.app.Namespace).
 		Get(h.ctx, h.app.AppName, metav1.GetOptions{})
@@ -510,7 +588,7 @@ func (h *HelmOps) isStartUp() (bool, error) {
 		sts, err := h.client.KubeClient.Kubernetes().AppsV1().StatefulSets(h.app.Namespace).
 			Get(h.ctx, h.app.AppName, metav1.GetOptions{})
 		if err != nil {
-			return false, err
+			return nil, err
 		}
 		labelSelector = metav1.FormatLabelSelector(sts.Spec.Selector)
 	}
@@ -519,9 +597,12 @@ func (h *HelmOps) isStartUp() (bool, error) {
 
 	if err != nil {
 		klog.Errorf("app %s get pods err %v", h.app.AppName, err)
-		return false, err
+		return nil, err
 	}
+	return pods, nil
+}
 
+func checkIfStartup(pods *corev1.PodList) (bool, error) {
 	if len(pods.Items) == 0 {
 		return false, errors.New("no pod found")
 	}
@@ -703,6 +784,9 @@ func (h *HelmOps) Install() error {
 		return err
 	}
 
+	if h.app.Type == appv1alpha1.Middleware.String() {
+		return nil
+	}
 	ok, err := h.WaitForStartUp()
 	if err != nil && errors.Is(err, errcode.ErrPodPending) {
 		return err
@@ -711,6 +795,7 @@ func (h *HelmOps) Install() error {
 		h.Uninstall()
 		return err
 	}
+
 	return nil
 }
 
