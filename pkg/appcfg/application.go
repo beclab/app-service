@@ -92,6 +92,7 @@ type ApplicationConfig struct {
 	Provider             []Provider
 	Type                 string
 	Envs                 []sysv1alpha1.AppEnvVar
+	Images               []string
 }
 
 func (c *ApplicationConfig) IsMiddleware() bool {

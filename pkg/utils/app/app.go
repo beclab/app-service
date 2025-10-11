@@ -856,6 +856,7 @@ func toApplicationConfig(app, chart string, cfg *appcfg.AppConfiguration) (*appc
 		Provider:             cfg.Provider,
 		Type:                 cfg.ConfigType,
 		Envs:                 cfg.Envs,
+		Images:               cfg.Options.Images,
 	}, chart, nil
 }
 

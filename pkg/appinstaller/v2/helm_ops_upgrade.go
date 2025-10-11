@@ -4,10 +4,12 @@ import (
 	"errors"
 	"fmt"
 
+	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	v1 "bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/errcode"
 	"bytetrade.io/web3os/app-service/pkg/helm"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
+
 	helmrelease "helm.sh/helm/v3/pkg/release"
 	"helm.sh/helm/v3/pkg/storage/driver"
 	"k8s.io/klog/v2"
@@ -82,6 +84,10 @@ func (h *HelmOpsV2) Upgrade() error {
 		if err = h.RegisterOrUnregisterAppProvider(v1.Register); err != nil {
 			klog.Errorf("Failed to register app provider err=%v", err)
 			return err
+		}
+
+		if h.App().Type == appv1alpha1.Middleware.String() {
+			return nil
 		}
 
 		ok, err := h.WaitForStartUp()

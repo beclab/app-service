@@ -201,7 +201,7 @@ func GetResourceListFromChart(chartPath string, values map[string]interface{}) (
 	}
 }
 
-func GetRefFromResourceList(chartPath string, values map[string]interface{}) (refs []v1alpha1.Ref, err error) {
+func GetRefFromResourceList(chartPath string, values map[string]interface{}, images []string) (refs []v1alpha1.Ref, err error) {
 	resources, err := GetResourceListFromChart(chartPath, values)
 	if err != nil {
 		klog.Infof("get resourcelist from chart err=%v", err)
@@ -258,6 +258,12 @@ func GetRefFromResourceList(chartPath string, values map[string]interface{}) (re
 				})
 			}
 		}
+	}
+	for _, image := range images {
+		refs = append(refs, v1alpha1.Ref{
+			Name:            image,
+			ImagePullPolicy: getPullPolicy(image, ""),
+		})
 	}
 	filteredRefs := make([]v1alpha1.Ref, 0)
 	for _, imageRef := range refs {

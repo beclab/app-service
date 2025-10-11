@@ -119,6 +119,9 @@ func (p *resumingInProgressApp) WaitAsync(ctx context.Context) {
 
 // poll implements PollableStatefulInProgressApp.
 func (p *resumingInProgressApp) poll(ctx context.Context) error {
+	if p.manager.Spec.Type == appsv1.Middleware {
+		return nil
+	}
 	ok := p.IsStartUp(ctx)
 	if !ok {
 		return fmt.Errorf("wait for app %s startup failed", p.manager.Spec.AppName)
