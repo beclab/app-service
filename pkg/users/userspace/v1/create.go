@@ -6,15 +6,16 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"helm.sh/helm/v3/pkg/storage/driver"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/types"
 	"math/rand"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"helm.sh/helm/v3/pkg/storage/driver"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/types"
 
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/helm"
@@ -38,7 +39,7 @@ type Creator struct {
 const (
 	USER_SPACE_ROLE = "admin"
 	MAX_RAND_INT    = 1000000
-	OlaresRootPath  = "OLARES_ROOT_DIR"
+	OlaresRootPath  = "OLARES_SYSTEM_ROOT_PATH"
 	DefaultRootPath = "/olares"
 )
 
@@ -279,7 +280,7 @@ func (c *Creator) installSysApps(ctx context.Context, bflPod *corev1.Pod) error 
 	vals["gpu"] = gpuType
 
 	vals["terminusGlobalEnvs"] = map[string]interface{}{
-		"COREDNS_SVC":                os.Getenv("COREDNS_SVC"),
+		"COREDNS_SVC":                os.Getenv("OLARES_SYSTEM_CLUSTER_DNS_SERVICE"),
 		"TAILSCALE_CONTROLPLANE_URL": os.Getenv("TAILSCALE_CONTROLPLANE_URL"),
 	}
 	userIndex, userSubnet, err := c.getUserSubnet(ctx)
