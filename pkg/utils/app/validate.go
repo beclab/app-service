@@ -1,7 +1,6 @@
 package app
 
 import (
-	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
@@ -477,7 +478,7 @@ func CheckAppEnvs(ctx context.Context, ctrlClient client.Client, envs []sysv1alp
 	referencedEnvs := make(map[string]string)
 	var once sync.Once
 	for _, env := range envs {
-		if env.ValueFrom != nil && env.ValueFrom.EnvName != "" {
+		if env.ValueFrom != nil && env.ValueFrom.EnvName != "" && env.Required {
 			var listErr error
 			once.Do(func() {
 				sysenvs := new(sysv1alpha1.SystemEnvList)
