@@ -1,7 +1,6 @@
 package app
 
 import (
-	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
@@ -20,7 +21,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/prometheus"
 	"bytetrade.io/web3os/app-service/pkg/tapr"
-	"bytetrade.io/web3os/app-service/pkg/upgrade"
+
 	"bytetrade.io/web3os/app-service/pkg/utils"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -66,7 +67,7 @@ func CheckDependencies(ctx context.Context, ctrlClient client.Client, deps []app
 
 	for _, dep := range deps {
 		if dep.Type == constants.DependencyTypeSystem {
-			terminus, err := upgrade.GetTerminusVersion(ctx, ctrlClient)
+			terminus, err := utils.GetTerminus(ctx, ctrlClient)
 			if err != nil {
 				return unSatisfiedDeps, err
 			}

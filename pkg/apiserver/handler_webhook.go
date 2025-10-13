@@ -15,7 +15,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/provider"
-	"bytetrade.io/web3os/app-service/pkg/upgrade"
+
 	"bytetrade.io/web3os/app-service/pkg/users"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/utils"
@@ -318,7 +318,7 @@ func (h *Handler) gpuLimitMutate(ctx context.Context, req *admissionv1.Admission
 		return resp
 	}
 
-	terminus, err := upgrade.GetTerminusVersion(ctx, h.ctrlClient)
+	terminus, err := utils.GetTerminus(ctx, h.ctrlClient)
 	if err != nil {
 		return h.sidecarWebhook.AdmissionError(req.UID, err)
 	}

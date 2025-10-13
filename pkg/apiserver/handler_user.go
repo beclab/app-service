@@ -10,7 +10,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/prometheus"
-	"bytetrade.io/web3os/app-service/pkg/upgrade"
+
 	"bytetrade.io/web3os/app-service/pkg/users"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 
@@ -134,7 +134,7 @@ func (h *Handler) createUser(req *restful.Request, resp *restful.Response) {
 		olaresName = users.OlaresName(username)
 		username = strings.Split(username, "@")[0]
 	} else {
-		olares, err := upgrade.GetTerminusVersion(req.Request.Context(), h.ctrlClient)
+		olares, err := utils.GetTerminus(req.Request.Context(), h.ctrlClient)
 		if err != nil {
 			api.HandleError(resp, req, err)
 			return

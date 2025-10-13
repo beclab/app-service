@@ -64,10 +64,6 @@ test: manifests generate fmt vet envtest ## Run tests.
 build: generate fmt vet ## Build app-service binary.
 	go build -o bin/app-service ./cmd/app-service/main.go
 
-.PHONY: upgrade-job
-upgrade-job:
-	go build -o bin/upgrade-job ./cmd/upgrade-job/main.go
-
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd/app-service/main.go

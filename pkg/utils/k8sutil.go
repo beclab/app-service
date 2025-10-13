@@ -291,3 +291,11 @@ func GetTerminusVersion(ctx context.Context, config *rest.Config) (*sysv1alpha1.
 
 	return &terminus, nil
 }
+
+func GetTerminus(ctx context.Context, ctrlClient client.Client) (*sysv1alpha1.Terminus, error) {
+	var terminus sysv1alpha1.Terminus
+	if err := ctrlClient.Get(ctx, types.NamespacedName{Name: "terminus"}, &terminus); err != nil {
+		return nil, err
+	}
+	return &terminus, nil
+}

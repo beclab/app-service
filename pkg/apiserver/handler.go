@@ -8,7 +8,8 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
 	"bytetrade.io/web3os/app-service/pkg/generated/informers/externalversions"
 	lister_v1alpha1 "bytetrade.io/web3os/app-service/pkg/generated/listers/app.bytetrade.io/v1alpha1"
-	"bytetrade.io/web3os/app-service/pkg/upgrade"
+
+	// upgrade removed from direct usage in handlers
 	"bytetrade.io/web3os/app-service/pkg/users/userspace/v1"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 	"bytetrade.io/web3os/app-service/pkg/webhook"
@@ -26,7 +27,6 @@ type Handler struct {
 	userspaceManager *userspace.Manager
 	kubeConfig       *rest.Config // helm's kubeConfig. TODO: insecure
 	sidecarWebhook   *webhook.Webhook
-	upgrader         *upgrade.Upgrader
 	ctrlClient       client.Client
 	informer         externalversions.SharedInformerFactory
 	appLister        lister_v1alpha1.ApplicationLister
@@ -136,7 +136,6 @@ func (b *handlerBuilder) Build() (*Handler, error) {
 		kubeConfig:       b.kubeConfig,
 		userspaceManager: userspace.NewManager(b.ctx),
 		sidecarWebhook:   wh,
-		upgrader:         upgrade.NewUpgrader(),
 		ctrlClient:       b.ctrlClient,
 		informer:         b.informer,
 		appLister:        b.informer.App().V1alpha1().Applications().Lister(),
