@@ -901,7 +901,7 @@ func (h *Handler) oamValues(req *restful.Request, resp *restful.Response) {
 	}
 	values["GPU"] = map[string]interface{}{
 		"Type": gpuType,
-		"Cuda": os.Getenv("CUDA_VERSION"),
+		"Cuda": os.Getenv("OLARES_SYSTEM_CUDA_VERSION"),
 	}
 	values["user"] = map[string]interface{}{
 		"zone": "user-zone",

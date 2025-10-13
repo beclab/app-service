@@ -212,7 +212,7 @@ func (p *UpgradingApp) exec(ctx context.Context) error {
 	}
 	values["GPU"] = map[string]interface{}{
 		"Type": gpuType,
-		"Cuda": os.Getenv("CUDA_VERSION"),
+		"Cuda": os.Getenv("OLARES_SYSTEM_CUDA_VERSION"),
 	}
 
 	terminus, err := utils.GetTerminusVersion(ctx, kubeConfig)

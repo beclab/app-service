@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/utils"
@@ -26,15 +27,6 @@ type SystemEnvProcessEnvController struct {
 // during the migration period. Keys are new env names, values are a single legacy name
 // that should mirror the same value in the process environment.
 var legacyEnvAliases = map[string]string{
-	"OLARES_SYSTEM_DID_SERVICE":         "DID_GATE_URL",
-	"OLARES_SYSTEM_CLOUD_SERVICE":       "OLARES_SYSTEM_SPACE_URL",
-	"OLARES_SYSTEM_PUSH_SERVICE":        "FIREBASE_PUSH_URL",
-	"OLARES_SYSTEM_FRP_INDEX_SERVICE":   "FRP_LIST_URL",
-	"OLARES_SYSTEM_VPN_CONTROL_SERVICE": "TAILSCALE_CONTROLPLANE_URL",
-	"OLARES_SYSTEM_MARKET_SERVICE":      "MARKET_PROVIDER",
-	"OLARES_SYSTEM_CERT_SERVICE":        "TERMINUS_CERT_SERVICE_API",
-	"OLARES_SYSTEM_DNS_SERVICE":         "TERMINUS_DNS_SERVICE_API",
-	"OLARES_SYSTEM_CDN_SERVICE":         "DOWNLOAD_CDN_URL",
 	"OLARES_SYSTEM_ROOT_PATH":           "OLARES_ROOT_DIR",
 	"OLARES_SYSTEM_ROOTFS_TYPE":         "OLARES_FS_TYPE",
 	"OLARES_SYSTEM_CUDA_VERSION":        "CUDA_VERSION",
@@ -95,6 +87,8 @@ func InitializeSystemEnvProcessEnv(ctx context.Context, c client.Client) error {
 	}
 
 	var errs []error
+	var domainName string
+	var once sync.Once
 	for i := range list.Items {
 		se := &list.Items[i]
 
@@ -102,9 +96,6 @@ func InitializeSystemEnvProcessEnv(ctx context.Context, c client.Client) error {
 		if !migrated {
 			if alias, ok := legacyEnvAliases[se.EnvName]; ok && alias != "" {
 				if legacyVal, ok := os.LookupEnv(alias); ok && legacyVal != "" {
-					if se.Type == "url" && !strings.HasPrefix(legacyVal, "http") {
-						legacyVal = "https://" + legacyVal
-					}
 					if err := utils.CheckEnvValueByType(legacyVal, se.Type); err != nil {
 						klog.Warningf("Skip migrating SystemEnv %s: legacy alias %s value invalid for type %s: %v", se.EnvName, alias, se.Type, err)
 					} else if se.Default != legacyVal {
@@ -117,6 +108,43 @@ func InitializeSystemEnvProcessEnv(ctx context.Context, c client.Client) error {
 						if err := c.Patch(ctx, se, client.MergeFrom(original)); err != nil {
 							errs = append(errs, fmt.Errorf("patch SystemEnv %s default from legacy alias failed: %w", se.EnvName, err))
 						}
+					}
+				}
+			} else {
+				var err error
+				once.Do(func() {
+					sysCR := &sysv1alpha1.Terminus{}
+					err = c.Get(ctx, client.ObjectKey{Name: "terminus"}, sysCR)
+					if err != nil {
+						klog.Errorf("get terminus failed: %v", err)
+						return
+					}
+					domainName = sysCR.Spec.Settings["domainName"]
+				})
+				if err != nil {
+					return fmt.Errorf("get terminus failed: %w", err)
+				}
+				if !strings.HasSuffix(domainName, ".cn") {
+					continue
+				}
+				var newDefaultVal string
+				switch se.EnvName {
+				case "OLARES_SYSTEM_REMOTE_SERVICE":
+					newDefaultVal = "https://api.olares.cn"
+				case "OLARES_SYSTEM_CDN_SERVICE":
+					newDefaultVal = "https://cdn.olares.cn"
+				case "OLARES_MIRROR_SERVICE":
+					newDefaultVal = "https://mirrors.olares.cn"
+				}
+				if se.Default != newDefaultVal {
+					original := se.DeepCopy()
+					se.Default = newDefaultVal
+					if se.Annotations == nil {
+						se.Annotations = make(map[string]string)
+					}
+					se.Annotations[migrationAnnotationKey] = "true"
+					if err := c.Patch(ctx, se, client.MergeFrom(original)); err != nil {
+						errs = append(errs, fmt.Errorf("patch SystemEnv %s default failed: %w", se.EnvName, err))
 					}
 				}
 			}
