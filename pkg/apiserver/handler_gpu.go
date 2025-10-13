@@ -8,7 +8,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
-	"bytetrade.io/web3os/app-service/pkg/upgrade"
+	"bytetrade.io/web3os/app-service/pkg/utils"
 
 	"github.com/emicklei/go-restful/v3"
 	corev1 "k8s.io/api/core/v1"
@@ -121,7 +121,7 @@ func (h *Handler) nvshareSwitch(req *restful.Request, enable bool) error {
 
 	// update terminus
 	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		terminus, err := upgrade.GetTerminusVersion(req.Request.Context(), h.ctrlClient)
+		terminus, err := utils.GetTerminus(req.Request.Context(), h.ctrlClient)
 		if err != nil {
 			return err
 		}
@@ -152,7 +152,7 @@ func (h *Handler) nvshareSwitch(req *restful.Request, enable bool) error {
 }
 
 func (h *Handler) getManagedMemoryValue(req *restful.Request, resp *restful.Response) {
-	terminus, err := upgrade.GetTerminusVersion(req.Request.Context(), h.ctrlClient)
+	terminus, err := utils.GetTerminus(req.Request.Context(), h.ctrlClient)
 	if err != nil {
 		klog.Error("get terminus value error, ", err)
 		api.HandleError(resp, req, &errors.StatusError{

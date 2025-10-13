@@ -16,7 +16,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
-	"bytetrade.io/web3os/app-service/pkg/upgrade"
+
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
@@ -478,7 +478,7 @@ func (h *Handler) pendingOrInstallingApps(req *restful.Request, resp *restful.Re
 }
 
 func (h *Handler) terminusVersion(req *restful.Request, resp *restful.Response) {
-	terminus, err := upgrade.GetTerminusVersion(req.Request.Context(), h.ctrlClient)
+	terminus, err := utils.GetTerminus(req.Request.Context(), h.ctrlClient)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return

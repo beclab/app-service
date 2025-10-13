@@ -21,7 +21,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/middlewareinstaller"
 	"bytetrade.io/web3os/app-service/pkg/prometheus"
 	"bytetrade.io/web3os/app-service/pkg/tapr"
-	"bytetrade.io/web3os/app-service/pkg/upgrade"
+
 	"bytetrade.io/web3os/app-service/pkg/utils"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 	"bytetrade.io/web3os/app-service/pkg/workflowinstaller"
@@ -99,7 +99,7 @@ func CheckDependencies(ctx context.Context, deps []appcfg.Dependency, ctrlClient
 
 	for _, dep := range deps {
 		if dep.Type == constants.DependencyTypeSystem {
-			terminus, err := upgrade.GetTerminusVersion(ctx, ctrlClient)
+			terminus, err := utils.GetTerminus(ctx, ctrlClient)
 			if err != nil {
 				klog.Errorf("Failed to get olares version err=%v", err)
 				return unSatisfiedDeps, err
