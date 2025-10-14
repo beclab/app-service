@@ -206,6 +206,18 @@ var (
 								},
 							},
 						},
+						{
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									NamespaceTypeLabel: System,
+								},
+							},
+							PodSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"app": "tapr-sysevent",
+								},
+							},
+						},
 					},
 				},
 			},
@@ -387,6 +399,32 @@ var (
 			},
 		},
 	} // end NSFilesPolicy
+
+	NPOSSystemProvider = netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "os-system-provider-np",
+		},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"provider": "true",
+				},
+			},
+			Ingress: []netv1.NetworkPolicyIngressRule{
+				{
+					From: []netv1.NetworkPolicyPeer{
+						{
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									NamespaceSharedLabel: "true",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	} // end NPOSSystemProvider
 )
 
 // NodeTunnelRule returns node tunnel rule.
