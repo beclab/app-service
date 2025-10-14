@@ -11,6 +11,7 @@ type Middleware struct {
 	Elasticsearch *ElasticsearchConfig `yaml:"elasticsearch,omitempty"`
 	MariaDB       *MariaDBConfig       `yaml:"mariadb,omitempty"`
 	MySQL         *MySQLConfig         `yaml:"mysql,omitempty"`
+	Argo          *ArgoConfig          `yaml:"argo,omitempty"`
 }
 
 // Database specify database name and if distributed.
@@ -26,6 +27,10 @@ type PostgresConfig struct {
 	Username  string     `yaml:"username" json:"username"`
 	Password  string     `yaml:"password,omitempty" json:"password,omitempty"`
 	Databases []Database `yaml:"databases" json:"databases"`
+}
+
+type ArgoConfig struct {
+	Required bool `yaml:"required" json:"required"`
 }
 
 type MinioConfig struct {

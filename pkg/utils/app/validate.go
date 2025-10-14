@@ -10,9 +10,8 @@ import (
 	"sync"
 	"time"
 
-	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
-
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	v1alpha1client "bytetrade.io/web3os/app-service/pkg/client/clientset/v1alpha1"
@@ -465,7 +464,65 @@ func CheckMiddlewareRequirement(ctx context.Context, ctrlClient client.Client, m
 			}
 			return false, nil
 		}
+		if middleware.MySQL != nil {
+			var am v1alpha1.ApplicationManager
+			err := ctrlClient.Get(ctx, types.NamespacedName{Name: "mysql-middleware-mysql"}, &am)
+			if err != nil {
+				return false, err
+			}
+			if am.Status.State == "running" {
+				return true, nil
+			}
+			return false, nil
+		}
+
+		if middleware.RabbitMQ != nil {
+			var am v1alpha1.ApplicationManager
+			err := ctrlClient.Get(ctx, types.NamespacedName{Name: "rabbitmq-middleware-rabbitmq"}, &am)
+			if err != nil {
+				return false, err
+			}
+			if am.Status.State == "running" {
+				return true, nil
+			}
+			return false, nil
+		}
+		if middleware.Elasticsearch != nil {
+			var am v1alpha1.ApplicationManager
+			err := ctrlClient.Get(ctx, types.NamespacedName{Name: "elasticsearch-middleware-elasticsearch"}, &am)
+			if err != nil {
+				return false, err
+			}
+			if am.Status.State == "running" {
+				return true, nil
+			}
+			return false, nil
+		}
+		if middleware.MariaDB != nil {
+			var am v1alpha1.ApplicationManager
+			err := ctrlClient.Get(ctx, types.NamespacedName{Name: "mariadb-middleware-mariadb"}, &am)
+			if err != nil {
+				return false, err
+			}
+			if am.Status.State == "running" {
+				return true, nil
+			}
+			return false, nil
+		}
+		if middleware.Argo != nil && middleware.Argo.Required {
+			var am v1alpha1.ApplicationManager
+			err := ctrlClient.Get(ctx, types.NamespacedName{Name: "argo-middleware-argo"}, &am)
+			if err != nil {
+				return false, err
+			}
+			if am.Status.State == "running" {
+				return true, nil
+			}
+			return false, nil
+		}
+
 		return true, nil
+
 	}
 	return true, nil
 }
