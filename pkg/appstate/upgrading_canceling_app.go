@@ -5,6 +5,8 @@ import (
 	"time"
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/images"
+
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -13,6 +15,7 @@ var _ CancelOperationApp = &UpgradingCancelingApp{}
 
 type UpgradingCancelingApp struct {
 	*baseOperationApp
+	imageClient images.ImageManager
 }
 
 func (p *UpgradingCancelingApp) IsAppCreated() bool {
@@ -25,13 +28,14 @@ func NewUpgradingCancelingApp(c client.Client,
 	return appFactory.New(c, manager, 0,
 		func(c client.Client, manager *appsv1.ApplicationManager, ttl time.Duration) StatefulApp {
 			return &UpgradingCancelingApp{
-				&baseOperationApp{
+				baseOperationApp: &baseOperationApp{
 					ttl: ttl,
 					baseStatefulApp: &baseStatefulApp{
 						manager: manager,
 						client:  c,
 					},
 				},
+				imageClient: images.NewImageManager(c),
 			}
 		})
 }
@@ -39,6 +43,11 @@ func NewUpgradingCancelingApp(c client.Client,
 func (p *UpgradingCancelingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
 	var err error
 	klog.Infof("execute upgrading cancel operation appName=%s", p.manager.Spec.AppName)
+	err = p.imageClient.UpdateStatus(ctx, p.manager.Name, appsv1.DownloadingCanceled.String(), appsv1.DownloadingCanceled.String())
+	if err != nil {
+		klog.Errorf("update im name=%s to downloadingCanceled state failed %v", p.manager.Name, err)
+		return nil, err
+	}
 
 	if ok := appFactory.cancelOperation(p.manager.Name); !ok {
 		klog.Errorf("app %s operation is not ", p.manager.Name)
