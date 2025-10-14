@@ -400,9 +400,9 @@ var (
 		},
 	} // end NSFilesPolicy
 
-	NPOSSystemProvider = netv1.NetworkPolicy{
+	NPSystemProvider = netv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "os-system-provider-np",
+			Name: "system-provider-np",
 		},
 		Spec: netv1.NetworkPolicySpec{
 			PodSelector: metav1.LabelSelector{
