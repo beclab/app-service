@@ -91,9 +91,9 @@ func (r *AppEnvController) syncEnvValues(ctx context.Context, appEnv *sysv1alpha
 	if err := r.List(ctx, &systemEnvList); err != nil {
 		return fmt.Errorf("failed to list SystemEnvs: %v", err)
 	}
-	systemEnvMap := make(map[string]string)
+	systemEnvMap := make(map[string]*sysv1alpha1.SystemEnv)
 	for _, sysEnv := range systemEnvList.Items {
-		systemEnvMap[sysEnv.EnvName] = sysEnv.GetEffectiveValue()
+		systemEnvMap[sysEnv.EnvName] = &sysEnv
 	}
 
 	// Get UserEnv values from user-space-{appOwner} namespace
@@ -102,48 +102,51 @@ func (r *AppEnvController) syncEnvValues(ctx context.Context, appEnv *sysv1alpha
 	if err := r.List(ctx, &userEnvList, client.InNamespace(userNamespace)); err != nil {
 		return fmt.Errorf("failed to list UserEnvs in namespace %s: %v", userNamespace, err)
 	}
-	userEnvMap := make(map[string]string)
+	userEnvMap := make(map[string]*sysv1alpha1.UserEnv)
 	for _, userEnv := range userEnvList.Items {
-		userEnvMap[userEnv.EnvName] = userEnv.GetEffectiveValue()
+		userEnvMap[userEnv.EnvName] = &userEnv
 	}
 
 	updated := false
 	for i := range appEnv.Envs {
 		envVar := &appEnv.Envs[i]
 		if envVar.ValueFrom != nil {
-			var value string
-			var exists bool
-			var source string
+			var refValue string
+			var refType string
+			var refSource string
 
 			// Check if both UserEnv and SystemEnv exist with the same name
-			userEnvExists := false
-			systemEnvExists := false
-			if _, userEnvExists = userEnvMap[envVar.ValueFrom.EnvName]; userEnvExists {
-				value = userEnvMap[envVar.ValueFrom.EnvName]
-				source = "UserEnv"
+			var userEnv *sysv1alpha1.UserEnv
+			var sysEnv *sysv1alpha1.SystemEnv
+			if userEnv = userEnvMap[envVar.ValueFrom.EnvName]; userEnv != nil {
+				refValue = userEnv.GetEffectiveValue()
+				refType = userEnv.Type
+				refSource = "UserEnv"
 			}
-			if _, systemEnvExists = systemEnvMap[envVar.ValueFrom.EnvName]; systemEnvExists {
-				if userEnvExists {
+			if sysEnv = systemEnvMap[envVar.ValueFrom.EnvName]; sysEnv != nil {
+				if userEnv != nil {
 					// Both exist - this is unexpected, log a warning
 					klog.Warningf("AppEnv %s/%s references environment variable %s which exists in both UserEnv and SystemEnv. UserEnv value will be used.",
 						appEnv.Namespace, appEnv.Name, envVar.ValueFrom.EnvName)
 				} else {
-					value = systemEnvMap[envVar.ValueFrom.EnvName]
-					source = "SystemEnv"
+					refValue = sysEnv.GetEffectiveValue()
+					refType = sysEnv.Type
+					refSource = "SystemEnv"
 				}
 			}
 
-			exists = userEnvExists || systemEnvExists
-			if exists {
-				if envVar.Value != value || envVar.ValueFrom.Status != constants.EnvRefStatusSynced {
-					envVar.Value = value
+			// do not check for non-empty value as an existing refed env may also contain empty value
+			if userEnv != nil || sysEnv != nil {
+				if envVar.Value != refValue || envVar.Type != refType || envVar.ValueFrom.Status != constants.EnvRefStatusSynced {
+					envVar.Value = refValue
+					envVar.Type = refType
 					envVar.ValueFrom.Status = constants.EnvRefStatusSynced
 					updated = true
 					if envVar.ApplyOnChange {
 						appEnv.NeedApply = true
 					}
 					klog.V(4).Infof("AppEnv %s/%s environment variable %s synced from %s with value: %s",
-						appEnv.Namespace, appEnv.Name, envVar.ValueFrom.EnvName, source, value)
+						appEnv.Namespace, appEnv.Name, envVar.ValueFrom.EnvName, refSource, refValue)
 				}
 			} else {
 				if envVar.ValueFrom.Status != constants.EnvRefStatusNotFound {
