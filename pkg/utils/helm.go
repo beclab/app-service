@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/constants"
 	refdocker "github.com/containerd/containerd/reference/docker"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
@@ -166,6 +167,7 @@ func GetResourceListFromChart(chartPath string, values map[string]interface{}) (
 		"subjects": map[string]interface{}{},
 		"refs":     map[string]interface{}{},
 	}
+	values[constants.OlaresEnvHelmValuesKey] = map[string]interface{}{}
 
 	ret, err := instAction.RunWithContext(context.Background(), chartRequested, values)
 	if err != nil {
