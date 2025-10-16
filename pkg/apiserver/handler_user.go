@@ -2,7 +2,6 @@ package apiserver
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -407,13 +406,7 @@ func (h *Handler) handleUsers(req *restful.Request, resp *restful.Response) {
 			u.LastLoginTime = pointer.Int64(user.Status.LastLoginTime.Unix())
 		}
 
-		if s, err := getEnableHTTPSTaskState(&user); err != nil {
-			klog.Errorf("user '%s' get https task state err: %v", user.Name, err)
-		} else {
-			if s.State == 4 {
-				u.WizardComplete = true
-			}
-		}
+		u.WizardComplete = getWizardComplete(&user)
 		userInfo = append(userInfo, u)
 	}
 	if err != nil {
@@ -468,38 +461,12 @@ func (h *Handler) handleUser(req *restful.Request, resp *restful.Response) {
 	}
 	u.Roles = roles
 
-	if s, err := getEnableHTTPSTaskState(&user); err != nil {
-		klog.Errorf("user '%s' get https task state err: %v", user.Name, err)
-	} else {
-		if s.State == 4 {
-			u.WizardComplete = true
-		}
-	}
-
+	u.WizardComplete = getWizardComplete(&user)
 	resp.WriteAsJson(map[string]interface{}{
 		"code": 200,
 		"data": u,
 	})
 
-}
-
-func getEnableHTTPSTaskState(user *iamv1alpha2.User) (*TaskResult, error) {
-	var t TaskResult
-
-	if v := user.Annotations[users.EnableSSLTaskResultAnnotationKey]; v != "" {
-		err := json.Unmarshal([]byte(v), &t)
-		if err != nil {
-			return nil, err
-		}
-		return &t, nil
-	}
-
-	return nil, errors.New("not started")
-}
-
-type TaskResult struct {
-	State int    `json:"state"`
-	Err   string `json:"err"`
 }
 
 func (h *Handler) getRolesByUserName(ctx context.Context, name string) ([]string, error) {
@@ -519,6 +486,18 @@ func (h *Handler) getRolesByUserName(ctx context.Context, name string) ([]string
 		}
 	}
 	return roles.List(), nil
+}
+
+func getWizardComplete(user *iamv1alpha2.User) bool {
+	if user == nil {
+		return false
+	}
+	if wizardStatus, ok := user.Annotations["bytetrade.io/wizard-status"]; ok {
+		if wizardStatus == "completed" || wizardStatus == "wait_reset_password" {
+			return true
+		}
+	}
+	return false
 }
 
 type UserInfo struct {
