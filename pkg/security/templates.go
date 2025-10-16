@@ -420,6 +420,13 @@ var (
 								},
 							},
 						},
+						{
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									NamespaceTypeLabel: System,
+								},
+							},
+						},
 					},
 				},
 			},

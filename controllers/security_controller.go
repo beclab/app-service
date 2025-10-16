@@ -363,7 +363,7 @@ func (r *SecurityReconciler) reconcileNetworkPolicy(ctx context.Context, ns *cor
 			networkPolicy.SetNamespace(ns.Name)
 			npFix = nil
 		} else if security.IsOSProtectedNamespace(ns.Name) {
-			networkPolicy = security.NetworkPolicies{security.NPOSProtected.DeepCopy()}
+			networkPolicy = security.NetworkPolicies{security.NPOSProtected.DeepCopy(), security.NPSystemProvider.DeepCopy()}
 			networkPolicy.SetName("os-protected-np")
 			networkPolicy.SetNamespace(ns.Name)
 			npFix = nil
