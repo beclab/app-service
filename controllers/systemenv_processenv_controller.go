@@ -27,10 +27,9 @@ type SystemEnvProcessEnvController struct {
 // during the migration period. Keys are new env names, values are a single legacy name
 // that should mirror the same value in the process environment.
 var legacyEnvAliases = map[string]string{
-	"OLARES_SYSTEM_ROOT_PATH":           "OLARES_ROOT_DIR",
-	"OLARES_SYSTEM_ROOTFS_TYPE":         "OLARES_FS_TYPE",
-	"OLARES_SYSTEM_CUDA_VERSION":        "CUDA_VERSION",
-	"OLARES_SYSTEM_CLUSTER_DNS_SERVICE": "COREDNS_SVC",
+	"OLARES_SYSTEM_ROOT_PATH":    "OLARES_ROOT_DIR",
+	"OLARES_SYSTEM_ROOTFS_TYPE":  "OLARES_FS_TYPE",
+	"OLARES_SYSTEM_CUDA_VERSION": "CUDA_VERSION",
 }
 
 const migrationAnnotationKey = "sys.bytetrade.io/systemenv-migrated"
