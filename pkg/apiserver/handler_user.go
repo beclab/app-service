@@ -405,6 +405,9 @@ func (h *Handler) handleUsers(req *restful.Request, resp *restful.Response) {
 		if user.Status.LastLoginTime != nil {
 			u.LastLoginTime = pointer.Int64(user.Status.LastLoginTime.Unix())
 		}
+		if zone, ok := user.Annotations[users.UserAnnotationZoneKey]; ok {
+			u.Zone = zone
+		}
 
 		u.WizardComplete = getWizardComplete(&user)
 		userInfo = append(userInfo, u)
@@ -510,6 +513,7 @@ type UserInfo struct {
 	LastLoginTime     *int64 `json:"last_login_time"`
 	CreationTimestamp int64  `json:"creation_timestamp"`
 	Avatar            string `json:"avatar"`
+	Zone              string `json:"zone"`
 
 	TerminusName   string `json:"terminusName"`
 	WizardComplete bool   `json:"wizard_complete"`
