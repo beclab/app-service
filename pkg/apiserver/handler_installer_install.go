@@ -618,3 +618,35 @@ func (h *installHandlerHelperV2) getAppConfig(adminUsers []string, marketSource 
 
 	return
 }
+
+func (h *Handler) isDeployAllowed(req *restful.Request, resp *restful.Response) {
+	app := req.PathParameter(ParamAppName)
+	owner := req.Attribute(constants.UserContextAttribute).(string)
+
+	name := fmt.Sprintf("%s-%s-%s", app, owner, app)
+	var am v1alpha1.ApplicationManager
+	err := h.ctrlClient.Get(req.Request.Context(), types.NamespacedName{Name: name}, &am)
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			api.HandleError(resp, req, err)
+			return
+		}
+		resp.WriteEntity(api.CanDeployResponse{
+			Response: api.Response{Code: 200},
+			Data: api.CanDeployResponseData{
+				CanOp: true,
+			},
+		})
+		return
+	}
+	canOp := false
+	if appstate.IsOperationAllowed(am.Status.State, v1alpha1.UninstallOp) {
+		canOp = true
+	}
+	resp.WriteEntity(api.CanDeployResponse{
+		Response: api.Response{Code: 200},
+		Data: api.CanDeployResponseData{
+			CanOp: canOp,
+		},
+	})
+}

@@ -91,6 +91,8 @@ spec:
                     port:
                       format: int32
                       type: integer
+                    skip:
+                      type: boolean
                     title:
                       description: Optional. if invisible=true.
                       type: string

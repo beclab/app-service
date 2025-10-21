@@ -239,3 +239,12 @@ type AppEnvCheckResult struct {
 	MissingRefs   []sysv1alpha1.AppEnvVar `json:"missingRefs"`
 	InvalidValues []sysv1alpha1.AppEnvVar `json:"invalidValues"`
 }
+
+type CanDeployResponse struct {
+	Response
+	Data CanDeployResponseData `json:"data"`
+}
+
+type CanDeployResponseData struct {
+	CanOp bool `json:"canOp"`
+}
