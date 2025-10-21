@@ -542,6 +542,10 @@ func (h *HelmOps) createOIDCClient(values map[string]interface{}, userZone, name
 }
 
 func (h *HelmOps) WaitForStartUp() (bool, error) {
+	if h.options.Source == constants.StudioSource {
+		time.Sleep(5 * time.Second)
+		return true, nil
+	}
 	timer := time.NewTicker(1 * time.Second)
 	for {
 		select {
@@ -800,21 +804,26 @@ func (h *HelmOps) Install() error {
 }
 
 func (h *HelmOps) WaitForLaunch() (bool, error) {
-	//req := reconcile.Request{NamespacedName: types.NamespacedName{
-	//	Namespace: h.app.OwnerName,
-	//}}
-	//task.WQueue.(*task.Type).SetCompleted(req)
-	//
-	//klog.Infof("dequeue username:%s,appname:%s", h.app.OwnerName, h.app.AppName)
+	if h.options.Source == constants.StudioSource {
+		return true, nil
+	}
 
 	timer := time.NewTicker(1 * time.Second)
 	entrances := h.app.Entrances
-	entranceCount := len(entrances)
+	entranceCount := 0
+	for _, e := range entrances {
+		if !e.Skip {
+			entranceCount++
+		}
+	}
 	for {
 		select {
 		case <-timer.C:
 			count := 0
 			for _, e := range entrances {
+				if e.Skip {
+					continue
+				}
 				klog.Info("Waiting service for launch :", e.Host)
 				host := fmt.Sprintf("%s.%s", e.Host, h.app.Namespace)
 				if apputils.TryConnect(host, strconv.Itoa(int(e.Port))) {

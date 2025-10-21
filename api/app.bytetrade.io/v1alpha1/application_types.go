@@ -94,6 +94,7 @@ type Entrance struct {
 	OpenMethod string `yaml:"openMethod,omitempty" json:"openMethod,omitempty"`
 
 	WindowPushState bool `yaml:"windowPushState,omitempty" json:"windowPushState,omitempty"`
+	Skip            bool `json:"skip,omitempty" json:"skip,omitempty"`
 }
 
 type ServicePort struct {

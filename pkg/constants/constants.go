@@ -36,6 +36,7 @@ const (
 	KubeSphereClientAttribute          = "ksclient"
 	MarketSource                       = "X-Market-Source"
 	MarketUser                         = "X-Market-User"
+	StudioSource                       = "devbox"
 	ApplicationInstallUserLabel        = "applications.app.bytetrade.io/install_user"
 	BflUserKey                         = "X-Bfl-User"
 
@@ -55,7 +56,7 @@ const (
 	EnvoyUID                        int64 = 1555
 	DefaultEnvoyLogLevel                  = "debug"
 	EnvoyImageVersion                     = "bytetrade/envoy:v1.25.11.1"
-	EnvoyContainerName                    = "terminus-envoy-sidecar"
+	EnvoyContainerName                    = "olares-envoy-sidecar"
 	EnvoyAdminPort                        = 15000
 	EnvoyAdminPortName                    = "proxy-admin"
 	EnvoyInboundListenerPort              = 15003
@@ -66,14 +67,14 @@ const (
 	EnvoyConfigFileName                   = "envoy.yaml"
 	EnvoyConfigFilePath                   = "/config"
 	EnvoyConfigOnlyOutBoundFileName       = "envoy2.yaml"
-	WsContainerName                       = "terminus-ws-sidecar"
+	WsContainerName                       = "olares-ws-sidecar"
 	WsContainerImage                      = "WS_CONTAINER_IMAGE"
 
-	UploadContainerName  = "terminus-upload-sidecar"
+	UploadContainerName  = "olares-upload-sidecar"
 	UploadContainerImage = "UPLOAD_CONTAINER_IMAGE"
 
-	SidecarConfigMapVolumeName = "terminus-sidecar-config"
-	SidecarInitContainerName   = "terminus-sidecar-init"
+	SidecarConfigMapVolumeName = "olares-sidecar-config"
+	SidecarInitContainerName   = "olares-sidecar-init"
 	EnvoyConfigWorkDirName     = "envoy-config"
 
 	ByteTradeAuthor         = "bytetrade.io"

@@ -393,6 +393,13 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Param(ws.PathParameter(ParamAppName, "the name of application")).
 		Returns(http.StatusOK, "Success to get a app status", nil))
 
+	ws.Route(ws.GET("/apps/{"+ParamAppName+"}/can-deploy").
+		To(handler.isDeployAllowed).
+		Doc("check if can deploy an app").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Param(ws.PathParameter(ParamAppName, "the name of application")).
+		Returns(http.StatusOK, "Success to check ", nil))
+
 	ws.Route(ws.GET("/apps/status").
 		To(handler.appsStatus).
 		Doc("get specified app status").

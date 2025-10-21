@@ -106,6 +106,9 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 					// ignore ownerless deployments
 					continue
 				}
+				if middleware, ok := d.GetLabels()[constants.ApplicationMiddlewareLabel]; ok && middleware == "true" {
+					continue
+				}
 				// for multi-app in one deployment/statefulset, we can not find only one object via
 				// namespace and label filter, so have to filter in object list
 				apps := getAppName(d)
