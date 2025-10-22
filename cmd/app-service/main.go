@@ -166,6 +166,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = (&controllers.PodAbnormalSuspendAppController{
+		Client: mgr.GetClient(),
+	}).SetUpWithManager(mgr); err != nil {
+		setupLog.Error(err, "Unable to create controller", "controller", "PodAbnormalSuspendApp")
+		os.Exit(1)
+	}
+
 	if err = (&controllers.TailScaleACLController{
 		Client: mgr.GetClient(),
 	}).SetUpWithManager(mgr); err != nil {
