@@ -572,11 +572,47 @@ func (h *HelmOps) WaitForStartUp() (bool, error) {
 }
 
 func (h *HelmOps) isStartUp() (bool, error) {
+	canSchedule, _ := h.canSchedule()
+	if !canSchedule {
+		return false, errcode.ErrPodPending
+	}
+
 	pods, err := h.findAppSelectedPods()
 	if err != nil {
 		return false, err
 	}
 	return checkIfStartup(pods)
+}
+
+func (h *HelmOps) canSchedule() (bool, error) {
+
+	gpus, err := getGpuDetails()
+	if err != nil {
+		return false, err
+	}
+
+	if h.app.RequiredGPU != "" {
+		if len(gpus) > 0 {
+			for _, gpu := range gpus {
+				for _, app := range gpu.Apps {
+					if app.AppName == h.app.AppName {
+						return true, nil
+					}
+				}
+				if gpu.ShareMode == ShareModeTimeSlicing {
+					return true, nil
+				}
+			}
+			return false, nil
+		}
+		if h.app.RequiredGPU == "0" {
+			return true, nil
+		}
+		return false, nil
+
+	}
+
+	return true, nil
 }
 
 func (h *HelmOps) findAppSelectedPods() (*corev1.PodList, error) {
