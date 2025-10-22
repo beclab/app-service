@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 
+	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/security"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 
@@ -84,18 +85,6 @@ func (r *EvictionManagerController) Reconcile(ctx context.Context, req ctrl.Requ
 	if podNamespace == "" || ignoredNs.Has(podNamespace) {
 		return ctrl.Result{}, nil
 	}
-	//for _, v := range pod.Status.ContainerStatuses {
-	//	if v.State.Terminated != nil {
-	//		if v.State.Terminated.Reason == "Unknown" || v.State.Terminated.Reason == "ContainerStatusUnknown" {
-	//			now := metav1.Now()
-	//			err = r.Delete(ctx, &pod)
-	//			if err != nil && !apierrors.IsNotFound(err) {
-	//				return ctrl.Result{}, err
-	//			}
-	//			return ctrl.Result{}, nil
-	//		}
-	//	}
-	//}
 
 	if pod.Status.Reason != "Evicted" {
 		return ctrl.Result{}, nil
@@ -118,6 +107,11 @@ func (r *EvictionManagerController) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 	if canScheduleNodes > 1 {
+		return ctrl.Result{}, nil
+	}
+	appName := pod.GetLabels()[constants.ApplicationNameLabel]
+	owner := pod.GetLabels()[constants.ApplicationOwnerLabel]
+	if appName != "" || owner != "" {
 		return ctrl.Result{}, nil
 	}
 	_, err = r.setDeployOrStsReplicas(ctx, podName, podNamespace, int32(0))
