@@ -639,6 +639,16 @@ func (h *Handler) isDeployAllowed(req *restful.Request, resp *restful.Response) 
 		})
 		return
 	}
+	if am.Status.State == v1alpha1.Uninstalled {
+		resp.WriteEntity(api.CanDeployResponse{
+			Response: api.Response{Code: 200},
+			Data: api.CanDeployResponseData{
+				CanOp: true,
+			},
+		})
+		return
+	}
+
 	canOp := false
 	if appstate.IsOperationAllowed(am.Status.State, v1alpha1.UninstallOp) {
 		canOp = true
