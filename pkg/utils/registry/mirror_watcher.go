@@ -2,9 +2,11 @@ package registry
 
 import (
 	"fmt"
-	"k8s.io/utils/strings/slices"
 	"os"
+	"path/filepath"
 	"sync"
+
+	"k8s.io/utils/strings/slices"
 
 	"github.com/fsnotify/fsnotify"
 	"k8s.io/klog/v2"
@@ -12,11 +14,10 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/utils"
 )
 
-const (
-	containerdConfigPath = "/etc/containerd/config.toml"
-)
-
 var (
+	containerdConfigDir  = "/etc/containerd"
+	containerdConfigFile = filepath.Join(containerdConfigDir, "config.toml")
+
 	instance *MirrorWatcher
 	once     sync.Once
 	initErr  error
@@ -40,14 +41,14 @@ type MirrorWatcher struct {
 
 // newMirrorWatcher creates a new config watcher
 func newMirrorWatcher() (*MirrorWatcher, error) {
-	if _, err := os.Stat(containerdConfigPath); err != nil {
-		klog.Warningf("Containerd config file %s does not exist, file watching disabled", containerdConfigPath)
+	if _, err := os.Stat(containerdConfigDir); err != nil {
+		klog.Warningf("Containerd config dir %s does not exist, file watching disabled", containerdConfigDir)
 		return nil, err
 	}
 
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create file watcher: %w", err)
+		return nil, fmt.Errorf("failed to create config dir watcher: %w", err)
 	}
 
 	w := &MirrorWatcher{
@@ -55,10 +56,10 @@ func newMirrorWatcher() (*MirrorWatcher, error) {
 	}
 	w.loadConfig()
 
-	err = watcher.Add(containerdConfigPath)
+	err = watcher.Add(containerdConfigDir)
 	if err != nil {
 		watcher.Close()
-		klog.Errorf("Failed to watch containerd config file: %v", err)
+		klog.Errorf("Failed to watch containerd config dir: %v", err)
 		return nil, err
 	}
 
@@ -115,7 +116,12 @@ func (w *MirrorWatcher) watch() {
 		select {
 		case event, ok := <-w.watcher.Events:
 			if !ok {
+				klog.Warningf("Containerd config dir watcher closed, exit")
 				return
+			}
+
+			if event.Name != containerdConfigFile {
+				continue
 			}
 
 			if event.Op&(fsnotify.Write|fsnotify.Create) != 0 {
@@ -123,14 +129,14 @@ func (w *MirrorWatcher) watch() {
 				w.loadConfig()
 			} else if event.Op&fsnotify.Remove != 0 {
 				klog.Warningf("Containerd config file removed: %s", event.Name)
-				return
 			}
 
 		case err, ok := <-w.watcher.Errors:
 			if !ok {
+				klog.Warningf("Containerd config dir watcher error, exit")
 				return
 			}
-			klog.Errorf("Error watching containerd config: %v", err)
+			klog.Errorf("Error watching containerd config dir: %v", err)
 		}
 	}
 }
