@@ -233,7 +233,7 @@ func (h *Handler) setupAppEntranceDomain(req *restful.Request, resp *restful.Res
 			return
 		}
 
-		ops, err := versioned.NewHelmOps(req.Request.Context(), h.kubeConfig, appCfg, token,
+		ops, err := versioned.NewHelmOps(context.TODO(), h.kubeConfig, appCfg, token,
 			appinstaller.Opt{Source: app.Spec.Settings["source"], MarketSource: appMgr.GetMarketSource()})
 		if err != nil {
 			api.HandleError(resp, req, err)
