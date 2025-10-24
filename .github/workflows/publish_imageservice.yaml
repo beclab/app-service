@@ -22,7 +22,7 @@ jobs:
         with:
           push: true
           tags: beclab/image-service:${{ github.event.inputs.tags }}-amd64
-          file: Dockerfile
+          file: Dockerfile.image
           platforms: linux/amd64
   publish_dockerhub_arm64:
     runs-on: self-hosted
@@ -39,7 +39,7 @@ jobs:
         with:
           push: true
           tags: beclab/image-service:${{ github.event.inputs.tags }}-arm64
-          file: Dockerfile
+          file: Dockerfile.image
           platforms: linux/arm64
 
   publish_manifest:
