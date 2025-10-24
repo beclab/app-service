@@ -86,7 +86,7 @@ func UpgradeCharts(ctx context.Context, actionConfig *action.Configuration, sett
 	client := action.NewUpgrade(actionConfig)
 	client.Namespace = namespace
 	client.Timeout = 300 * time.Second
-	client.Recreate = true
+	client.Recreate = false
 	if reuseValue {
 		client.ReuseValues = true
 	}
