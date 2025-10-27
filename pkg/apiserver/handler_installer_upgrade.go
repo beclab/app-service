@@ -11,6 +11,7 @@ import (
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
+	"bytetrade.io/web3os/app-service/pkg/appstate"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/utils"
@@ -213,6 +214,12 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 
 	if appMgr.Spec.Source != request.Source.String() {
 		api.HandleBadRequest(resp, req, fmt.Errorf("unmatched chart source"))
+		return
+	}
+
+	if !appstate.IsOperationAllowed(appMgr.Status.State, appv1alpha1.UpgradeOp) {
+		err = fmt.Errorf("%s operation is not allowed for %s state", appv1alpha1.UpgradeOp, appMgr.Status.State)
+		api.HandleBadRequest(resp, req, err)
 		return
 	}
 

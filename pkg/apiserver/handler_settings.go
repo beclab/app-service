@@ -6,18 +6,21 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"strconv"
 	"strings"
+	"time"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
-	"bytetrade.io/web3os/app-service/pkg/appinstaller"
-	"bytetrade.io/web3os/app-service/pkg/appinstaller/versioned"
+	"bytetrade.io/web3os/app-service/pkg/appstate"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/provider"
 	"bytetrade.io/web3os/app-service/pkg/tapr"
+	"bytetrade.io/web3os/app-service/pkg/utils"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
 	"github.com/emicklei/go-restful/v3"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -27,6 +30,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func (h *Handler) setupApp(req *restful.Request, resp *restful.Response) {
@@ -110,7 +114,7 @@ func (h *Handler) setupAppEntranceDomain(req *restful.Request, resp *restful.Res
 	}
 	appCopy := app.DeepCopy()
 
-	client := req.Attribute(constants.KubeSphereClientAttribute).(*clientset.ClientSet)
+	kclient := req.Attribute(constants.KubeSphereClientAttribute).(*clientset.ClientSet)
 
 	customDomain, ok := settings["customDomain"].(map[string]interface{})
 
@@ -172,7 +176,7 @@ func (h *Handler) setupAppEntranceDomain(req *restful.Request, resp *restful.Res
 		return
 	}
 
-	appUpdated, err := client.AppClient.AppV1alpha1().Applications().Patch(req.Request.Context(), appCopy.Name, types.MergePatchType, patchByte, metav1.PatchOptions{})
+	appUpdated, err := kclient.AppClient.AppV1alpha1().Applications().Patch(req.Request.Context(), appCopy.Name, types.MergePatchType, patchByte, metav1.PatchOptions{})
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
@@ -220,7 +224,7 @@ func (h *Handler) setupAppEntranceDomain(req *restful.Request, resp *restful.Res
 		}
 		vals["domain"] = entries
 
-		appMgr, err := client.AppClient.AppV1alpha1().ApplicationManagers().Get(req.Request.Context(), appUpdated.Name, metav1.GetOptions{})
+		appMgr, err := kclient.AppClient.AppV1alpha1().ApplicationManagers().Get(req.Request.Context(), appUpdated.Name, metav1.GetOptions{})
 		if err != nil {
 			api.HandleError(resp, req, err)
 			return
@@ -232,18 +236,39 @@ func (h *Handler) setupAppEntranceDomain(req *restful.Request, resp *restful.Res
 			api.HandleError(resp, req, err)
 			return
 		}
+		if !appstate.IsOperationAllowed(appMgr.Status.State, v1alpha1.UpgradeOp) {
+			err = fmt.Errorf("%s operation is not allowed for %s state", v1alpha1.UpgradeOp, appMgr.Status.State)
+			api.HandleBadRequest(resp, req, err)
+			return
+		}
 
-		ops, err := versioned.NewHelmOps(context.TODO(), h.kubeConfig, appCfg, token,
-			appinstaller.Opt{Source: app.Spec.Settings["source"], MarketSource: appMgr.GetMarketSource()})
+		appMgrCopy := appMgr.DeepCopy()
+		appMgrCopy.Annotations[api.AppTokenKey] = token
+
+		err = h.ctrlClient.Patch(req.Request.Context(), appMgrCopy, client.MergeFrom(appMgr))
 		if err != nil {
 			api.HandleError(resp, req, err)
 			return
 		}
-		err = ops.Upgrade()
+
+		now := metav1.Now()
+		opID := strconv.FormatInt(time.Now().Unix(), 10)
+
+		status := v1alpha1.ApplicationManagerStatus{
+			OpType:     v1alpha1.UpgradeOp,
+			OpID:       opID,
+			State:      v1alpha1.Upgrading,
+			Message:    "waiting for upgrade",
+			StatusTime: &now,
+			UpdateTime: &now,
+		}
+
+		am, err := apputils.UpdateAppMgrStatus(appMgr.Name, status)
 		if err != nil {
 			api.HandleError(resp, req, err)
 			return
 		}
+		utils.PublishAppEvent(am.Spec.AppOwner, am.Spec.AppName, string(am.Status.OpType), opID, v1alpha1.Upgrading.String(), "", nil)
 	}
 	resp.WriteAsJson(appUpdated.Spec.Settings)
 }
