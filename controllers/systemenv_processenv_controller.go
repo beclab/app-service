@@ -123,19 +123,31 @@ func InitializeSystemEnvProcessEnv(ctx context.Context, c client.Client) error {
 				if err != nil {
 					return fmt.Errorf("get terminus failed: %w", err)
 				}
-				if !strings.HasSuffix(domainName, ".cn") {
-					continue
+
+				var isCNDomain bool
+				if strings.HasSuffix(domainName, ".cn") {
+					isCNDomain = true
 				}
 				var newDefaultVal string
 				switch se.EnvName {
+				case "OLARES_SYSTEM_DOCKERHUB_SERVICE":
+					newDefaultVal = "https://mirrors.olares.com"
+					if isCNDomain {
+						newDefaultVal = "https://mirrors.olares.cn"
+					}
 				case "OLARES_SYSTEM_REMOTE_SERVICE":
-					newDefaultVal = "https://api.olares.cn"
+					newDefaultVal = "https://api.olares.com"
+					if isCNDomain {
+						newDefaultVal = "https://api.olares.cn"
+					}
 				case "OLARES_SYSTEM_CDN_SERVICE":
-					newDefaultVal = "https://cdn.olares.cn"
-				case "OLARES_MIRROR_SERVICE":
-					newDefaultVal = "https://mirrors.olares.cn"
+					newDefaultVal = "https://cdn.olares.com"
+					if isCNDomain {
+						newDefaultVal = "https://cdn.olares.cn"
+					}
+
 				}
-				if se.Default != newDefaultVal {
+				if newDefaultVal != "" && se.Default != newDefaultVal {
 					original := se.DeepCopy()
 					se.Default = newDefaultVal
 					if se.Annotations == nil {
@@ -147,10 +159,10 @@ func InitializeSystemEnvProcessEnv(ctx context.Context, c client.Client) error {
 					}
 				}
 			}
-		}
 
-		if err := setEnvAndAlias(se.EnvName, se.GetEffectiveValue()); err != nil {
-			errs = append(errs, fmt.Errorf("set process env for %s failed: %w", se.EnvName, err))
+			if err := setEnvAndAlias(se.EnvName, se.GetEffectiveValue()); err != nil {
+				errs = append(errs, fmt.Errorf("set process env for %s failed: %w", se.EnvName, err))
+			}
 		}
 	}
 	return utilerrors.NewAggregate(errs)
