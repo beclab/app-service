@@ -50,7 +50,9 @@ spec:
           default:
             type: string
           description:
-            type: string
+            additionalProperties:
+              type: string
+            type: object
           editable:
             type: boolean
           envName:
@@ -67,6 +69,10 @@ spec:
             type: object
           required:
             type: boolean
+          title:
+            additionalProperties:
+              type: string
+            type: object
           type:
             type: string
           value:
