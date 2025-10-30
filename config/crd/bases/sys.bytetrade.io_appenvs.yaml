@@ -53,13 +53,19 @@ spec:
                 default:
                   type: string
                 description:
-                  type: string
+                  additionalProperties:
+                    type: string
+                  type: object
                 editable:
                   type: boolean
                 envName:
                   type: string
                 required:
                   type: boolean
+                title:
+                  additionalProperties:
+                    type: string
+                  type: object
                 type:
                   type: string
                 value:

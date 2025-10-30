@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller/versioned"
@@ -99,13 +100,15 @@ func (a *ApplyingEnvApp) exec(ctx context.Context) error {
 		return err
 	}
 
+	token := a.manager.Annotations[api.AppTokenKey]
+
 	var appCfg *appcfg.ApplicationConfig
 	if err := json.Unmarshal([]byte(a.manager.Spec.Config), &appCfg); err != nil {
 		klog.Errorf("Failed to unmarshal app config: %v", err)
 		return err
 	}
 
-	helmOps, err := versioned.NewHelmOps(ctx, kubeConfig, appCfg, kubeConfig.BearerToken, appinstaller.Opt{Source: a.manager.Spec.Source})
+	helmOps, err := versioned.NewHelmOps(ctx, kubeConfig, appCfg, token, appinstaller.Opt{Source: a.manager.Spec.Source, MarketSource: a.manager.GetMarketSource()})
 	if err != nil {
 		klog.Errorf("Failed to create HelmOps: %v", err)
 		return err

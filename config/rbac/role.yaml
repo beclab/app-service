@@ -8,9 +8,20 @@ rules:
   - ""
   resources:
   - configmaps
+  - pods
   verbs:
   - get
   - list
+  - watch
+- apiGroups:
+  - app.bytetrade.io
+  resources:
+  - applicationmanagers
+  verbs:
+  - get
+  - list
+  - patch
+  - update
   - watch
 - apiGroups:
   - app.bytetrade.io
