@@ -78,6 +78,10 @@ func (r *AppEnvController) reconcileAppEnv(ctx context.Context, appEnv *sysv1alp
 			klog.Errorf("Failed to trigger ApplyEnv for AppEnv %s/%s: %v", appEnv.Namespace, appEnv.Name, err)
 			return ctrl.Result{}, err
 		}
+		if err := r.markEnvApplied(ctx, appEnv); err != nil {
+			klog.Errorf("Failed to mark AppEnv %s/%s as applied: %v", appEnv.Namespace, appEnv.Name, err)
+			return ctrl.Result{}, err
+		}
 	}
 
 	return ctrl.Result{}, nil
@@ -204,7 +208,6 @@ func (r *AppEnvController) triggerApplyEnv(ctx context.Context, appEnv *sysv1alp
 		UpdateTime: &now,
 	}
 
-	// todo: should we consider an apply attempt applied, and set needApply back to false here, or should we keep retrying every time a new reconcile is trigger?
 	am, err := apputils.UpdateAppMgrStatus(targetAppMgr.Name, status)
 	if err != nil {
 		return fmt.Errorf("failed to update ApplicationManager Status: %v", err)
@@ -224,5 +227,14 @@ func (r *AppEnvController) clearSyncAnnotation(ctx context.Context, appEnv *sysv
 	delete(appEnv.Annotations, constants.AppEnvSyncAnnotation)
 
 	klog.Infof("Clearing environment sync annotation from AppEnv %s/%s", appEnv.Namespace, appEnv.Name)
+	return r.Patch(ctx, appEnv, client.MergeFrom(original))
+}
+
+func (r *AppEnvController) markEnvApplied(ctx context.Context, appEnv *sysv1alpha1.AppEnv) error {
+	if !appEnv.NeedApply {
+		return nil
+	}
+	original := appEnv.DeepCopy()
+	appEnv.NeedApply = false
 	return r.Patch(ctx, appEnv, client.MergeFrom(original))
 }

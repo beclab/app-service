@@ -80,10 +80,6 @@ func (a *ApplyingEnvApp) Exec(ctx context.Context) (StatefulInProgressApp, error
 					if updateErr != nil {
 						klog.Errorf("update appmgr state to Initializing state failed %v", updateErr)
 					}
-					// todo: mark here after actually succeeded or when op is made?
-					if err := a.markEnvApplied(context.Background()); err != nil {
-						klog.Errorf("mark appenv as applied failed %v", err)
-					}
 				}
 			}()
 
@@ -114,7 +110,7 @@ func (a *ApplyingEnvApp) exec(ctx context.Context) error {
 		return err
 	}
 
-	if err := helmOps.Upgrade(); err != nil {
+	if err := helmOps.ApplyEnv(); err != nil {
 		klog.Errorf("Failed to upgrade chart with environment variables: %v", err)
 		return err
 	}
