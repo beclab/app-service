@@ -250,7 +250,7 @@ func (h *HelmOps) SetValues() (values map[string]interface{}, err error) {
 		return values, err
 	}
 	values["sysVersion"] = terminus.Spec.Version
-	if err := h.addEnvironmentVariables(values); err != nil {
+	if err := h.AddEnvironmentVariables(values); err != nil {
 		klog.Errorf("Failed to add environment variables: %v", err)
 		return values, err
 	}
@@ -290,7 +290,7 @@ func (h *HelmOps) getInstalledApps(ctx context.Context) (installed bool, app []*
 	return
 }
 
-func (h *HelmOps) addEnvironmentVariables(values map[string]interface{}) error {
+func (h *HelmOps) AddEnvironmentVariables(values map[string]interface{}) error {
 	values[constants.OlaresEnvHelmValuesKey] = make(map[string]interface{})
 	appEnv, err := h.client.AppClient.SysV1alpha1().AppEnvs(h.app.Namespace).Get(h.ctx, apputils.FormatAppEnvName(h.app.AppName, h.app.OwnerName), metav1.GetOptions{})
 	if errors.IsNotFound(err) {

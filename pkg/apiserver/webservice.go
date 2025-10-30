@@ -379,6 +379,13 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Param(ws.PathParameter(ParamAppName, "the name of a application")).
 		Returns(http.StatusOK, "Success to begin upgrade of the application", &api.ReleaseUpgradeResponse{}))
 
+	ws.Route(ws.POST("/apps/{"+ParamAppName+"}/applyenv").
+		To(handler.queued(handler.appApplyEnv)).
+		Doc("Apply the application environment variables").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Param(ws.PathParameter(ParamAppName, "the name of a application")).
+		Returns(http.StatusOK, "Success to begin apply of the application environment variables", &api.Response{}))
+
 	ws.Route(ws.POST("/apps/{"+ParamAppName+"}/cancel").
 		To(handler.queued(handler.cancel)).
 		Doc("cancel pending or installing app").
