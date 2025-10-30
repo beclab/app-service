@@ -89,9 +89,6 @@ func (p *UpgradingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) 
 
 				p.finally = func() {
 					klog.Info("upgrade app success, update app status to initializing, ", p.manager.Name)
-					if err := p.markEnvApplied(context.Background()); err != nil {
-						klog.Errorf("mark appenv as applied failed %v", err)
-					}
 					updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.Initializing, nil, appsv1.Initializing.String())
 					if updateErr != nil {
 						klog.Errorf("update appmgr state to initializing state failed %v", updateErr)

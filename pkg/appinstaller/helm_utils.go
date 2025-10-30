@@ -306,5 +306,18 @@ func (h *HelmOps) AddEnvironmentVariables(values map[string]interface{}) error {
 
 	klog.Infof("Added environment variables to Helm values: %+v", values[constants.OlaresEnvHelmValuesKey])
 
+	if !appEnv.NeedApply {
+		return nil
+	}
+
+	appEnv.NeedApply = false
+	_, err = h.client.AppClient.SysV1alpha1().AppEnvs(h.app.Namespace).Update(h.ctx, appEnv, metav1.UpdateOptions{})
+	if err != nil {
+		// ignore update error, we use update rather than patch to avoid race condition
+		// and the update error may indicate that the appenv is already updated by other request
+		// which might need to be applied again
+		klog.Errorf("Failed to update appenv %s/%s needApply to false err=%v", appEnv.Namespace, appEnv.Name, err)
+	}
+
 	return nil
 }

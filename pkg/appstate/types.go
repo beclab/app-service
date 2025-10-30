@@ -3,13 +3,8 @@ package appstate
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"time"
-
-	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
-	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
@@ -125,24 +120,6 @@ func (p *baseStatefulApp) forceDeleteApp(ctx context.Context) error {
 		return err
 	}
 	return nil
-}
-
-func (p *baseStatefulApp) markEnvApplied(ctx context.Context) error {
-	var appEnv sysv1alpha1.AppEnv
-	err := p.client.Get(ctx, types.NamespacedName{Name: apputils.FormatAppEnvName(p.manager.Spec.AppName, p.manager.Spec.AppOwner), Namespace: p.manager.Spec.AppNamespace}, &appEnv)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			klog.Warningf("appenv resource missing for app: %s, owner: %s, skip marking applied", p.manager.Spec.AppName, p.manager.Spec.AppOwner)
-			return nil
-		}
-		return fmt.Errorf("failed to get the app env: %v", err)
-	}
-	if !appEnv.NeedApply {
-		return nil
-	}
-	original := appEnv.DeepCopy()
-	appEnv.NeedApply = false
-	return p.client.Patch(ctx, &appEnv, client.MergeFrom(original))
 }
 
 type OperationApp interface {
