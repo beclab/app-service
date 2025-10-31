@@ -18,6 +18,7 @@ import (
 	netv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	unstructuredv1 "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -92,7 +93,35 @@ func (r *SecurityReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Mana
 			return err
 		}
 	}
+
+	if _, err := mgr.GetRESTMapper().RESTMapping(schema.GroupKind{Group: "apps.kubeblocks.io", Kind: "Cluster"}, "v1"); err == nil {
+		if err = r.addCronWorkflowWatch(ctx, c, mgr); err != nil {
+			return err
+		}
+	} else {
+		r.Logger.Info("CronWorkflow CRD not installed, skip adding watch")
+	}
 	return nil
+}
+
+func (r *SecurityReconciler) addCronWorkflowWatch(ctx context.Context, c controller.Controller, mgr ctrl.Manager) error {
+	u := &unstructuredv1.Unstructured{}
+	u.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "apps.kubeblocks.io",
+		Version: "v1",
+		Kind:    "Cluster",
+	})
+
+	return c.Watch(source.Kind(
+		mgr.GetCache(),
+		u,
+		handler.TypedEnqueueRequestsFromMapFunc(
+			func(ctx context.Context, h *unstructuredv1.Unstructured) []reconcile.Request {
+				return []reconcile.Request{{NamespacedName: types.NamespacedName{
+					Name: h.GetNamespace(),
+				}}}
+			}),
+	))
 }
 
 func (r *SecurityReconciler) addWatch(ctx context.Context, c controller.Controller, mgr ctrl.Manager, watchedObject client.Object) error {
