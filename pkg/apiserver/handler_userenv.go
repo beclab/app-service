@@ -1,7 +1,9 @@
 package apiserver
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -10,6 +12,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/utils"
 
 	"github.com/emicklei/go-restful/v3"
+	coordinationv1 "k8s.io/api/coordination/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -240,4 +243,132 @@ func (h *Handler) getUserEnvDetail(req *restful.Request, resp *restful.Response)
 	}
 
 	resp.WriteAsJson(detail)
+}
+
+func (h *Handler) acquireUserEnvBatchLease(ctx context.Context, userNamespace string) (func(), error) {
+	const leaseName = "env-batch-lock"
+	lease := &coordinationv1.Lease{}
+	holder := fmt.Sprintf("app-service-%d", time.Now().UnixNano())
+	duration := int32(5)
+	now := metav1.MicroTime{Time: time.Now()}
+
+	if err := h.ctrlClient.Get(ctx, types.NamespacedName{Name: leaseName, Namespace: userNamespace}, lease); err != nil {
+		if apierrors.IsNotFound(err) {
+			lease = &coordinationv1.Lease{
+				ObjectMeta: metav1.ObjectMeta{Name: leaseName, Namespace: userNamespace},
+				Spec: coordinationv1.LeaseSpec{
+					HolderIdentity:       &holder,
+					LeaseDurationSeconds: &duration,
+					AcquireTime:          &now,
+					RenewTime:            &now,
+				},
+			}
+			if err := h.ctrlClient.Create(ctx, lease); err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
+	} else {
+		if lease.Spec.RenewTime == nil || lease.Spec.LeaseDurationSeconds == nil ||
+			time.Now().After(lease.Spec.RenewTime.Add(time.Duration(*lease.Spec.LeaseDurationSeconds)*time.Second)) {
+			original := lease.DeepCopy()
+			lease.Spec.HolderIdentity = &holder
+			lease.Spec.LeaseDurationSeconds = &duration
+			lease.Spec.RenewTime = &now
+			if lease.Spec.AcquireTime == nil {
+				lease.Spec.AcquireTime = &now
+			}
+			if err := h.ctrlClient.Patch(ctx, lease, client.MergeFrom(original)); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	release := func() {
+		// Best-effort delete to release immediately; controller also relies on expiry
+		l := &coordinationv1.Lease{}
+		if err := h.ctrlClient.Get(ctx, types.NamespacedName{Name: leaseName, Namespace: userNamespace}, l); err == nil {
+			_ = h.ctrlClient.Delete(ctx, l)
+		}
+	}
+	return release, nil
+}
+
+func (h *Handler) batchUpdateUserEnvs(req *restful.Request, resp *restful.Response) {
+	username := getCurrentUser(req)
+
+	var items []sysv1alpha1.EnvVarSpec
+	if err := req.ReadEntity(&items); err != nil {
+		api.HandleBadRequest(resp, req, err)
+		return
+	}
+	if len(items) == 0 {
+		resp.WriteAsJson([]sysv1alpha1.EnvVarSpec{})
+		return
+	}
+
+	ctx := req.Request.Context()
+	userNamespace := utils.UserspaceName(username)
+	results := make([]sysv1alpha1.EnvVarSpec, 0, len(items))
+
+	dedup := make(map[string]string)
+	for _, it := range items {
+		if it.EnvName == "" {
+			api.HandleBadRequest(resp, req, fmt.Errorf("userenv name is required"))
+			return
+		}
+		resourceName, err := utils.EnvNameToResourceName(it.EnvName)
+		if err != nil {
+			api.HandleBadRequest(resp, req, err)
+			return
+		}
+		dedup[resourceName] = it.Value
+	}
+
+	if len(dedup) > 1 {
+		release, err := h.acquireUserEnvBatchLease(ctx, userNamespace)
+		if err != nil {
+			klog.Errorf("Failed to acquire user env batch lease: %v", err)
+		}
+		if release != nil {
+			defer release()
+		}
+	}
+
+	for resourceName, value := range dedup {
+		var current sysv1alpha1.UserEnv
+		if err := h.ctrlClient.Get(ctx, types.NamespacedName{Name: resourceName, Namespace: userNamespace}, &current); err != nil {
+			api.HandleError(resp, req, err)
+			return
+		}
+
+		if !current.Editable {
+			api.HandleBadRequest(resp, req, fmt.Errorf("userenv '%s' is not editable", current.EnvName))
+			return
+		}
+
+		if current.Required && current.GetEffectiveValue() == "" && value == "" {
+			api.HandleBadRequest(resp, req, fmt.Errorf("userenv '%s' is required", current.EnvName))
+			return
+		}
+
+		if current.Value != value {
+			if err := utils.CheckEnvValueByType(value, current.Type); err != nil {
+				api.HandleBadRequest(resp, req, err)
+				return
+			}
+			klog.Infof("Updating UserEnv %s/%s value from '%s' to '%s'", userNamespace, resourceName, current.Value, value)
+			original := current.DeepCopy()
+			current.Value = value
+			if err := h.ctrlClient.Patch(ctx, &current, client.MergeFrom(original)); err != nil {
+				api.HandleError(resp, req, err)
+				return
+			}
+		}
+
+		results = append(results, current.EnvVarSpec)
+	}
+
+	resp.WriteAsJson(results)
 }

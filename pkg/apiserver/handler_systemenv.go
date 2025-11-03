@@ -259,3 +259,70 @@ func (h *Handler) getSystemEnvDetail(req *restful.Request, resp *restful.Respons
 
 	resp.WriteAsJson(detail)
 }
+
+func (h *Handler) batchUpdateSystemEnvs(req *restful.Request, resp *restful.Response) {
+	_, ok := h.ensureAdmin(req, resp)
+	if !ok {
+		return
+	}
+
+	var items []sysv1alpha1.EnvVarSpec
+	if err := req.ReadEntity(&items); err != nil {
+		api.HandleBadRequest(resp, req, err)
+		return
+	}
+	if len(items) == 0 {
+		resp.WriteAsJson([]sysv1alpha1.EnvVarSpec{})
+		return
+	}
+
+	ctx := req.Request.Context()
+	results := make([]sysv1alpha1.EnvVarSpec, 0, len(items))
+
+	for _, it := range items {
+		if it.EnvName == "" {
+			api.HandleBadRequest(resp, req, fmt.Errorf("systemenv name is required"))
+			return
+		}
+
+		resourceName, err := utils.EnvNameToResourceName(it.EnvName)
+		if err != nil {
+			api.HandleBadRequest(resp, req, err)
+			return
+		}
+
+		var current sysv1alpha1.SystemEnv
+		if err := h.ctrlClient.Get(ctx, types.NamespacedName{Name: resourceName}, &current); err != nil {
+			api.HandleError(resp, req, err)
+			return
+		}
+
+		if !current.Editable {
+			api.HandleBadRequest(resp, req, fmt.Errorf("systemenv '%s' is not editable", current.EnvName))
+			return
+		}
+
+		if current.Required && current.Default == "" && it.Value == "" {
+			api.HandleBadRequest(resp, req, fmt.Errorf("systemenv '%s' is required", current.EnvName))
+			return
+		}
+
+		if current.Value != it.Value {
+			if err := utils.CheckEnvValueByType(it.Value, current.Type); err != nil {
+				api.HandleBadRequest(resp, req, err)
+				return
+			}
+			klog.Infof("Updating SystemEnv %s value from '%s' to '%s'", resourceName, current.Value, it.Value)
+			original := current.DeepCopy()
+			current.Value = it.Value
+			if err := h.ctrlClient.Patch(ctx, &current, client.MergeFrom(original)); err != nil {
+				api.HandleError(resp, req, err)
+				return
+			}
+		}
+
+		results = append(results, current.EnvVarSpec)
+	}
+
+	resp.WriteAsJson(results)
+}
