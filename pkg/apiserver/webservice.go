@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 
 	restfulspec "github.com/emicklei/go-restful-openapi/v2"
@@ -678,6 +679,15 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to list system envs", nil))
 
+	ws.Route(ws.PUT("/systemenvs").
+		To(handler.batchUpdateSystemEnvs).
+		Doc("batch update system environment variable values (admin only)").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Reads([]sysv1alpha1.EnvVarSpec{}).
+		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
+		Consumes(restful.MIME_JSON).
+		Returns(http.StatusOK, "Success to batch update system envs", nil))
+
 	ws.Route(ws.PUT("/systemenvs/{"+ParamAppName+"}").
 		To(handler.updateSystemEnv).
 		Doc("update a system environment variable value (admin only)").
@@ -718,6 +728,15 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
 		Returns(http.StatusOK, "Success to list user envs", nil))
+
+	ws.Route(ws.PUT("/userenvs").
+		To(handler.batchUpdateUserEnvs).
+		Doc("batch update user environment variable values").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Reads([]sysv1alpha1.EnvVarSpec{}).
+		Param(ws.HeaderParameter("X-Authorization", "Auth token")).
+		Consumes(restful.MIME_JSON).
+		Returns(http.StatusOK, "Success to batch update user envs", nil))
 
 	ws.Route(ws.PUT("/userenvs/{"+ParamAppName+"}").
 		To(handler.updateUserEnv).

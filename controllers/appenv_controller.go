@@ -13,6 +13,7 @@ import (
 	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/appstate"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
+	coordinationv1 "k8s.io/api/coordination/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -74,6 +75,15 @@ func (r *AppEnvController) reconcileAppEnv(ctx context.Context, appEnv *sysv1alp
 	}
 
 	if appEnv.NeedApply {
+		// check for active user batch lease to avoid mid-batch apply
+		userNamespace := utils.UserspaceName(appEnv.AppOwner)
+		lease := &coordinationv1.Lease{}
+		if err := r.Get(ctx, types.NamespacedName{Name: "env-batch-lock", Namespace: userNamespace}, lease); err == nil {
+			if isLeaseActive(lease) {
+				klog.Infof("User batch lease is active for app: %s owner: %s, requeueing", appEnv.AppName, appEnv.AppOwner)
+				return ctrl.Result{RequeueAfter: 3 * time.Second}, nil
+			}
+		}
 		if err := r.triggerApplyEnv(ctx, appEnv); err != nil {
 			klog.Errorf("Failed to trigger ApplyEnv for AppEnv %s/%s: %v", appEnv.Namespace, appEnv.Name, err)
 			return ctrl.Result{}, err
@@ -237,4 +247,13 @@ func (r *AppEnvController) markEnvApplied(ctx context.Context, appEnv *sysv1alph
 	original := appEnv.DeepCopy()
 	appEnv.NeedApply = false
 	return r.Patch(ctx, appEnv, client.MergeFrom(original))
+}
+
+// isLeaseActive returns true if now < RenewTime + LeaseDurationSeconds
+func isLeaseActive(l *coordinationv1.Lease) bool {
+	if l == nil || l.Spec.RenewTime == nil || l.Spec.LeaseDurationSeconds == nil {
+		return false
+	}
+	exp := l.Spec.RenewTime.Add(time.Duration(*l.Spec.LeaseDurationSeconds) * time.Second)
+	return time.Now().Before(exp)
 }
