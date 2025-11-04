@@ -177,6 +177,10 @@ func (r *EntranceStatusManagerController) updateEntranceStatus(ctx context.Conte
 			continue
 		}
 		for _, e := range a.Spec.Entrances {
+			// skip entrances explicitly marked to be ignored
+			if e.Skip {
+				continue
+			}
 			isSelected, err := r.isEntrancePod(ctx, pod, e.Host, namespace)
 			if err != nil && !apierrors.IsNotFound(err) {
 				return err

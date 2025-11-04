@@ -343,6 +343,9 @@ func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.
 	entranceStatues := make([]appv1alpha1.EntranceStatus, 0, len(app.Spec.Entrances))
 
 	for _, e := range app.Spec.Entrances {
+		if e.Skip {
+			continue
+		}
 		state := appv1alpha1.EntranceNotReady
 		if userspace.IsSysApp(app.Spec.Name) {
 			state = appv1alpha1.EntranceRunning
