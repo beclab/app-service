@@ -1,8 +1,6 @@
 package apiserver
 
 import (
-	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
-	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,6 +8,9 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+
+	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
@@ -88,8 +89,6 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 	klog.Infof("insReq: %#v", insReq)
-	b, _ := json.Marshal(insReq)
-	klog.Infof("iiii: %s", string(b))
 	if insReq.Source != api.Market && insReq.Source != api.Custom && insReq.Source != api.DevBox {
 		api.HandleBadRequest(resp, req, fmt.Errorf("unsupported chart source: %s", insReq.Source))
 		return
