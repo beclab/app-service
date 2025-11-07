@@ -37,14 +37,15 @@ var _ upgradeHelperIntf = (upgradeHelperIntf)(nil)
 var _ upgradeHelperIntf = (upgradeHelperIntf)(nil)
 
 type upgradeHandlerHelper struct {
-	h         *Handler
-	req       *restful.Request
-	resp      *restful.Response
-	owner     string
-	app       string
-	request   *api.UpgradeRequest
-	token     string
-	appConfig *appcfg.ApplicationConfig
+	h          *Handler
+	req        *restful.Request
+	resp       *restful.Response
+	owner      string
+	app        string
+	rawAppName string
+	request    *api.UpgradeRequest
+	token      string
+	appConfig  *appcfg.ApplicationConfig
 }
 
 type upgradeHandlerHelperV2 struct {
@@ -88,6 +89,7 @@ func (h *upgradeHandlerHelper) getAppConfig(prevCfg *appcfg.ApplicationConfig, a
 
 	appConfig, _, err := apputils.GetAppConfig(h.req.Request.Context(), &apputils.ConfigOptions{
 		App:          h.app,
+		RawAppName:   h.rawAppName,
 		Owner:        h.owner,
 		RepoURL:      h.request.RepoURL,
 		Version:      h.request.Version,
@@ -229,9 +231,14 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
+	rawAppName := appMgr.Spec.AppName
+	if appMgr.Spec.RawAppName != "" {
+		rawAppName = appMgr.Spec.RawAppName
+	}
 
-	apiVersion, err := apputils.GetApiVersionFromAppConfig(req.Request.Context(), &apputils.ConfigOptions{
+	apiVersion, _, err := apputils.GetApiVersionFromAppConfig(req.Request.Context(), &apputils.ConfigOptions{
 		App:          app,
+		RawAppName:   rawAppName,
 		Owner:        owner,
 		RepoURL:      request.RepoURL,
 		MarketSource: marketSource,
@@ -247,13 +254,14 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 	case appcfg.V1:
 		klog.Info("Using install handler helper for V1")
 		h := &upgradeHandlerHelper{
-			h:       h,
-			req:     req,
-			resp:    resp,
-			request: request,
-			app:     app,
-			owner:   owner,
-			token:   token,
+			h:          h,
+			req:        req,
+			resp:       resp,
+			request:    request,
+			app:        app,
+			rawAppName: rawAppName,
+			owner:      owner,
+			token:      token,
 		}
 
 		helper = h
@@ -261,13 +269,14 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		klog.Info("Using install handler helper for V2")
 		h := &upgradeHandlerHelperV2{
 			upgradeHandlerHelper: &upgradeHandlerHelper{
-				h:       h,
-				req:     req,
-				resp:    resp,
-				request: request,
-				app:     app,
-				owner:   owner,
-				token:   token,
+				h:          h,
+				req:        req,
+				resp:       resp,
+				request:    request,
+				app:        app,
+				rawAppName: rawAppName,
+				owner:      owner,
+				token:      token,
 			},
 		}
 

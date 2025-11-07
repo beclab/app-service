@@ -68,6 +68,8 @@ spec:
               opType:
                 description: OpType represents the type of operation being performed.
                 type: string
+              rawAppName:
+                type: string
               source:
                 type: string
               type:

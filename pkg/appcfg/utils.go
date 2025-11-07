@@ -2,8 +2,10 @@ package appcfg
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"path/filepath"
 	"time"
 
@@ -25,8 +27,8 @@ func AppChartPath(app string) string {
 
 // GetAppInstallationConfig get app installation configuration from app store
 func GetAppInstallationConfig(app, owner string) (*ApplicationConfig, error) {
-	chart := AppChartPath(app)
-	appcfg, err := getAppConfigFromConfigurationFile(app, chart, owner)
+	//chart := AppChartPath(rawAppName)
+	appcfg, err := getAppConfigFromAppMgrConfig(app, owner)
 	if err != nil {
 		return nil, err
 	}
@@ -43,6 +45,25 @@ func GetAppInstallationConfig(app, owner string) (*ApplicationConfig, error) {
 	appcfg.OwnerName = owner
 
 	return appcfg, nil
+}
+
+func getAppConfigFromAppMgrConfig(appName, owner string) (*ApplicationConfig, error) {
+	kclient, err := utils.GetClient()
+	if err != nil {
+		return nil, err
+	}
+	name := fmt.Sprintf("%s-%s-%s", appName, owner, appName)
+	am, err := kclient.AppV1alpha1().ApplicationManagers().Get(context.TODO(), name, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	appConfig := ApplicationConfig{}
+	err = json.Unmarshal([]byte(am.Spec.Config), &appConfig)
+	if err != nil {
+		return nil, err
+	}
+	return &appConfig, nil
+
 }
 
 func getAppConfigFromConfigurationFile(app, chart, owner string) (*ApplicationConfig, error) {

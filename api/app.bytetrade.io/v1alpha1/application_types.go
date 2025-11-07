@@ -26,6 +26,9 @@ type ApplicationSpec struct {
 	// the name of the application
 	Name string `json:"name"`
 
+	// RawAppName the name of application for cloned app, if RawAppName is not empty means this app is cloned
+	RawAppName string `json:"rawAppName,omitempty"`
+
 	// the unique id of the application
 	// for sys application appid equal name otherwise appid equal md5(name)[:8]
 	Appid string `json:"appid"`
@@ -94,7 +97,7 @@ type Entrance struct {
 	OpenMethod string `yaml:"openMethod,omitempty" json:"openMethod,omitempty"`
 
 	WindowPushState bool `yaml:"windowPushState,omitempty" json:"windowPushState,omitempty"`
-	Skip            bool `json:"skip,omitempty" json:"skip,omitempty"`
+	Skip            bool `yaml:"skip,omitempty" json:"skip,omitempty"`
 }
 
 type ServicePort struct {

@@ -93,6 +93,8 @@ type ApplicationConfig struct {
 	Type                 string
 	Envs                 []sysv1alpha1.AppEnvVar
 	Images               []string
+	AllowMultipleInstall bool
+	RawAppName           string
 }
 
 func (c *ApplicationConfig) IsMiddleware() bool {

@@ -664,6 +664,7 @@ type ConfigOptions struct {
 	Admin        string
 	MarketSource string
 	IsAdmin      bool
+	RawAppName   string
 }
 
 // GetAppConfig get app installation configuration from app store
@@ -706,24 +707,25 @@ func GetAppConfig(ctx context.Context, options *ConfigOptions) (*appcfg.Applicat
 	return appcfg, chartPath, nil
 }
 
-func GetApiVersionFromAppConfig(ctx context.Context, options *ConfigOptions) (appcfg.APIVersion, error) {
+func GetApiVersionFromAppConfig(ctx context.Context, options *ConfigOptions) (appcfg.APIVersion, *appcfg.ApplicationConfig, error) {
 
 	cfg, _, err := GetAppConfig(ctx, options)
 	if err != nil {
-		return "", fmt.Errorf("failed to get app config: %w", err)
+		return "", nil, fmt.Errorf("failed to get app config: %w", err)
 	}
 
 	// default version is v1
 	if cfg.APIVersion == "" {
-		return appcfg.V1, nil
+		return appcfg.V1, cfg, nil
 	}
 
-	return cfg.APIVersion, nil
+	return cfg.APIVersion, cfg, nil
 }
 
 func getAppConfigFromRepo(ctx context.Context, options *ConfigOptions) (*appcfg.ApplicationConfig, string, error) {
 	chartPath, err := GetIndexAndDownloadChart(ctx, options)
 	if err != nil {
+		klog.Errorf("failed to get index and download chart app: %s, rawAppName: %s, %v", options.App, options.RawAppName, err)
 		return nil, chartPath, err
 	}
 	return getAppConfigFromConfigurationFile(options.App, chartPath, options.Owner, options.Admin, options.IsAdmin)
@@ -857,6 +859,7 @@ func toApplicationConfig(app, chart string, cfg *appcfg.AppConfiguration) (*appc
 		Type:                 cfg.ConfigType,
 		Envs:                 cfg.Envs,
 		Images:               cfg.Options.Images,
+		AllowMultipleInstall: cfg.Options.AllowMultipleInstall,
 	}, chart, nil
 }
 
@@ -911,17 +914,17 @@ func GetIndexAndDownloadChart(ctx context.Context, options *ConfigOptions) (stri
 
 	klog.Infof("Success to load chart index from %s", indexFileURL)
 	// get specified version chart, if version is empty return the chart with the latest stable version
-	chartVersion, err := index.Get(options.App, options.Version)
+	chartVersion, err := index.Get(options.RawAppName, options.Version)
 
 	if err != nil {
-		klog.Errorf("Failed to get chart version err=%v app [%s %s]", err, options.App, options.Version)
+		klog.Errorf("Failed to get chart version err=%v app=%s rawApp=%s version=%s", err, options.App, options.RawAppName, options.Version)
 		if errors.Is(err, repo.ErrNoChartName) {
 			return "", ErrAppNotFoundInChartRepo
 		}
 		return "", err
 	}
 
-	klog.Infof("Success to find app chart from index app=%s version=%s", options.App, options.Version)
+	klog.Infof("Success to find app chart from index app=%s rawApp=%s version=%s", options.App, options.RawAppName, options.Version)
 	chartURL, err := repo.ResolveReferenceURL(options.RepoURL, chartVersion.URLs[0])
 	if err != nil {
 		return "", err
@@ -933,7 +936,7 @@ func GetIndexAndDownloadChart(ctx context.Context, options *ConfigOptions) (stri
 	}
 
 	// assume the chart path is app name
-	chartPath := appcfg.ChartsPath + "/" + options.App
+	chartPath := appcfg.ChartsPath + "/" + options.RawAppName
 	if files.IsExist(chartPath) {
 		if err := files.RemoveAll(chartPath); err != nil {
 			return "", err

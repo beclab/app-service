@@ -122,12 +122,14 @@ type UpgradeRequest struct {
 
 // InstallRequest represents a request to install an application.
 type InstallRequest struct {
-	Dev     bool                    `json:"devMode"`
-	RepoURL string                  `json:"repoUrl"`
-	CfgURL  string                  `json:"cfgUrl"`
-	Source  AppSource               `json:"source"`
-	Images  []Image                 `json:"images"`
-	Envs    []sysv1alpha1.AppEnvVar `json:"envs"`
+	Dev        bool                    `json:"devMode"`
+	RepoURL    string                  `json:"repoUrl"`
+	CfgURL     string                  `json:"cfgUrl"`
+	Source     AppSource               `json:"source"`
+	Images     []Image                 `json:"images"`
+	Envs       []sysv1alpha1.AppEnvVar `json:"envs"`
+	RawAppName string                  `json:"rawAppName"`
+	Title      string                  `json:"title"`
 }
 
 type Image struct {
