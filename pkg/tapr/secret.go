@@ -13,12 +13,12 @@ import (
 )
 
 // CreateOrUpdateSecret creates or updates secret for middleware password.
-func CreateOrUpdateSecret(config *rest.Config, appName, namespace string, middleware MiddlewareType) error {
+func CreateOrUpdateSecret(config *rest.Config, appName, namespace string, middlewareType MiddlewareType) error {
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return err
 	}
-	return createOrUpdateSecret(clientset, appName, namespace, middleware)
+	return createOrUpdateSecret(clientset, appName, namespace, middlewareType)
 }
 
 func createOrUpdateSecret(clientset kubernetes.Interface, appName, namespace string, middleware MiddlewareType) error {

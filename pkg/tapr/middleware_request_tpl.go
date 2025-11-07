@@ -2,6 +2,7 @@ package tapr
 
 import (
 	"bytes"
+	"fmt"
 	"text/template"
 )
 
@@ -216,6 +217,7 @@ spec:
   appNamespace: {{ .AppNamespace }}
   middleware: minio
   minio:
+    allowNamespaceBuckets: {{ .Middleware.AllowNamespaceBuckets }}
     buckets:
     {{- range $k, $v := .Middleware.Buckets }}
     - name: {{ $v.Name }}
@@ -268,6 +270,7 @@ spec:
   appNamespace: {{ .AppNamespace }}
   middleware: elasticsearch
   elasticsearch:
+    allowNamespaceIndexes: {{ .Middleware.AllowNamespaceIndexes }}
     indexes:
     {{- range $k, $v := .Middleware.Indexes }}
     - name: {{ $v.Name }}
@@ -284,180 +287,158 @@ spec:
     user: {{ .Middleware.Username }}
 `
 
-func GenMiddleRequest(middleware MiddlewareType, appName, appNamespace, namespace, username, password string,
-	databases []Database, natsConfig *NatsConfig, ownerName string, buckets []Bucket, vhosts []VHost, indexes []Index) ([]byte, error) {
-	switch middleware {
+type RequestParams struct {
+	MiddlewareType MiddlewareType
+	AppName        string
+	AppNamespace   string
+	Namespace      string
+	Username       string
+	Password       string
+	OwnerName      string
+	Middleware     *Middleware
+}
+
+func GenMiddleRequest(p RequestParams) ([]byte, error) {
+	switch p.MiddlewareType {
 	case TypePostgreSQL:
-		return genPostgresRequest(appName, appNamespace, namespace, username, password, databases)
+		return genPostgresRequest(p)
 	case TypeRedis:
-		return genRedisRequest(appName, appNamespace, namespace, password, databases)
+		return genRedisRequest(p)
 	case TypeMongoDB:
-		return genMongodbRequest(appName, appNamespace, namespace, username, password, databases)
+		return genMongodbRequest(p)
 	case TypeNats:
-		return genNatsRequest(appName, appNamespace, namespace, username, password, natsConfig, ownerName)
+		return genNatsRequest(p)
 	case TypeMinio:
-		return genMinioRequest(appName, appNamespace, namespace, username, password, buckets)
+		return genMinioRequest(p)
 	case TypeRabbitMQ:
-		return genRabbitMQRequest(appName, appNamespace, namespace, username, password, vhosts)
+		return genRabbitMQRequest(p)
 	case TypeElasticsearch:
-		return genElasticsearchRequest(appName, appNamespace, namespace, username, password, indexes)
+		return genElasticsearchRequest(p)
 	case TypeMariaDB:
-		return genMariadbRequest(appName, appNamespace, namespace, username, password, databases)
+		return genMariadbRequest(p)
 	case TypeMySQL:
-		return genMysqlRequest(appName, appNamespace, namespace, username, password, databases)
+		return genMysqlRequest(p)
 	default:
-		return []byte{}, nil
+		return []byte{}, fmt.Errorf("unsupported middleware type: %s", p.MiddlewareType)
 	}
 }
 
-func genPostgresRequest(appName, appNamespace, namespace, username, password string, databases []Database) ([]byte, error) {
-	tpl, err := template.New("postgresRequest").Parse(postgresRequest)
+func renderTemplate(tplStr string, data interface{}) ([]byte, error) {
+	tpl, err := template.New("tpl").Parse(tplStr)
 	if err != nil {
 		return []byte{}, err
 	}
-	var middlewareRequest bytes.Buffer
+	var buf bytes.Buffer
+	if err := tpl.Execute(&buf, data); err != nil {
+		return []byte{}, err
+	}
+	return buf.Bytes(), nil
+}
+
+func genPostgresRequest(p RequestParams) ([]byte, error) {
 	data := struct {
 		AppName      string
 		AppNamespace string
 		Namespace    string
 		Middleware   *PostgresConfig
 	}{
-		AppName:      appName,
-		AppNamespace: appNamespace,
-		Namespace:    namespace,
+		AppName:      p.AppName,
+		AppNamespace: p.AppNamespace,
+		Namespace:    p.Namespace,
 		Middleware: &PostgresConfig{
-			Username:  username,
-			Password:  password,
-			Databases: databases,
+			Username:  p.Username,
+			Password:  p.Password,
+			Databases: p.Middleware.Postgres.Databases,
 		},
 	}
-	err = tpl.Execute(&middlewareRequest, data)
-	if err != nil {
-		return []byte{}, err
-	}
-	return middlewareRequest.Bytes(), nil
+	return renderTemplate(postgresRequest, data)
 }
 
-func genRedisRequest(appName, appNamespace, namespace, password string, databases []Database) ([]byte, error) {
-	tpl, err := template.New("redisRequest").Parse(redisRequest)
-	if err != nil {
-		return []byte{}, err
+func genRedisRequest(p RequestParams) ([]byte, error) {
+	if len(p.Middleware.Redis.Namespace) == 0 {
+		return []byte{}, fmt.Errorf("redis requires at least one namespace/database")
 	}
-	var middlewareRequest bytes.Buffer
 	data := struct {
 		AppName      string
 		AppNamespace string
 		Namespace    string
 		Middleware   *RedisConfig
 	}{
-		AppName:      appName,
-		AppNamespace: appNamespace,
-		Namespace:    namespace,
+		AppName:      p.AppName,
+		AppNamespace: p.AppNamespace,
+		Namespace:    p.Namespace,
 		Middleware: &RedisConfig{
-			Password:  password,
-			Namespace: databases[0].Name,
+			Password:  p.Password,
+			Namespace: p.Middleware.Redis.Namespace,
 		},
 	}
-	err = tpl.Execute(&middlewareRequest, data)
-	if err != nil {
-		return []byte{}, err
-	}
-	return middlewareRequest.Bytes(), nil
+	return renderTemplate(redisRequest, data)
 }
 
-func genMongodbRequest(appName, appNamespace, namespace, username, password string, databases []Database) ([]byte, error) {
-	tpl, err := template.New("mongodbRequest").Parse(mongodbRequest)
-	if err != nil {
-		return []byte{}, err
-	}
-	var middlewareRequest bytes.Buffer
+func genMongodbRequest(p RequestParams) ([]byte, error) {
 	data := struct {
 		AppName      string
 		AppNamespace string
 		Namespace    string
 		Middleware   *MongodbConfig
 	}{
-		AppName:      appName,
-		AppNamespace: appNamespace,
-		Namespace:    namespace,
+		AppName:      p.AppName,
+		AppNamespace: p.AppNamespace,
+		Namespace:    p.Namespace,
 		Middleware: &MongodbConfig{
-			Username:  username,
-			Password:  password,
-			Databases: databases,
+			Username:  p.Username,
+			Password:  p.Password,
+			Databases: p.Middleware.MongoDB.Databases,
 		},
 	}
-	err = tpl.Execute(&middlewareRequest, data)
-	if err != nil {
-		return []byte{}, err
-	}
-	return middlewareRequest.Bytes(), nil
+	return renderTemplate(mongodbRequest, data)
 }
 
-func genMariadbRequest(appName, appNamespace, namespace, username, password string, databases []Database) ([]byte, error) {
-	tpl, err := template.New("mariadbRequest").Parse(mariadbRequest)
-	if err != nil {
-		return []byte{}, err
-	}
-	var middlewareRequest bytes.Buffer
+func genMariadbRequest(p RequestParams) ([]byte, error) {
 	data := struct {
 		AppName      string
 		AppNamespace string
 		Namespace    string
 		Middleware   *MariaDBConfig
 	}{
-		AppName:      appName,
-		AppNamespace: appNamespace,
-		Namespace:    namespace,
+		AppName:      p.AppName,
+		AppNamespace: p.AppNamespace,
+		Namespace:    p.Namespace,
 		Middleware: &MariaDBConfig{
-			Username:  username,
-			Password:  password,
-			Databases: databases,
+			Username:  p.Username,
+			Password:  p.Password,
+			Databases: p.Middleware.MariaDB.Databases,
 		},
 	}
-	err = tpl.Execute(&middlewareRequest, data)
-	if err != nil {
-		return []byte{}, err
-	}
-	return middlewareRequest.Bytes(), nil
+	return renderTemplate(mariadbRequest, data)
 }
 
-func genMysqlRequest(appName, appNamespace, namespace, username, password string, databases []Database) ([]byte, error) {
-	tpl, err := template.New("mysqlRequest").Parse(mysqlRequest)
-	if err != nil {
-		return []byte{}, err
-	}
-	var middlewareRequest bytes.Buffer
+func genMysqlRequest(p RequestParams) ([]byte, error) {
 	data := struct {
 		AppName      string
 		AppNamespace string
 		Namespace    string
 		Middleware   *MySQLConfig
 	}{
-		AppName:      appName,
-		AppNamespace: appNamespace,
-		Namespace:    namespace,
+		AppName:      p.AppName,
+		AppNamespace: p.AppNamespace,
+		Namespace:    p.Namespace,
 		Middleware: &MySQLConfig{
-			Username:  username,
-			Password:  password,
-			Databases: databases,
+			Username:  p.Username,
+			Password:  p.Password,
+			Databases: p.Middleware.MySQL.Databases,
 		},
 	}
-	err = tpl.Execute(&middlewareRequest, data)
-	if err != nil {
-		return []byte{}, err
-	}
-	return middlewareRequest.Bytes(), nil
+	return renderTemplate(mysqlRequest, data)
 }
 
-func genNatsRequest(appName, appNamespace, namespace, username, password string, natsConfig *NatsConfig, ownerName string) ([]byte, error) {
-	tpl, err := template.New("natsRequest").Parse(natsRequest)
-	if err != nil {
-		return []byte{}, err
+func genNatsRequest(p RequestParams) ([]byte, error) {
+	if p.Middleware.Nats == nil {
+		return []byte{}, fmt.Errorf("natsConfig cannot be nil for NATS middleware request")
 	}
-	var middlewareRequest bytes.Buffer
 
-	natsConfig.Username = username
-	natsConfig.Password = password
+	p.Middleware.Nats.Username = p.Username
+	p.Middleware.Nats.Password = p.Password
 
 	data := struct {
 		AppName      string
@@ -465,99 +446,69 @@ func genNatsRequest(appName, appNamespace, namespace, username, password string,
 		Namespace    string
 		Middleware   *NatsConfig
 	}{
-		AppName:      appName,
-		AppNamespace: appNamespace,
-		Namespace:    namespace,
-		Middleware:   natsConfig,
+		AppName:      p.AppName,
+		AppNamespace: p.AppNamespace,
+		Namespace:    p.Namespace,
+		Middleware:   p.Middleware.Nats,
 	}
-
-	err = tpl.Execute(&middlewareRequest, data)
-	if err != nil {
-		return []byte{}, err
-	}
-	return middlewareRequest.Bytes(), nil
+	return renderTemplate(natsRequest, data)
 }
 
-func genMinioRequest(appName, appNamespace, namespace, username, password string, buckets []Bucket) ([]byte, error) {
-	tpl, err := template.New("minioRequest").Parse(minioRequest)
-	if err != nil {
-		return []byte{}, err
-	}
-	var middlewareRequest bytes.Buffer
+func genMinioRequest(p RequestParams) ([]byte, error) {
 	data := struct {
 		AppName      string
 		AppNamespace string
 		Namespace    string
 		Middleware   *MinioConfig
 	}{
-		AppName:      appName,
-		AppNamespace: appNamespace,
-		Namespace:    namespace,
+		AppName:      p.AppName,
+		AppNamespace: p.AppNamespace,
+		Namespace:    p.Namespace,
 		Middleware: &MinioConfig{
-			Username: username,
-			Password: password,
-			Buckets:  buckets,
+			Username:              p.Username,
+			Password:              p.Password,
+			Buckets:               p.Middleware.Minio.Buckets,
+			AllowNamespaceBuckets: p.Middleware.Minio.AllowNamespaceBuckets,
 		},
 	}
-	err = tpl.Execute(&middlewareRequest, data)
-	if err != nil {
-		return []byte{}, err
-	}
-	return middlewareRequest.Bytes(), nil
+	return renderTemplate(minioRequest, data)
 }
 
-func genRabbitMQRequest(appName, appNamespace, namespace, username, password string, vhosts []VHost) ([]byte, error) {
-	tpl, err := template.New("rabbitmqRequest").Parse(rabbitmqRequest)
-	if err != nil {
-		return []byte{}, err
-	}
-	var middlewareRequest bytes.Buffer
+func genRabbitMQRequest(p RequestParams) ([]byte, error) {
 	data := struct {
 		AppName      string
 		AppNamespace string
 		Namespace    string
 		Middleware   *RabbitMQConfig
 	}{
-		AppName:      appName,
-		AppNamespace: appNamespace,
-		Namespace:    namespace,
+		AppName:      p.AppName,
+		AppNamespace: p.AppNamespace,
+		Namespace:    p.Namespace,
 		Middleware: &RabbitMQConfig{
-			Username: username,
-			Password: password,
-			VHosts:   vhosts,
+			Username: p.Username,
+			Password: p.Password,
+			VHosts:   p.Middleware.RabbitMQ.VHosts,
 		},
 	}
-	err = tpl.Execute(&middlewareRequest, data)
-	if err != nil {
-		return []byte{}, err
-	}
-	return middlewareRequest.Bytes(), nil
+	return renderTemplate(rabbitmqRequest, data)
 }
 
-func genElasticsearchRequest(appName, appNamespace, namespace, username, password string, indexes []Index) ([]byte, error) {
-	tpl, err := template.New("elasticsearchRequest").Parse(elasticsearchRequest)
-	if err != nil {
-		return []byte{}, err
-	}
-	var middlewareRequest bytes.Buffer
+func genElasticsearchRequest(p RequestParams) ([]byte, error) {
 	data := struct {
 		AppName      string
 		AppNamespace string
 		Namespace    string
 		Middleware   *ElasticsearchConfig
 	}{
-		AppName:      appName,
-		AppNamespace: appNamespace,
-		Namespace:    namespace,
+		AppName:      p.AppName,
+		AppNamespace: p.AppNamespace,
+		Namespace:    p.Namespace,
 		Middleware: &ElasticsearchConfig{
-			Username: username,
-			Password: password,
-			Indexes:  indexes,
+			Username:              p.Username,
+			Password:              p.Password,
+			Indexes:               p.Middleware.Elasticsearch.Indexes,
+			AllowNamespaceIndexes: p.Middleware.Elasticsearch.AllowNamespaceIndexes,
 		},
 	}
-	err = tpl.Execute(&middlewareRequest, data)
-	if err != nil {
-		return []byte{}, err
-	}
-	return middlewareRequest.Bytes(), nil
+	return renderTemplate(elasticsearchRequest, data)
 }
