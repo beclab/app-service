@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -331,52 +332,54 @@ func (h *Handler) setupAppAuthLevel(req *restful.Request, resp *restful.Response
 		return
 	}
 
-	appCopy := app.DeepCopy()
-	entrances := appCopy.Spec.Entrances
-
-	policy := make(map[string]map[string]interface{})
-	err = json.Unmarshal([]byte(appCopy.Spec.Settings["policy"]), &policy)
-	if err != nil {
-		api.HandleError(resp, req, err)
-		return
-	}
+	entrance := entranceName
 	authLevel := data["authorizationLevel"]["authorization_level"]
-	for i := range entrances {
-		if entrances[i].Name == entranceName {
-			if authLevel == constants.AuthorizationLevelOfPublic {
-				policy[entrances[i].Name]["default_policy"] = constants.AuthorizationLevelOfPublic
-			}
-			if authLevel == constants.AuthorizationLevelOfPrivate &&
-				entrances[i].AuthLevel == constants.AuthorizationLevelOfPublic {
-				policy[entrances[i].Name]["default_policy"] = "system"
-			}
-		}
-	}
-
-	for i := range entrances {
-		if entrances[i].Name == entranceName {
-			entrances[i].AuthLevel = authLevel
-		}
-	}
-
-	appCopy.Spec.Entrances = entrances
-
-	policyStr, err := json.Marshal(policy)
-	if err != nil {
-		api.HandleError(resp, req, err)
-		return
-	}
-	appCopy.Spec.Settings["policy"] = string(policyStr)
 	kclient := req.Attribute(constants.KubeSphereClientAttribute).(*clientset.ClientSet)
 
-	appUpdated, err := kclient.AppClient.AppV1alpha1().Applications().Update(req.Request.Context(), appCopy, metav1.UpdateOptions{})
-
+	var updated *v1alpha1.Application
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		current, err := kclient.AppClient.AppV1alpha1().Applications().Get(req.Request.Context(), app.Name, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		appCopy := current.DeepCopy()
+		entrances := appCopy.Spec.Entrances
+		policy := make(map[string]map[string]interface{})
+		if p := appCopy.Spec.Settings["policy"]; p != "" {
+			if err := json.Unmarshal([]byte(p), &policy); err != nil {
+				return err
+			}
+		}
+		for i := range entrances {
+			if entrances[i].Name == entrance {
+				if authLevel == constants.AuthorizationLevelOfPublic {
+					policy[entrances[i].Name]["default_policy"] = constants.AuthorizationLevelOfPublic
+				}
+				if authLevel == constants.AuthorizationLevelOfPrivate &&
+					entrances[i].AuthLevel == constants.AuthorizationLevelOfPublic {
+					policy[entrances[i].Name]["default_policy"] = "system"
+				}
+			}
+		}
+		for i := range entrances {
+			if entrances[i].Name == entrance {
+				entrances[i].AuthLevel = authLevel
+			}
+		}
+		appCopy.Spec.Entrances = entrances
+		policyStr, err := json.Marshal(policy)
+		if err != nil {
+			return err
+		}
+		appCopy.Spec.Settings["policy"] = string(policyStr)
+		updated, err = kclient.AppClient.AppV1alpha1().Applications().Update(req.Request.Context(), appCopy, metav1.UpdateOptions{})
+		return err
+	})
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
-
-	resp.WriteAsJson(appUpdated.Spec.Settings)
+	resp.WriteAsJson(updated.Spec.Settings)
 }
 
 func (h *Handler) setupAppEntrancePolicy(req *restful.Request, resp *restful.Response) {
@@ -404,52 +407,54 @@ func (h *Handler) setupAppEntrancePolicy(req *restful.Request, resp *restful.Res
 
 	settings := data["policy"].(map[string]interface{})
 
-	appCopy := app.DeepCopy()
-
-	var origin map[string]interface{}
-	err = json.Unmarshal([]byte(appCopy.Spec.Settings["policy"]), &origin)
-	if err != nil {
-		api.HandleError(resp, req, err)
-		return
-	}
-
-	merge := make(map[string]interface{})
-	merge[entranceName] = settings
-
-	for k, v := range origin {
-		if k != entranceName {
-			merge[k] = v.(map[string]interface{})
-			continue
-		}
-	}
-	settingsBytes, err := json.Marshal(merge)
-	if err != nil {
-		api.HandleError(resp, req, err)
-		return
-	}
-
-	patchData := map[string]interface{}{
-		"spec": map[string]interface{}{
-			"settings": map[string]string{
-				"policy": string(settingsBytes),
-			},
-		},
-	}
-	patchByte, err := json.Marshal(patchData)
-	if err != nil {
-		api.HandleError(resp, req, err)
-		return
-	}
-
 	client := req.Attribute(constants.KubeSphereClientAttribute).(*clientset.ClientSet)
 
-	appUpdated, err := client.AppClient.AppV1alpha1().Applications().Patch(req.Request.Context(), appCopy.Name, types.MergePatchType, patchByte, metav1.PatchOptions{})
+	var updated *v1alpha1.Application
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		current, err := client.AppClient.AppV1alpha1().Applications().Get(req.Request.Context(), app.Name, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		appCopy := current.DeepCopy()
+		var origin map[string]interface{}
+
+		err = json.Unmarshal([]byte(appCopy.Spec.Settings["policy"]), &origin)
+		if err != nil {
+			return err
+		}
+
+		merge := make(map[string]interface{})
+		merge[entranceName] = settings
+		for k, v := range origin {
+			if k != entranceName {
+				merge[k] = v.(map[string]interface{})
+				continue
+			}
+		}
+		settingsBytes, err := json.Marshal(merge)
+		if err != nil {
+			return err
+		}
+		patchData := map[string]interface{}{
+			"spec": map[string]interface{}{
+				"settings": map[string]string{
+					"policy": string(settingsBytes),
+				},
+			},
+		}
+		patchByte, err := json.Marshal(patchData)
+		if err != nil {
+			return err
+		}
+		updated, err = client.AppClient.AppV1alpha1().Applications().Patch(req.Request.Context(), appCopy.Name, types.MergePatchType, patchByte, metav1.PatchOptions{})
+		return err
+	})
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
 
-	resp.WriteAsJson(appUpdated.Spec.Settings)
+	resp.WriteAsJson(updated.Spec.Settings)
 }
 
 func (h *Handler) tryToPatchDeploymentAnnotations(patchData map[string]interface{}, app *v1alpha1.Application) error {
