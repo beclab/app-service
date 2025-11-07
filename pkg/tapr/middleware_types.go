@@ -34,9 +34,10 @@ type ArgoConfig struct {
 }
 
 type MinioConfig struct {
-	Username string   `yaml:"username" json:"username"`
-	Password string   `yaml:"password" json:"password"`
-	Buckets  []Bucket `yaml:"buckets" json:"buckets"`
+	Username              string   `yaml:"username" json:"username"`
+	Password              string   `yaml:"password" json:"password"`
+	Buckets               []Bucket `yaml:"buckets" json:"buckets"`
+	AllowNamespaceBuckets bool     `yaml:"allowNamespaceBuckets" json:"allowNamespaceBuckets"`
 }
 
 type Bucket struct {
@@ -54,9 +55,10 @@ type VHost struct {
 }
 
 type ElasticsearchConfig struct {
-	Username string  `yaml:"username" json:"username"`
-	Password string  `yaml:"password" json:"password"`
-	Indexes  []Index `yaml:"indexes" json:"indexes"`
+	Username              string  `yaml:"username" json:"username"`
+	Password              string  `yaml:"password" json:"password"`
+	Indexes               []Index `yaml:"indexes" json:"indexes"`
+	AllowNamespaceIndexes bool    `yaml:"allowNamespaceIndexes" json:"allowNamespaceIndexes"`
 }
 
 type Index struct {

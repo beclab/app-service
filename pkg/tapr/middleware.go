@@ -75,14 +75,16 @@ type MiddlewareRequestInfo struct {
 
 type MiddlewareRequestResp struct {
 	MiddlewareRequestInfo
-	Host      string            `json:"host"`
-	Port      int32             `json:"port"`
-	Indexes   map[string]string `json:"indexes"`
-	Databases map[string]string `json:"databases"`
-	Buckets   map[string]string `json:"buckets"`
-	Vhosts    map[string]string `json:"vhosts"`
-	Subjects  map[string]string `json:"subjects"`
-	Refs      map[string]string `json:"refs"`
+	Host         string            `json:"host"`
+	Port         int32             `json:"port"`
+	Indexes      map[string]string `json:"indexes"`
+	Databases    map[string]string `json:"databases"`
+	Buckets      map[string]string `json:"buckets"`
+	Vhosts       map[string]string `json:"vhosts"`
+	Subjects     map[string]string `json:"subjects"`
+	Refs         map[string]string `json:"refs"`
+	BucketPrefix string            `json:"bucketPrefix"`
+	IndexPrefix  string            `json:"indexPrefix"`
 }
 
 type Resp struct {
@@ -141,8 +143,7 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 	if middleware.Postgres != nil {
 		username := fmt.Sprintf("%s_%s_%s", middleware.Postgres.Username, ownerName, appName)
 		username = strings.ReplaceAll(username, "-", "_")
-		err := process(kubeConfig, appName, appNamespace, namespace, username,
-			middleware.Postgres.Password, middleware.Postgres.Databases, TypePostgreSQL, nil, ownerName, nil, nil, nil)
+		err := process(kubeConfig, appName, appNamespace, namespace, username, TypePostgreSQL, ownerName, middleware)
 		if err != nil {
 			return err
 		}
@@ -161,8 +162,7 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 
 	if middleware.Redis != nil {
 		username := ""
-		err := process(kubeConfig, appName, appNamespace, namespace, username,
-			middleware.Redis.Password, []Database{{Name: middleware.Redis.Namespace}}, TypeRedis, nil, ownerName, nil, nil, nil)
+		err := process(kubeConfig, appName, appNamespace, namespace, username, TypeRedis, ownerName, middleware)
 		if err != nil {
 			return err
 		}
@@ -180,8 +180,7 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 
 	if middleware.MongoDB != nil {
 		username := fmt.Sprintf("%s-%s-%s", middleware.MongoDB.Username, ownerName, appName)
-		err := process(kubeConfig, appName, appNamespace, namespace, username,
-			middleware.MongoDB.Password, middleware.MongoDB.Databases, TypeMongoDB, nil, ownerName, nil, nil, nil)
+		err := process(kubeConfig, appName, appNamespace, namespace, username, TypeMongoDB, ownerName, middleware)
 		if err != nil {
 			return err
 		}
@@ -199,8 +198,7 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 	}
 	if middleware.Minio != nil {
 		username := fmt.Sprintf("%s-%s-%s", middleware.Minio.Username, ownerName, appName)
-		err := process(kubeConfig, appName, appNamespace, namespace, username, middleware.Minio.Password,
-			nil, TypeMinio, nil, ownerName, middleware.Minio.Buckets, nil, nil)
+		err := process(kubeConfig, appName, appNamespace, namespace, username, TypeMinio, ownerName, middleware)
 		if err != nil {
 			return err
 		}
@@ -210,17 +208,17 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 			return err
 		}
 		vals["minio"] = map[string]interface{}{
-			"host":     resp.Host,
-			"port":     resp.Port,
-			"username": resp.UserName,
-			"password": resp.Password,
-			"buckets":  resp.Buckets,
+			"host":         resp.Host,
+			"port":         resp.Port,
+			"username":     resp.UserName,
+			"password":     resp.Password,
+			"buckets":      resp.Buckets,
+			"bucketPrefix": resp.BucketPrefix,
 		}
 	}
 	if middleware.RabbitMQ != nil {
 		username := fmt.Sprintf("%s-%s-%s", middleware.RabbitMQ.Username, ownerName, appName)
-		err := process(kubeConfig, appName, appNamespace, namespace, username, middleware.RabbitMQ.Password,
-			nil, TypeRabbitMQ, nil, ownerName, nil, middleware.RabbitMQ.VHosts, nil)
+		err := process(kubeConfig, appName, appNamespace, namespace, username, TypeRabbitMQ, ownerName, middleware)
 		if err != nil {
 			return err
 		}
@@ -241,8 +239,7 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 
 	if middleware.Elasticsearch != nil {
 		username := fmt.Sprintf("%s-%s-%s", middleware.Elasticsearch.Username, ownerName, appName)
-		err := process(kubeConfig, appName, appNamespace, namespace, username, middleware.Elasticsearch.Password,
-			nil, TypeElasticsearch, nil, ownerName, nil, nil, middleware.Elasticsearch.Indexes)
+		err := process(kubeConfig, appName, appNamespace, namespace, username, TypeElasticsearch, ownerName, middleware)
 		if err != nil {
 			return err
 		}
@@ -252,20 +249,19 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 			return err
 		}
 		vals["elasticsearch"] = map[string]interface{}{
-			"host":     resp.Host,
-			"port":     resp.Port,
-			"username": resp.UserName,
-			"password": resp.Password,
-			"indexes":  resp.Indexes,
+			"host":        resp.Host,
+			"port":        resp.Port,
+			"username":    resp.UserName,
+			"password":    resp.Password,
+			"indexes":     resp.Indexes,
+			"indexPrefix": resp.IndexPrefix,
 		}
 		klog.Infof("values.elasticsearch: %v", vals["elasticsearch"])
 	}
 
 	if middleware.Nats != nil {
 		username := fmt.Sprintf("%s-%s", middleware.Nats.Username, appNamespace)
-		err := process(kubeConfig, appName, appNamespace, namespace, username,
-			"", []Database{}, TypeNats, middleware.Nats, ownerName, nil, nil, nil)
-		klog.Infof("middleware.Nats: %#v\n", middleware.Nats)
+		err := process(kubeConfig, appName, appNamespace, namespace, username, TypeNats, ownerName, middleware)
 		if err != nil {
 			return err
 		}
@@ -287,8 +283,7 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 	if middleware.MariaDB != nil {
 		klog.Infof("middleware.MariaDB: %#v", middleware.MariaDB)
 		username := fmt.Sprintf("%s-%s-%s", middleware.MariaDB.Username, ownerName, appName)
-		err := process(kubeConfig, appName, appNamespace, namespace, username, middleware.MariaDB.Password,
-			middleware.MariaDB.Databases, TypeMariaDB, nil, ownerName, nil, nil, nil)
+		err := process(kubeConfig, appName, appNamespace, namespace, username, TypeMariaDB, ownerName, middleware)
 		if err != nil {
 			return err
 		}
@@ -310,8 +305,7 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 	if middleware.MySQL != nil {
 		klog.Errorf("middleware.mYSQL: %#v", middleware.MySQL)
 		username := fmt.Sprintf("%s-%s-%s", middleware.MySQL.Username, ownerName, appName)
-		err := process(kubeConfig, appName, appNamespace, namespace, username, middleware.MySQL.Password,
-			middleware.MySQL.Databases, TypeMySQL, nil, ownerName, nil, nil, nil)
+		err := process(kubeConfig, appName, appNamespace, namespace, username, TypeMySQL, ownerName, middleware)
 		if err != nil {
 			return err
 		}
@@ -332,25 +326,63 @@ func Apply(middleware *Middleware, kubeConfig *rest.Config, appName, appNamespac
 	return nil
 }
 
-func process(kubeConfig *rest.Config, appName, appNamespace, namespace, username, password string,
-	databases []Database, middleware MiddlewareType, natsConfig *NatsConfig, ownerName string, buckets []Bucket, vhosts []VHost, indexes []Index) error {
-	request, err := GenMiddleRequest(middleware, appName,
-		appNamespace, namespace, username, password, databases, natsConfig, ownerName, buckets, vhosts, indexes)
+func process(kubeConfig *rest.Config, appName, appNamespace, namespace, username string,
+	middlewareType MiddlewareType, ownerName string, middleware *Middleware) error {
+	params := RequestParams{
+		MiddlewareType: middlewareType,
+		AppName:        appName,
+		AppNamespace:   appNamespace,
+		Namespace:      namespace,
+		Username:       username,
+		OwnerName:      ownerName,
+		Middleware:     middleware,
+	}
+	password, err := getPassword(middleware, middlewareType)
 	if err != nil {
-		klog.Errorf("Failed to generate middleware request from template middlewareType=%s err=%v", middleware, err)
+		klog.Error(err)
 		return err
 	}
-	if len(password) == 0 {
-		err = CreateOrUpdateSecret(kubeConfig, appName, namespace, middleware)
-		klog.Errorf("create secret:appname: %s,namespace:%s, middleware:%s,err: %v", appName, namespace, middleware, err)
+	params.Password = password
+	request, err := GenMiddleRequest(params)
+	if err != nil {
+		klog.Errorf("Failed to generate middleware request from template middlewareType=%s err=%v", middlewareType, err)
+		return err
+	}
+	if len(params.Password) == 0 {
+		err = CreateOrUpdateSecret(kubeConfig, appName, namespace, middlewareType)
+		klog.Errorf("create secret:appname: %s,namespace:%s, middlewareType:%s,err: %v", appName, namespace, middlewareType, err)
 		if err != nil {
 			return err
 		}
 	}
 	_, err = CreateOrUpdateMiddlewareRequest(kubeConfig, namespace, request)
 	if err != nil {
-		klog.Errorf("Failed to create or update middleware request middlewareType=%s err=%v", middleware, err)
+		klog.Errorf("Failed to create or update middleware request middlewareType=%s err=%v", middlewareType, err)
 		return err
 	}
 	return nil
+}
+
+func getPassword(middleware *Middleware, middlewareType MiddlewareType) (string, error) {
+	switch middlewareType {
+	case TypePostgreSQL:
+		return middleware.Postgres.Password, nil
+	case TypeRedis:
+		return middleware.Redis.Password, nil
+	case TypeMongoDB:
+		return middleware.MongoDB.Password, nil
+	case TypeNats:
+		return middleware.Nats.Password, nil
+	case TypeMinio:
+		return middleware.Minio.Password, nil
+	case TypeRabbitMQ:
+		return middleware.RabbitMQ.Password, nil
+	case TypeElasticsearch:
+		return middleware.Elasticsearch.Password, nil
+	case TypeMariaDB:
+		return middleware.MariaDB.Password, nil
+	case TypeMySQL:
+		return middleware.MySQL.Password, nil
+	}
+	return "", fmt.Errorf("unsupported middleware type %v", middlewareType)
 }
