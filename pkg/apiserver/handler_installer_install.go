@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
@@ -38,10 +39,12 @@ type installHelperIntf interface {
 	getAdminUsers() (admin []string, isAdmin bool, err error)
 	getInstalledApps() (installed bool, app []*v1alpha1.Application, err error)
 	getAppConfig(adminUsers []string, marketSource string, isAdmin, appInstalled bool, installedApps []*v1alpha1.Application) (err error)
+	setAppConfig(req *api.InstallRequest, appName string)
 	validate(bool, []*v1alpha1.Application) error
 	setAppEnv(overrides []sysv1alpha1.AppEnvVar) error
 	applyAppEnv(ctx context.Context) error
 	applyApplicationManager(marketSource string) (opID string, err error)
+	isTitleDuplicated(owner, appName, title string) (bool, error)
 }
 
 var _ installHelperIntf = (*installHandlerHelper)(nil)
@@ -52,6 +55,7 @@ type installHandlerHelper struct {
 	req                  *restful.Request
 	resp                 *restful.Response
 	app                  string
+	rawAppName           string
 	owner                string
 	token                string
 	insReq               *api.InstallRequest
@@ -84,14 +88,20 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		api.HandleBadRequest(resp, req, err)
 		return
 	}
-	klog.Infof("insReq: images: %v", insReq.Images)
+	klog.Infof("insReq: %#v", insReq)
 	if insReq.Source != api.Market && insReq.Source != api.Custom && insReq.Source != api.DevBox {
 		api.HandleBadRequest(resp, req, fmt.Errorf("unsupported chart source: %s", insReq.Source))
 		return
 	}
+	rawAppName := app
+	if insReq.RawAppName != "" {
+		rawAppName = insReq.RawAppName
+	}
+	klog.Infof("rawAppName: %s", rawAppName)
 
-	apiVersion, err := apputils.GetApiVersionFromAppConfig(req.Request.Context(), &apputils.ConfigOptions{
+	apiVersion, appCfg, err := apputils.GetApiVersionFromAppConfig(req.Request.Context(), &apputils.ConfigOptions{
 		App:          app,
+		RawAppName:   rawAppName,
 		Owner:        owner,
 		RepoURL:      insReq.RepoURL,
 		MarketSource: marketSource,
@@ -99,6 +109,11 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 	if err != nil {
 		klog.Errorf("Failed to get api version err=%v", err)
 		api.HandleBadRequest(resp, req, err)
+		return
+	}
+	if !appCfg.AllowMultipleInstall && insReq.RawAppName != "" {
+		klog.Errorf("app %s can not be clone", app)
+		api.HandleBadRequest(resp, req, fmt.Errorf("app %s can not be clone", app))
 		return
 	}
 
@@ -114,14 +129,15 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 	case appcfg.V1:
 		klog.Info("Using install handler helper for V1")
 		h := &installHandlerHelper{
-			h:      h,
-			req:    req,
-			resp:   resp,
-			app:    app,
-			owner:  owner,
-			token:  token,
-			insReq: insReq,
-			client: client,
+			h:          h,
+			req:        req,
+			resp:       resp,
+			app:        app,
+			rawAppName: rawAppName,
+			owner:      owner,
+			token:      token,
+			insReq:     insReq,
+			client:     client,
 		}
 
 		h.validateClusterScope = h._validateClusterScope
@@ -131,14 +147,15 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		klog.Info("Using install handler helper for V2")
 		h := &installHandlerHelperV2{
 			installHandlerHelper: installHandlerHelper{
-				h:      h,
-				req:    req,
-				resp:   resp,
-				app:    app,
-				owner:  owner,
-				token:  token,
-				insReq: insReq,
-				client: client,
+				h:          h,
+				req:        req,
+				resp:       resp,
+				app:        app,
+				rawAppName: rawAppName,
+				owner:      owner,
+				token:      token,
+				insReq:     insReq,
+				client:     client,
 			},
 		}
 
@@ -167,6 +184,20 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 	if err != nil {
 		klog.Errorf("Failed to get app config err=%v", err)
 		return
+	}
+
+	// replace title and appName if app is cloned
+	if insReq.RawAppName != "" && insReq.Title != "" {
+		isDuplicated, err := helper.isTitleDuplicated(owner, app, insReq.Title)
+		if err != nil {
+			api.HandleError(resp, req, err)
+			return
+		}
+		if isDuplicated {
+			api.HandleBadRequest(resp, req, fmt.Errorf("title %s is duplicated", insReq.Title))
+			return
+		}
+		helper.setAppConfig(insReq, app)
 	}
 
 	err = helper.setAppEnv(insReq.Envs)
@@ -394,6 +425,7 @@ func (h *installHandlerHelper) getAppConfig(adminUsers []string, marketSource st
 
 	appConfig, _, err := apputils.GetAppConfig(h.req.Request.Context(), &apputils.ConfigOptions{
 		App:          h.app,
+		RawAppName:   h.rawAppName,
 		Owner:        h.owner,
 		RepoURL:      h.insReq.RepoURL,
 		Version:      "",
@@ -410,6 +442,74 @@ func (h *installHandlerHelper) getAppConfig(adminUsers []string, marketSource st
 	h.appConfig = appConfig
 
 	return
+}
+
+func (h *installHandlerHelper) setAppConfig(req *api.InstallRequest, appName string) {
+	h.appConfig.AppName = appName
+	h.appConfig.RawAppName = appName
+	if req.RawAppName != "" {
+		h.appConfig.RawAppName = req.RawAppName
+	}
+	h.appConfig.Title = req.Title
+	var appid string
+	if userspace.IsSysApp(req.RawAppName) {
+		appid = appName
+	} else {
+		appid = utils.Md5String(appName)[:8]
+	}
+	h.appConfig.AppID = appid
+	if len(h.appConfig.Entrances) == 1 {
+		h.appConfig.Entrances[0].Title = req.Title
+		return
+	}
+	for i := range h.appConfig.Entrances {
+		h.appConfig.Entrances[i].Title = fmt.Sprintf("%s%d", req.Title, i)
+	}
+	return
+}
+func (h *installHandlerHelper) isTitleDuplicated(owner, appName, title string) (bool, error) {
+	// list ApplicationManagers and check duplicates for same owner and app
+	amList, err := h.client.AppV1alpha1().ApplicationManagers().List(h.req.Request.Context(), metav1.ListOptions{})
+	if err != nil {
+		return false, err
+	}
+
+	for _, am := range amList.Items {
+		if am.Status.State == v1alpha1.Uninstalled {
+			continue
+		}
+
+		if am.Spec.AppOwner != owner {
+			continue
+		}
+		app := am.Spec.AppName
+		if userspace.IsSysApp(app) {
+			continue
+		}
+
+		var cfg appcfg.ApplicationConfig
+		err = json.Unmarshal([]byte(am.Spec.Config), &cfg)
+		if err != nil {
+			return false, err
+		}
+
+		if cfg.RawAppName != "" {
+			app = cfg.RawAppName
+		}
+		if app != appName {
+			continue
+		}
+
+		if cfg.Title == title {
+			return true, nil
+		}
+		for _, e := range cfg.Entrances {
+			if e.Title == title {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opID string, err error) {
@@ -440,6 +540,7 @@ func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opI
 		},
 		Spec: v1alpha1.ApplicationManagerSpec{
 			AppName:      h.app,
+			RawAppName:   h.rawAppName,
 			AppNamespace: h.appConfig.Namespace,
 			AppOwner:     h.owner,
 			Config:       string(config),
@@ -557,6 +658,14 @@ func (h *installHandlerHelper) applyAppEnv(ctx context.Context) (err error) {
 		api.HandleError(h.resp, h.req, err)
 	}
 	return
+}
+
+func (h *installHandlerHelperV2) setAppConfig(req *api.InstallRequest, appName string) {
+	return
+}
+
+func (h *installHandlerHelperV2) isTitleDuplicated(owner, appName, title string) (bool, error) {
+	return false, nil
 }
 
 func (h *installHandlerHelperV2) _validateClusterScope(isAdmin bool, installedApps []*v1alpha1.Application) (err error) {

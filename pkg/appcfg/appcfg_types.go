@@ -122,6 +122,7 @@ type Options struct {
 	ApiTimeout           *int64                   `yaml:"apiTimeout" json:"apiTimeout"`
 	AllowedOutboundPorts []int                    `yaml:"allowedOutboundPorts" json:"AllowedOutboundPorts"`
 	Images               []string                 `yaml:"images" json:"images"`
+	AllowMultipleInstall bool                     `yaml:"allowMultipleInstall" json:"allowMultipleInstall"`
 }
 
 type ResetCookie struct {

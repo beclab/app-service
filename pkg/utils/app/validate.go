@@ -567,6 +567,11 @@ func CheckAppEnvs(ctx context.Context, ctrlClient client.Client, envs []sysv1alp
 		}
 		if err := utils.CheckEnvValueByType(effectiveValue, env.Type); err != nil {
 			result.InvalidValues = append(result.InvalidValues, env)
+			continue
+		}
+		if err := env.ValidateValueAgainstOptions(effectiveValue); err != nil {
+			result.InvalidValues = append(result.InvalidValues, env)
+			continue
 		}
 	}
 	if len(result.MissingValues) > 0 || len(result.InvalidValues) > 0 || len(result.MissingRefs) > 0 {

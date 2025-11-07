@@ -121,7 +121,6 @@ func isTCPPortAvailable(port int) bool {
 }
 
 func IsPortAvailable(protocol string, port int) bool {
-	klog.Infof("isportava: %v", protocol)
 	if protocol == "tcp" {
 		return isTCPPortAvailable(port)
 	}

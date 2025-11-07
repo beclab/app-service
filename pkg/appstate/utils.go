@@ -94,11 +94,14 @@ func setExposePorts(ctx context.Context, appConfig *appcfg.ApplicationConfig) er
 	for i := range appConfig.Ports {
 		if appConfig.Ports[i].AddToTailscaleAcl {
 			appConfig.TailScale.ACLs = append(appConfig.TailScale.ACLs, appv1alpha1.ACL{
-				Proto: appConfig.Ports[i].Protocol,
-				Dst:   []string{fmt.Sprintf("*:%d", appConfig.Ports[i].ExposePort)},
+				Action: "accept",
+				Src:    []string{"*"},
+				Proto:  appConfig.Ports[i].Protocol,
+				Dst:    []string{fmt.Sprintf("*:%d", appConfig.Ports[i].ExposePort)},
 			})
 		}
 	}
+	klog.Infof("appConfig.TailScale: %v", appConfig.TailScale)
 	return nil
 }
 

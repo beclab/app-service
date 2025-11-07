@@ -276,6 +276,7 @@ func (r *ApplicationReconciler) addWatch(c controller.Controller, cache cache.Ca
 func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.Request,
 	deployment client.Object, name string) error {
 	owner := deployment.GetLabels()[constants.ApplicationOwnerLabel]
+	rawAppName := deployment.GetLabels()[constants.ApplicationRawAppNameLabel]
 	appNames := getAppName(deployment)
 	isMultiApp := len(appNames) > 1
 	icon := getAppIcon(deployment)
@@ -298,7 +299,7 @@ func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.
 		appid = name
 		isSysApp = true
 	} else {
-		appid = utils.Md5String(name)[:8]
+		appid = appv1alpha1.AppName(name).GetAppID()
 	}
 	settings := r.getAppSettings(ctx, name, appid, owner, deployment, isMultiApp, entrancesMap[name])
 	// create the application cr
@@ -309,6 +310,7 @@ func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.
 		},
 		Spec: appv1alpha1.ApplicationSpec{
 			Name:           name,
+			RawAppName:     rawAppName,
 			Appid:          appid,
 			IsSysApp:       isSysApp,
 			Namespace:      req.Namespace,
@@ -501,6 +503,7 @@ func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, app
 	isMulti bool, entrances []appv1alpha1.Entrance) map[string]string {
 	settings := make(map[string]string)
 	settings["source"] = api.Unknown.String()
+	rawAppName := deployment.GetLabels()[constants.ApplicationRawAppNameLabel]
 
 	if chartSource, ok := deployment.GetAnnotations()[constants.ApplicationSourceLabel]; ok {
 		settings["source"] = chartSource
@@ -552,7 +555,7 @@ func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, app
 	}
 
 	// not sys applications.
-	if !userspace.IsSysApp(appName) {
+	if !userspace.IsSysApp(rawAppName) {
 		if appCfg, err := appcfg.GetAppInstallationConfig(appName, owner); err != nil {
 			klog.Infof("Failed to get app configuration appName=%s owner=%s err=%v", appName, owner, err)
 		} else {

@@ -46,6 +46,7 @@ type ApplicationManagerStatus struct {
 // ApplicationManagerSpec defines the desired state of ApplicationManager
 type ApplicationManagerSpec struct {
 	AppName      string `json:"appName"`
+	RawAppName   string `json:"rawAppName,omitempty"`
 	AppNamespace string `json:"appNamespace,omitempty"`
 	AppOwner     string `json:"appOwner,omitempty"`
 	Config       string `json:"config,omitempty"`

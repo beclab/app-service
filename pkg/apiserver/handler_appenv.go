@@ -86,6 +86,10 @@ func (h *Handler) updateAppEnv(req *restful.Request, resp *restful.Response) {
 						api.HandleBadRequest(resp, req, fmt.Errorf("failed to update app env '%s': %v", env.EnvName, err))
 						return
 					}
+					if err := existingEnv.ValidateValueAgainstOptions(env.Value); err != nil {
+						api.HandleBadRequest(resp, req, fmt.Errorf("failed to update app env '%s': %v", env.EnvName, err))
+						return
+					}
 					targetAppEnv.Envs[i].Value = env.Value
 					updated = true
 					if existingEnv.ApplyOnChange {

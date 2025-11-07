@@ -877,6 +877,7 @@ func makePatches(req *admissionv1.AdmissionRequest, appCfg *appcfg.ApplicationCo
 		tpl.ObjectMeta.Labels["io.bytetrade.app"] = "true"
 		tpl.ObjectMeta.Labels[constants.ApplicationNameLabel] = appCfg.AppName
 		tpl.ObjectMeta.Labels[constants.ApplicationOwnerLabel] = appCfg.OwnerName
+		tpl.ObjectMeta.Labels[constants.ApplicationRawAppNameLabel] = appCfg.RawAppName
 		if gpuPolicy != "" {
 			tpl.ObjectMeta.Labels[constants.AppPodGPUConsumePolicy] = gpuPolicy
 		}
@@ -902,6 +903,8 @@ func makePatches(req *admissionv1.AdmissionRequest, appCfg *appcfg.ApplicationCo
 		tpl.ObjectMeta.Labels["io.bytetrade.app"] = "true"
 		tpl.ObjectMeta.Labels[constants.ApplicationNameLabel] = appCfg.AppName
 		tpl.ObjectMeta.Labels[constants.ApplicationOwnerLabel] = appCfg.OwnerName
+		tpl.ObjectMeta.Labels[constants.ApplicationRawAppNameLabel] = appCfg.RawAppName
+
 		if gpuPolicy != "" {
 			tpl.ObjectMeta.Labels[constants.AppPodGPUConsumePolicy] = gpuPolicy
 		}
