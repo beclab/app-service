@@ -63,17 +63,6 @@ func (h *Handler) createSystemEnv(req *restful.Request, resp *restful.Response) 
 		return
 	}
 
-	err := utils.CheckEnvValueByType(body.Value, body.Type)
-	if err != nil {
-		api.HandleBadRequest(resp, req, fmt.Errorf("env value: %v", err))
-		return
-	}
-	err = utils.CheckEnvValueByType(body.Default, body.Type)
-	if err != nil {
-		api.HandleBadRequest(resp, req, fmt.Errorf("env default value: %v", err))
-		return
-	}
-
 	// validate and normalize resource name
 	resourceName, err := utils.EnvNameToResourceName(body.EnvName)
 	if err != nil {
@@ -86,6 +75,15 @@ func (h *Handler) createSystemEnv(req *restful.Request, resp *restful.Response) 
 			Name: resourceName,
 		},
 		EnvVarSpec: body,
+	}
+
+	if err := obj.ValidateValue(body.Value); err != nil {
+		api.HandleBadRequest(resp, req, err)
+		return
+	}
+	if err := obj.ValidateValue(body.Default); err != nil {
+		api.HandleBadRequest(resp, req, err)
+		return
 	}
 
 	if err := h.ctrlClient.Create(req.Request.Context(), obj); err != nil {
@@ -137,7 +135,7 @@ func (h *Handler) updateSystemEnv(req *restful.Request, resp *restful.Response) 
 	}
 
 	if current.Value != body.Value {
-		err := utils.CheckEnvValueByType(body.Value, current.Type)
+		err := current.ValidateValue(body.Value)
 		if err != nil {
 			api.HandleBadRequest(resp, req, err)
 			return
@@ -308,7 +306,7 @@ func (h *Handler) batchUpdateSystemEnvs(req *restful.Request, resp *restful.Resp
 		}
 
 		if current.Value != it.Value {
-			if err := utils.CheckEnvValueByType(it.Value, current.Type); err != nil {
+			if err := current.ValidateValue(it.Value); err != nil {
 				api.HandleBadRequest(resp, req, err)
 				return
 			}

@@ -26,11 +26,6 @@ type AppEnvVar struct {
 	EnvVarSpec    `json:",inline" yaml:",inline"`
 	ApplyOnChange bool       `json:"applyOnChange,omitempty" yaml:"applyOnChange,omitempty"`
 	ValueFrom     *ValueFrom `json:"valueFrom,omitempty" yaml:"valueFrom,omitempty"`
-	// Options defines a finite set of allowed values for this env var
-	Options []EnvValueOptionItem `json:"options,omitempty" yaml:"options,omitempty"`
-	// +kubebuilder:validation:Pattern=`^https?://`
-	// RemoteOptions provides a URL (http/https) returning a JSON-encoded string array of allowed values
-	RemoteOptions string `json:"remoteOptions,omitempty" yaml:"remoteOptions,omitempty"`
 }
 
 // ValueFrom defines a reference to an environment variable (UserEnv or SystemEnv)

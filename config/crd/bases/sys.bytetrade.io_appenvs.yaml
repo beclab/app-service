@@ -72,6 +72,8 @@ spec:
                     - value
                     type: object
                   type: array
+                regex:
+                  type: string
                 remoteOptions:
                   description: RemoteOptions provides a URL (http/https) returning
                     a JSON-encoded string array of allowed values

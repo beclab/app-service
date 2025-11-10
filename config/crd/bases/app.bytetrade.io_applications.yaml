@@ -141,8 +141,8 @@ spec:
                     protocol:
                       default: tcp/udp
                       description: |-
-                        The protocol(s) for this entrance. Supports "tcp", "udp" or multiple like "tcp,udp".
-                        Default is tcp/udp, "" means both tcp and udp.
+                        The protocol for this entrance. Supports "tcp" and "udp","".
+                        Default is tcp/udp, "" mean tcp and udp.
                       type: string
                   required:
                   - host

@@ -216,6 +216,9 @@ func ApplyAppEnv(ctx context.Context, c client.Client, appConfig *appcfg.Applica
 			env.Default = ""
 			env.Type = ""
 			env.Editable = false
+			env.Options = nil
+			env.RemoteOptions = ""
+			env.Regex = ""
 			env.ValueFrom.Status = constants.EnvRefStatusPending
 		}
 
