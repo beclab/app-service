@@ -71,20 +71,14 @@ func (h *HelmOps) SetValues() (values map[string]interface{}, err error) {
 			// userData = userspacePath + /Home
 
 			if perm == appcfg.AppCacheRW {
-				userspace["appCache"] = appCachePath
-				if h.options.Source == "devbox" {
-					userspace["appCache"] = filepath.Join(appCachePath, "studio")
-				}
+				userspace["appCache"] = filepath.Join(appCachePath, h.app.AppName)
 			}
 			if perm == appcfg.UserDataRW {
 				userspace["userData"] = fmt.Sprintf("%s/Home", userspacePath)
 			}
 			if perm == appcfg.AppDataRW {
 				appData := fmt.Sprintf("%s/Data", userspacePath)
-				userspace["appData"] = appData
-				if h.options.Source == "devbox" {
-					userspace["appData"] = filepath.Join(appData, "studio")
-				}
+				userspace["appData"] = filepath.Join(appData, h.app.AppName)
 			}
 
 		case []appcfg.ProviderPermission:
