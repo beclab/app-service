@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
-	"bytetrade.io/web3os/app-service/pkg/utils"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/klog/v2"
@@ -95,7 +94,7 @@ func InitializeSystemEnvProcessEnv(ctx context.Context, c client.Client) error {
 		if !migrated {
 			if alias, ok := legacyEnvAliases[se.EnvName]; ok && alias != "" {
 				if legacyVal, ok := os.LookupEnv(alias); ok && legacyVal != "" {
-					if err := utils.CheckEnvValueByType(legacyVal, se.Type); err != nil {
+					if err := se.ValidateValue(legacyVal); err != nil {
 						klog.Warningf("Skip migrating SystemEnv %s: legacy alias %s value invalid for type %s: %v", se.EnvName, alias, se.Type, err)
 					} else if se.Default != legacyVal {
 						original := se.DeepCopy()
