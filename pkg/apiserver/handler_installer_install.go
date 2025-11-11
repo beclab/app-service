@@ -38,7 +38,7 @@ type depRequest struct {
 type installHelperIntf interface {
 	getAdminUsers() (admin []string, isAdmin bool, err error)
 	getInstalledApps() (installed bool, app []*v1alpha1.Application, err error)
-	getAppConfig(adminUsers []string, marketSource string, isAdmin, appInstalled bool, installedApps []*v1alpha1.Application) (err error)
+	getAppConfig(adminUsers []string, marketSource string, isAdmin, appInstalled bool, installedApps []*v1alpha1.Application, chartVersion string) (err error)
 	setAppConfig(req *api.InstallRequest, appName string)
 	validate(bool, []*v1alpha1.Application) error
 	setAppEnv(overrides []sysv1alpha1.AppEnvVar) error
@@ -98,6 +98,14 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		rawAppName = insReq.RawAppName
 	}
 	klog.Infof("rawAppName: %s", rawAppName)
+	chartVersion := ""
+	if insReq.RawAppName != "" {
+		chartVersion, err = h.getOriginChartVersion(rawAppName, owner)
+		if err != nil {
+			api.HandleBadRequest(resp, req, err)
+			return
+		}
+	}
 
 	apiVersion, appCfg, err := apputils.GetApiVersionFromAppConfig(req.Request.Context(), &apputils.ConfigOptions{
 		App:          app,
@@ -105,7 +113,9 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		Owner:        owner,
 		RepoURL:      insReq.RepoURL,
 		MarketSource: marketSource,
+		Version:      chartVersion,
 	})
+	klog.Infof("chartVersion: %s", chartVersion)
 	if err != nil {
 		klog.Errorf("Failed to get api version err=%v", err)
 		api.HandleBadRequest(resp, req, err)
@@ -180,7 +190,7 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		return
 	}
 
-	err = helper.getAppConfig(adminUsers, marketSource, isAdmin, appInstalled, installedApps)
+	err = helper.getAppConfig(adminUsers, marketSource, isAdmin, appInstalled, installedApps, chartVersion)
 	if err != nil {
 		klog.Errorf("Failed to get app config err=%v", err)
 		return
@@ -229,6 +239,20 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		Response: api.Response{Code: 200},
 		Data:     api.InstallationResponseData{UID: app, OpID: opID},
 	})
+}
+
+func (h *Handler) getOriginChartVersion(rawAppName, owner string) (string, error) {
+	var ams v1alpha1.ApplicationManagerList
+	err := h.ctrlClient.List(context.TODO(), &ams)
+	if err != nil {
+		return "", err
+	}
+	for _, am := range ams.Items {
+		if am.Spec.AppName == rawAppName && am.Spec.AppOwner == owner {
+			return am.Annotations[api.AppVersionKey], nil
+		}
+	}
+	return "", fmt.Errorf("rawApp %s not found", rawAppName)
 }
 
 func (h *installHandlerHelper) getAdminUsers() (admin []string, isAdmin bool, err error) {
@@ -383,7 +407,7 @@ func (h *installHandlerHelper) getInstalledApps() (installed bool, app []*v1alph
 	return
 }
 
-func (h *installHandlerHelper) getAppConfig(adminUsers []string, marketSource string, isAdmin, appInstalled bool, installedApps []*v1alpha1.Application) (err error) {
+func (h *installHandlerHelper) getAppConfig(adminUsers []string, marketSource string, isAdmin, appInstalled bool, installedApps []*v1alpha1.Application, chartVersion string) (err error) {
 	var (
 		admin                   string
 		installAsAdmin          bool
@@ -428,7 +452,7 @@ func (h *installHandlerHelper) getAppConfig(adminUsers []string, marketSource st
 		RawAppName:   h.rawAppName,
 		Owner:        h.owner,
 		RepoURL:      h.insReq.RepoURL,
-		Version:      "",
+		Version:      chartVersion,
 		Admin:        admin,
 		IsAdmin:      installAsAdmin,
 		MarketSource: marketSource,
@@ -579,9 +603,10 @@ func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opI
 				},
 			},
 			"spec": map[string]interface{}{
-				"opType": v1alpha1.InstallOp,
-				"config": string(config),
-				"source": h.insReq.Source.String(),
+				"opType":     v1alpha1.InstallOp,
+				"config":     string(config),
+				"source":     h.insReq.Source.String(),
+				"rawAppName": h.rawAppName,
 			},
 		}
 		var patchByte []byte
@@ -689,7 +714,7 @@ func (h *installHandlerHelperV2) _validateClusterScope(isAdmin bool, installedAp
 	return nil
 }
 
-func (h *installHandlerHelperV2) getAppConfig(adminUsers []string, marketSource string, isAdmin, appInstalled bool, installedApps []*v1alpha1.Application) (err error) {
+func (h *installHandlerHelperV2) getAppConfig(adminUsers []string, marketSource string, isAdmin, appInstalled bool, installedApps []*v1alpha1.Application, chartVersion string) (err error) {
 	klog.Info("get app config for install handler v2")
 
 	var (
@@ -709,9 +734,10 @@ func (h *installHandlerHelperV2) getAppConfig(adminUsers []string, marketSource 
 
 	appConfig, _, err := apputils.GetAppConfig(h.req.Request.Context(), &apputils.ConfigOptions{
 		App:          h.app,
+		RawAppName:   h.rawAppName,
 		Owner:        h.owner,
 		RepoURL:      h.insReq.RepoURL,
-		Version:      "",
+		Version:      chartVersion,
 		Token:        h.token,
 		Admin:        admin,
 		MarketSource: marketSource,

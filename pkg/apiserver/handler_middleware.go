@@ -90,6 +90,7 @@ func (h *Handler) installMiddleware(req *restful.Request, resp *restful.Response
 		},
 		Spec: v1alpha1.ApplicationManagerSpec{
 			AppName:      app,
+			RawAppName:   app,
 			AppNamespace: middlewareConfig.Namespace,
 			AppOwner:     owner,
 			Source:       insReq.Source.String(),

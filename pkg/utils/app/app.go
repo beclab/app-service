@@ -306,6 +306,7 @@ func CreateSysAppMgr(app, owner string) error {
 		Spec: v1alpha1.ApplicationManagerSpec{
 			OpType:       v1alpha1.InstallOp,
 			AppName:      app,
+			RawAppName:   app,
 			AppNamespace: appNamespace,
 			AppOwner:     owner,
 			Source:       "system",
@@ -731,10 +732,10 @@ func getAppConfigFromRepo(ctx context.Context, options *ConfigOptions) (*appcfg.
 		klog.Errorf("failed to get index and download chart app: %s, rawAppName: %s, %v", options.App, options.RawAppName, err)
 		return nil, chartPath, err
 	}
-	return getAppConfigFromConfigurationFile(options.App, chartPath, options.Owner, options.Admin, options.IsAdmin)
+	return getAppConfigFromConfigurationFile(options, chartPath)
 }
 
-func toApplicationConfig(app, chart string, cfg *appcfg.AppConfiguration) (*appcfg.ApplicationConfig, string, error) {
+func toApplicationConfig(app, chart, rawAppName string, cfg *appcfg.AppConfiguration) (*appcfg.ApplicationConfig, string, error) {
 	var permission []appcfg.AppPermission
 	if cfg.Permission.AppData {
 		permission = append(permission, appcfg.AppDataRW)
@@ -823,6 +824,7 @@ func toApplicationConfig(app, chart string, cfg *appcfg.AppConfiguration) (*appc
 		APIVersion:     appcfg.APIVersion(cfg.APIVersion),
 		CfgFileVersion: cfg.ConfigVersion,
 		AppName:        app,
+		RawAppName:     rawAppName,
 		Title:          cfg.Metadata.Title,
 		Version:        cfg.Metadata.Version,
 		Target:         cfg.Metadata.Target,
@@ -866,17 +868,17 @@ func toApplicationConfig(app, chart string, cfg *appcfg.AppConfiguration) (*appc
 	}, chart, nil
 }
 
-func getAppConfigFromConfigurationFile(app, chart, owner, admin string, isAdmin bool) (*appcfg.ApplicationConfig, string, error) {
-	data, err := utils.RenderManifest(filepath.Join(chart, AppCfgFileName), owner, admin, isAdmin)
+func getAppConfigFromConfigurationFile(opt *ConfigOptions, chartPath string) (*appcfg.ApplicationConfig, string, error) {
+	data, err := utils.RenderManifest(filepath.Join(chartPath, AppCfgFileName), opt.Owner, opt.Admin, opt.IsAdmin)
 	if err != nil {
-		return nil, chart, err
+		return nil, chartPath, err
 	}
 	var cfg appcfg.AppConfiguration
 	if err := yaml.Unmarshal([]byte(data), &cfg); err != nil {
-		return nil, chart, err
+		return nil, chartPath, err
 	}
 
-	return toApplicationConfig(app, chart, &cfg)
+	return toApplicationConfig(opt.App, chartPath, opt.RawAppName, &cfg)
 }
 
 func checkVersionFormat(constraint string) error {
