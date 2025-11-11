@@ -579,9 +579,10 @@ func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opI
 				},
 			},
 			"spec": map[string]interface{}{
-				"opType": v1alpha1.InstallOp,
-				"config": string(config),
-				"source": h.insReq.Source.String(),
+				"opType":     v1alpha1.InstallOp,
+				"config":     string(config),
+				"source":     h.insReq.Source.String(),
+				"rawAppName": h.rawAppName,
 			},
 		}
 		var patchByte []byte
@@ -709,6 +710,7 @@ func (h *installHandlerHelperV2) getAppConfig(adminUsers []string, marketSource 
 
 	appConfig, _, err := apputils.GetAppConfig(h.req.Request.Context(), &apputils.ConfigOptions{
 		App:          h.app,
+		RawAppName:   h.rawAppName,
 		Owner:        h.owner,
 		RepoURL:      h.insReq.RepoURL,
 		Version:      "",
