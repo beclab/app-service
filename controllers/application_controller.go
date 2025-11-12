@@ -276,7 +276,6 @@ func (r *ApplicationReconciler) addWatch(c controller.Controller, cache cache.Ca
 func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.Request,
 	deployment client.Object, name string) error {
 	owner := deployment.GetLabels()[constants.ApplicationOwnerLabel]
-	rawAppName := deployment.GetLabels()[constants.ApplicationRawAppNameLabel]
 	appNames := getAppName(deployment)
 	isMultiApp := len(appNames) > 1
 	icon := getAppIcon(deployment)
@@ -302,6 +301,11 @@ func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.
 		appid = appv1alpha1.AppName(name).GetAppID()
 	}
 	settings := r.getAppSettings(ctx, name, appid, owner, deployment, isMultiApp, entrancesMap[name])
+
+	rawAppName := name
+	if deployment.GetLabels()[constants.ApplicationRawAppNameLabel] != "" {
+		rawAppName = deployment.GetLabels()[constants.ApplicationRawAppNameLabel]
+	}
 	// create the application cr
 	newapp := &appv1alpha1.Application{
 		TypeMeta: metav1.TypeMeta{},
@@ -503,7 +507,10 @@ func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, app
 	isMulti bool, entrances []appv1alpha1.Entrance) map[string]string {
 	settings := make(map[string]string)
 	settings["source"] = api.Unknown.String()
-	rawAppName := deployment.GetLabels()[constants.ApplicationRawAppNameLabel]
+	rawAppName := appName
+	if deployment.GetLabels()[constants.ApplicationRawAppNameLabel] != "" {
+		rawAppName = deployment.GetLabels()[constants.ApplicationRawAppNameLabel]
+	}
 
 	if chartSource, ok := deployment.GetAnnotations()[constants.ApplicationSourceLabel]; ok {
 		settings["source"] = chartSource
@@ -641,6 +648,8 @@ func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, app
 				}
 			}
 		}
+		klog.Infof("applicationPoliciesFromAnnotation: %s", applicationPoliciesFromAnnotation)
+		klog.Infof("policy: %#v", policy)
 
 		// transform from Policy to AppPolicy
 		var appPolicies []appcfg.AppPolicy
