@@ -4,10 +4,11 @@ import (
 	"fmt"
 	"path/filepath"
 
-	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
-
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
+	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/tapr"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // TODO: share the structs in projects
@@ -79,9 +80,10 @@ type Permission struct {
 }
 
 type ProviderPermission struct {
-	AppName      string `yaml:"appName" json:"appName"`
-	Namespace    string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
-	ProviderName string `yaml:"providerName" json:"providerName"`
+	AppName      string                 `yaml:"appName" json:"appName"`
+	Namespace    string                 `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+	ProviderName string                 `yaml:"providerName" json:"providerName"`
+	PodSelectors []metav1.LabelSelector `yaml:"podSelectors" json:"podSelectors"`
 }
 
 type Policy struct {

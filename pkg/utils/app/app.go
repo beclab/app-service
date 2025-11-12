@@ -818,6 +818,10 @@ func toApplicationConfig(app, chart, rawAppName string, cfg *appcfg.AppConfigura
 	if appcfg.APIVersion(cfg.APIVersion) == appcfg.V2 {
 		// V2: additional validation for app config
 	}
+	podSelectors := make([]metav1.LabelSelector, 0)
+	for _, p := range cfg.Permission.Provider {
+		podSelectors = append(podSelectors, p.PodSelectors...)
+	}
 
 	return &appcfg.ApplicationConfig{
 		AppID:          appid,
@@ -865,6 +869,7 @@ func toApplicationConfig(app, chart, rawAppName string, cfg *appcfg.AppConfigura
 		Envs:                 cfg.Envs,
 		Images:               cfg.Options.Images,
 		AllowMultipleInstall: cfg.Options.AllowMultipleInstall,
+		PodsSelectors:        podSelectors,
 	}, chart, nil
 }
 

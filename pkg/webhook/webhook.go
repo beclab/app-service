@@ -160,9 +160,6 @@ func (wh *Webhook) CreatePatch(
 
 	pod.Spec.Volumes = append(pod.Spec.Volumes, volume, sidecar.GetEnvoyConfigWorkVolume())
 
-	initContainer := sidecar.GetInitContainerSpec(appcfg)
-	pod.Spec.InitContainers = append(pod.Spec.InitContainers, initContainer)
-
 	clusterID := fmt.Sprintf("%s.%s", pod.Spec.ServiceAccountName, req.Name)
 	envoyFilename := constants.EnvoyConfigFilePath + "/" + constants.EnvoyConfigFileName
 	// pod is not an entrance pod, just inject outbound proxy
@@ -171,18 +168,21 @@ func (wh *Webhook) CreatePatch(
 	}
 	appKey, appSecret, _ := wh.getAppKeySecret(req.Namespace)
 
-	policySidecar := sidecar.GetEnvoySidecarContainerSpec(clusterID, envoyFilename, appKey, appSecret)
-	pod.Spec.Containers = append(pod.Spec.Containers, policySidecar)
+	if injectPolicy || wh.isSelected(appcfg.PodsSelectors, pod) {
+		initContainer := sidecar.GetInitContainerSpec(appcfg)
+		pod.Spec.InitContainers = append(pod.Spec.InitContainers, initContainer)
+		policySidecar := sidecar.GetEnvoySidecarContainerSpec(clusterID, envoyFilename, appKey, appSecret)
+		pod.Spec.Containers = append(pod.Spec.Containers, policySidecar)
 
-	pod.Spec.InitContainers = append(
-		[]corev1.Container{
-			sidecar.GetInitContainerSpecForWaitFor(appcfg.OwnerName),
-			sidecar.GetInitContainerSpecForRenderEnvoyConfig(),
-		},
-		pod.Spec.InitContainers...)
+		pod.Spec.InitContainers = append(
+			[]corev1.Container{
+				sidecar.GetInitContainerSpecForWaitFor(appcfg.OwnerName),
+				sidecar.GetInitContainerSpecForRenderEnvoyConfig(),
+			},
+			pod.Spec.InitContainers...)
+	}
 
 	if injectWs {
-
 		wsSidecar := sidecar.GetWebSocketSideCarContainerSpec(&appcfg.WsConfig)
 		pod.Spec.Containers = append(pod.Spec.Containers, wsSidecar)
 	}
@@ -557,4 +557,18 @@ func (wh *Webhook) getAppKeySecret(namespace string) (string, string, error) {
 		return appKey, appSecret, nil
 	}
 	return "", "", errors.New("nil applicationpermission object")
+}
+
+func (wh *Webhook) isSelected(podSelectors []metav1.LabelSelector, pod *corev1.Pod) bool {
+	for _, ps := range podSelectors {
+		ls, err := metav1.LabelSelectorAsSelector(&ps)
+		if err != nil {
+			continue
+		}
+		selected := ls.Matches(labels.Set(pod.Labels))
+		if selected {
+			return true
+		}
+	}
+	return false
 }

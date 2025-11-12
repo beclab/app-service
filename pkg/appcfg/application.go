@@ -11,6 +11,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/utils"
 
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
 )
 
@@ -95,6 +96,7 @@ type ApplicationConfig struct {
 	Images               []string
 	AllowMultipleInstall bool
 	RawAppName           string
+	PodsSelectors        []metav1.LabelSelector
 }
 
 func (c *ApplicationConfig) IsMiddleware() bool {

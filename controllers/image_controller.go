@@ -239,6 +239,9 @@ func (r *ImageManagerController) updateStatus(ctx context.Context, im *appv1alph
 				if node != thisNode {
 					continue
 				}
+				if imCopy.Status.Conditions == nil {
+					imCopy.Status.Conditions = make(map[string]map[string]map[string]string)
+				}
 				if imCopy.Status.Conditions[thisNode] == nil {
 					imCopy.Status.Conditions[thisNode] = make(map[string]map[string]string)
 				}
