@@ -232,7 +232,7 @@ func (r *PodAbnormalSuspendAppController) trySuspendApp(ctx context.Context, own
 		return false, err
 	}
 
-	utils.PublishAppEvent(am.Spec.AppOwner, am.Spec.AppName, string(status.OpType), opID, appv1alpha1.Stopping.String(), reason, nil)
+	utils.PublishAppEvent(am.Spec.AppOwner, am.Spec.AppName, string(status.OpType), opID, appv1alpha1.Stopping.String(), reason, nil, am.Spec.RawAppName)
 	klog.Infof("suspend requested for app=%s owner=%s, reason=%s", am.Spec.AppName, am.Spec.AppOwner, reason)
 	return true, nil
 }

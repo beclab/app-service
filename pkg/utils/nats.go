@@ -16,6 +16,7 @@ type Event struct {
 	EventID          string                    `json:"eventID"`
 	CreateTime       time.Time                 `json:"createTime"`
 	Name             string                    `json:"name"`
+	RawAppName       string                    `json:"rawAppName"`
 	Type             string                    `json:"type"`
 	OpType           string                    `json:"opType,omitempty"`
 	OpID             string                    `json:"opID,omitempty"`
@@ -54,7 +55,7 @@ func PublishUserEvent(topic, user, operator string) {
 	}
 }
 
-func PublishAppEvent(owner, name, opType, opID, state, progress string, entranceStatuses []v1alpha1.EntranceStatus) {
+func PublishAppEvent(owner, name, opType, opID, state, progress string, entranceStatuses []v1alpha1.EntranceStatus, rawAppName string) {
 	subject := fmt.Sprintf("os.application.%s", owner)
 
 	now := time.Now()
@@ -68,6 +69,12 @@ func PublishAppEvent(owner, name, opType, opID, state, progress string, entrance
 		State:      state,
 		Progress:   progress,
 		User:       owner,
+		RawAppName: func() string {
+			if rawAppName == "" {
+				return name
+			}
+			return rawAppName
+		}(),
 	}
 	if len(entranceStatuses) > 0 {
 		data.EntranceStatuses = entranceStatuses
@@ -111,7 +118,7 @@ func publish(subject string, data interface{}) error {
 	return nil
 }
 
-func PublishMiddlewareEvent(owner, name, opType, opID, state, progress string, entranceStatuses []v1alpha1.EntranceStatus) {
+func PublishMiddlewareEvent(owner, name, opType, opID, state, progress string, entranceStatuses []v1alpha1.EntranceStatus, rawAppName string) {
 	subject := fmt.Sprintf("os.application.%s", owner)
 
 	now := time.Now()
@@ -125,32 +132,12 @@ func PublishMiddlewareEvent(owner, name, opType, opID, state, progress string, e
 		State:      state,
 		Progress:   progress,
 		User:       owner,
-	}
-	if len(entranceStatuses) > 0 {
-		data.EntranceStatuses = entranceStatuses
-	}
-
-	if err := publish(subject, data); err != nil {
-		klog.Errorf("async publish subject %s,data %v, failed %v", subject, data, err)
-	} else {
-		klog.Infof("publish event success data: %#v", data)
-	}
-}
-
-func PublishAppEventToQueue(owner, name, opType, opID, state, progress string, entranceStatuses []v1alpha1.EntranceStatus) {
-	subject := fmt.Sprintf("os.application.%s", owner)
-
-	now := time.Now()
-	data := Event{
-		EventID:    fmt.Sprintf("%s-%s-%d", owner, name, now.UnixMilli()),
-		CreateTime: now,
-		Name:       name,
-		Type:       "app",
-		OpType:     opType,
-		OpID:       opID,
-		State:      state,
-		Progress:   progress,
-		User:       owner,
+		RawAppName: func() string {
+			if rawAppName == "" {
+				return name
+			}
+			return rawAppName
+		}(),
 	}
 	if len(entranceStatuses) > 0 {
 		data.EntranceStatuses = entranceStatuses

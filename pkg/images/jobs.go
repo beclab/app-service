@@ -84,7 +84,7 @@ func showProgress(ctx context.Context, rCtx *containerd.RemoteContext, ongoing *
 		descs, err = getAllLayerDescriptor(rCtx, desc, cs)
 		if err != nil {
 			attempt++
-			klog.Infof("attempt %d to get layer descriptor err=%v", attempt, err)
+			klog.Infof("image %s,attempt %d to get layer descriptor err=%v", ongoing.name, attempt, err)
 			return err
 		}
 		for _, desc := range descs {
@@ -214,7 +214,7 @@ outer:
 			}
 
 			if done {
-				klog.Infof("progress is done")
+				klog.Infof("image %s progress is done", ongoing.name)
 				return
 			}
 		case <-ctx.Done():

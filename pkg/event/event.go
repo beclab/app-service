@@ -80,7 +80,7 @@ func SetAppEventQueue(q *QueuedEventController) {
 	AppEventQueue = q
 }
 
-func PublishAppEventToQueue(owner, name, opType, opID, state, progress string, entranceStatuses []v1alpha1.EntranceStatus) {
+func PublishAppEventToQueue(owner, name, opType, opID, state, progress string, entranceStatuses []v1alpha1.EntranceStatus, rawAppName string) {
 	subject := fmt.Sprintf("os.application.%s", owner)
 
 	now := time.Now()
@@ -94,6 +94,12 @@ func PublishAppEventToQueue(owner, name, opType, opID, state, progress string, e
 		State:      state,
 		Progress:   progress,
 		User:       owner,
+		RawAppName: func() string {
+			if rawAppName == "" {
+				return name
+			}
+			return rawAppName
+		}(),
 	}
 	if len(entranceStatuses) > 0 {
 		data.EntranceStatuses = entranceStatuses
