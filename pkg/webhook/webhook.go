@@ -168,7 +168,7 @@ func (wh *Webhook) CreatePatch(
 	}
 	appKey, appSecret, _ := wh.getAppKeySecret(req.Namespace)
 
-	if injectPolicy || wh.isSelected(appcfg.PodsSelectors, pod) {
+	if injectPolicy || len(appcfg.PodsSelectors) == 0 || wh.isSelected(appcfg.PodsSelectors, pod) {
 		initContainer := sidecar.GetInitContainerSpec(appcfg)
 		pod.Spec.InitContainers = append(pod.Spec.InitContainers, initContainer)
 		policySidecar := sidecar.GetEnvoySidecarContainerSpec(clusterID, envoyFilename, appKey, appSecret)
