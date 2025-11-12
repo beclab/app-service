@@ -145,10 +145,18 @@ func (p *UpgradingApp) exec(ctx context.Context) error {
 		klog.Errorf("failed check is admin user %v", err)
 		return err
 	}
-	if !userspace.IsSysApp(p.manager.Spec.AppName) {
+	getRawAppName := func(rawAppName string) string {
+		if rawAppName == "" {
+			return p.manager.Spec.AppName
+		}
+		return rawAppName
+	}
+
+	if !userspace.IsSysApp(getRawAppName(p.manager.Spec.RawAppName)) {
 		appConfig, _, err = apputils.GetAppConfig(ctx, &apputils.ConfigOptions{
 			App:          p.manager.Spec.AppName,
 			Owner:        p.manager.Spec.AppOwner,
+			RawAppName:   getRawAppName(p.manager.Spec.RawAppName),
 			RepoURL:      repoURL,
 			Version:      version,
 			Token:        token,
@@ -164,6 +172,7 @@ func (p *UpgradingApp) exec(ctx context.Context) error {
 	} else {
 		_, err = apputils.GetIndexAndDownloadChart(ctx, &apputils.ConfigOptions{
 			App:          p.manager.Spec.AppName,
+			RawAppName:   getRawAppName(p.manager.Spec.RawAppName),
 			RepoURL:      repoURL,
 			Version:      version,
 			Token:        token,

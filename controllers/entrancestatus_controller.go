@@ -239,7 +239,7 @@ func (r *EntranceStatusManagerController) updateEntranceStatus(ctx context.Conte
 			return err
 		}
 		if err == nil {
-			appevent.PublishAppEventToQueue(appCopy.Spec.Owner, appCopy.Spec.Name, "", "", am.Status.State.String(), "", appCopy.Status.EntranceStatuses)
+			appevent.PublishAppEventToQueue(appCopy.Spec.Owner, appCopy.Spec.Name, "", "", am.Status.State.String(), "", appCopy.Status.EntranceStatuses, appCopy.Spec.RawAppName)
 		}
 	}
 	return nil

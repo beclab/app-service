@@ -269,7 +269,7 @@ func (h *Handler) setupAppEntranceDomain(req *restful.Request, resp *restful.Res
 			api.HandleError(resp, req, err)
 			return
 		}
-		utils.PublishAppEvent(am.Spec.AppOwner, am.Spec.AppName, string(am.Status.OpType), opID, v1alpha1.Upgrading.String(), "", nil)
+		utils.PublishAppEvent(am.Spec.AppOwner, am.Spec.AppName, string(am.Status.OpType), opID, v1alpha1.Upgrading.String(), "", nil, am.Spec.RawAppName)
 	}
 	resp.WriteAsJson(appUpdated.Spec.Settings)
 }

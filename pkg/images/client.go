@@ -217,7 +217,7 @@ func (imc *ImageManagerClient) updateProgress(ctx context.Context, am *appv1alph
 	if *lastProgress != progress {
 		*lastProgress = progress
 
-		appevent.PublishAppEventToQueue(am.Spec.AppOwner, am.Spec.AppName, string(am.Status.OpType), am.Status.OpID, appv1alpha1.Downloading.String(), progressStr, nil)
+		appevent.PublishAppEventToQueue(am.Spec.AppOwner, am.Spec.AppName, string(am.Status.OpType), am.Status.OpID, appv1alpha1.Downloading.String(), progressStr, nil, am.Spec.RawAppName)
 	}
 	klog.Infof("app %s download progress.... %v", am.Spec.AppName, progressStr)
 	if progressStr == "100.00" {

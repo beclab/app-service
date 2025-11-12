@@ -906,7 +906,7 @@ func GetIndexAndDownloadChart(ctx context.Context, options *ConfigOptions) (stri
 	}
 	klog.Infof("GetIndexAndDownloadChart: user: %v, source: %v", options.Owner, options.MarketSource)
 
-	indexFileURL += "index.yaml"
+	indexFileURL += "static-index.yaml"
 	resp, err := client.R().Get(indexFileURL)
 	if err != nil {
 		return "", err
@@ -1063,4 +1063,11 @@ func FormatCacheDirs(dirs []string) []string {
 
 func FormatAppEnvName(appName, appowner string) string {
 	return fmt.Sprintf("%s-%s", appName, appowner)
+}
+
+func IsClonedApp(appName, rawAppName string) bool {
+	if rawAppName != "" && rawAppName != appName {
+		return true
+	}
+	return false
 }
