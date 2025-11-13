@@ -104,6 +104,11 @@ func (wh *Webhook) CreateOrUpdateSandboxMutatingWebhook() error {
 							Operator: metav1.LabelSelectorOpNotIn,
 							Values:   security.GPUSystemNamespaces,
 						},
+						{
+							Key:      "kubernetes.io/metadata.name",
+							Operator: metav1.LabelSelectorOpNotIn,
+							Values:   security.OSProtectedNamespaces,
+						},
 					},
 				},
 				Rules: []admissionregv1.RuleWithOperations{
@@ -187,6 +192,30 @@ func (wh *Webhook) CreateOrUpdateAppNamespaceValidatingWebhook() error {
 				},
 				FailurePolicy: &failurePolicy,
 				MatchPolicy:   &matchPolicy,
+				NamespaceSelector: &metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "kubernetes.io/metadata.name",
+							Operator: metav1.LabelSelectorOpNotIn,
+							Values:   security.UnderLayerNamespaces,
+						},
+						{
+							Key:      "kubernetes.io/metadata.name",
+							Operator: metav1.LabelSelectorOpNotIn,
+							Values:   security.OSSystemNamespaces,
+						},
+						{
+							Key:      "kubernetes.io/metadata.name",
+							Operator: metav1.LabelSelectorOpNotIn,
+							Values:   security.OSNetworkNamespaces,
+						},
+						{
+							Key:      "kubernetes.io/metadata.name",
+							Operator: metav1.LabelSelectorOpNotIn,
+							Values:   security.GPUSystemNamespaces,
+						},
+					},
+				},
 				Rules: []admissionregv1.RuleWithOperations{
 					{
 						Operations: []admissionregv1.OperationType{admissionregv1.Create},
@@ -268,6 +297,30 @@ func (wh *Webhook) CreateOrUpdateGpuLimitMutatingWebhook() error {
 				},
 				FailurePolicy: &failurePolicy,
 				MatchPolicy:   &matchPolicy,
+				NamespaceSelector: &metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "kubernetes.io/metadata.name",
+							Operator: metav1.LabelSelectorOpNotIn,
+							Values:   security.UnderLayerNamespaces,
+						},
+						{
+							Key:      "kubernetes.io/metadata.name",
+							Operator: metav1.LabelSelectorOpNotIn,
+							Values:   security.OSSystemNamespaces,
+						},
+						{
+							Key:      "kubernetes.io/metadata.name",
+							Operator: metav1.LabelSelectorOpNotIn,
+							Values:   security.OSNetworkNamespaces,
+						},
+						{
+							Key:      "kubernetes.io/metadata.name",
+							Operator: metav1.LabelSelectorOpNotIn,
+							Values:   security.GPUSystemNamespaces,
+						},
+					},
+				},
 				ObjectSelector: &metav1.LabelSelector{
 					MatchExpressions: []metav1.LabelSelectorRequirement{
 						{
@@ -623,6 +676,30 @@ func (wh *Webhook) CreateOrUpdateAppLabelMutatingWebhook() error {
 				},
 				FailurePolicy: &failurePolicy,
 				MatchPolicy:   &matchPolicy,
+				NamespaceSelector: &metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "kubernetes.io/metadata.name",
+							Operator: metav1.LabelSelectorOpNotIn,
+							Values:   security.UnderLayerNamespaces,
+						},
+						{
+							Key:      "kubernetes.io/metadata.name",
+							Operator: metav1.LabelSelectorOpNotIn,
+							Values:   security.OSSystemNamespaces,
+						},
+						{
+							Key:      "kubernetes.io/metadata.name",
+							Operator: metav1.LabelSelectorOpNotIn,
+							Values:   security.OSNetworkNamespaces,
+						},
+						{
+							Key:      "kubernetes.io/metadata.name",
+							Operator: metav1.LabelSelectorOpNotIn,
+							Values:   security.GPUSystemNamespaces,
+						},
+					},
+				},
 				ObjectSelector: &metav1.LabelSelector{
 					MatchExpressions: []metav1.LabelSelectorRequirement{
 						{
