@@ -258,6 +258,31 @@ func (h *Handler) operateHistory(req *restful.Request, resp *restful.Response) {
 	resp.WriteAsJson(map[string]interface{}{"result": ops})
 }
 
+func (h *Handler) allAppManagers(req *restful.Request, resp *restful.Response) {
+	ams, err := h.appmgrLister.List(labels.Everything())
+	if err != nil {
+		klog.Errorf("failed to get appmgr list %v", err)
+		api.HandleError(resp, req, err)
+		return
+	}
+	ret := make([]v1alpha1.ApplicationManager, 0, len(ams))
+	for _, am := range ams {
+		if am.Spec.Type != v1alpha1.App && am.Spec.Type != v1alpha1.Middleware {
+			continue
+		}
+		if userspace.IsSysApp(am.Spec.AppName) {
+			continue
+		}
+		am.ManagedFields = make([]metav1.ManagedFieldsEntry, 0)
+		am.Annotations[api.AppTokenKey] = ""
+		am.Annotations[constants.ApplicationImageLabel] = ""
+		am.Spec.Config = ""
+		am.Status.OpRecords = make([]v1alpha1.OpRecord, 0)
+		ret = append(ret, *am.DeepCopy())
+	}
+	resp.WriteAsJson(ret)
+}
+
 func (h *Handler) allOperateHistory(req *restful.Request, resp *restful.Response) {
 	owner := req.Attribute(constants.UserContextAttribute).(string)
 	source := req.QueryParameter("source")
