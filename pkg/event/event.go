@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -80,29 +79,32 @@ func SetAppEventQueue(q *QueuedEventController) {
 	AppEventQueue = q
 }
 
-func PublishAppEventToQueue(owner, name, opType, opID, state, progress string, entranceStatuses []v1alpha1.EntranceStatus, rawAppName string) {
-	subject := fmt.Sprintf("os.application.%s", owner)
+func PublishAppEventToQueue(p utils.EventParams) {
+	subject := fmt.Sprintf("os.application.%s", p.Owner)
 
 	now := time.Now()
 	data := utils.Event{
-		EventID:    fmt.Sprintf("%s-%s-%d", owner, name, now.UnixMilli()),
+		EventID:    fmt.Sprintf("%s-%s-%d", p.Owner, p.Name, now.UnixMilli()),
 		CreateTime: now,
-		Name:       name,
+		Name:       p.Name,
 		Type:       "app",
-		OpType:     opType,
-		OpID:       opID,
-		State:      state,
-		Progress:   progress,
-		User:       owner,
+		OpType:     p.OpType,
+		OpID:       p.OpID,
+		State:      p.State,
+		Progress:   p.Progress,
+		User:       p.Owner,
 		RawAppName: func() string {
-			if rawAppName == "" {
-				return name
+			if p.RawAppName == "" {
+				return p.Name
 			}
-			return rawAppName
+			return p.RawAppName
 		}(),
+		Title:   p.Title,
+		Reason:  p.Reason,
+		Message: p.Message,
 	}
-	if len(entranceStatuses) > 0 {
-		data.EntranceStatuses = entranceStatuses
+	if len(p.EntranceStatuses) > 0 {
+		data.EntranceStatuses = p.EntranceStatuses
 	}
 
 	AppEventQueue.enqueue(&QueueEvent{Subject: subject, Data: data})

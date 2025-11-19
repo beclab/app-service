@@ -94,7 +94,7 @@ func (p *InstallingApp) Exec(ctx context.Context) (StatefulInProgressApp, error)
 
 						p.finally = func() {
 							klog.Infof("app %s pods is still pending, update app state to stopping", p.manager.Spec.AppName)
-							updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.Stopping, nil, err.Error())
+							updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.Stopping, nil, err.Error(), constants.AppUnschedulable)
 							if updateErr != nil {
 								klog.Errorf("update status failed %v", updateErr)
 								return
@@ -107,7 +107,7 @@ func (p *InstallingApp) Exec(ctx context.Context) (StatefulInProgressApp, error)
 					p.finally = func() {
 						klog.Errorf("app %s install failed, update app state to installFailed", p.manager.Spec.AppName)
 						opRecord := makeRecord(p.manager, appsv1.InstallFailed, fmt.Sprintf(constants.OperationFailedTpl, p.manager.Spec.OpType, err.Error()))
-						updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.InstallFailed, opRecord, err.Error())
+						updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.InstallFailed, opRecord, err.Error(), "")
 						if updateErr != nil {
 							klog.Errorf("update status failed %v", updateErr)
 						}
@@ -118,7 +118,7 @@ func (p *InstallingApp) Exec(ctx context.Context) (StatefulInProgressApp, error)
 
 				p.finally = func() {
 					klog.Infof("app %s install successfully, update app state to initializing", p.manager.Spec.AppName)
-					updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.Initializing, nil, appsv1.Initializing.String())
+					updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.Initializing, nil, appsv1.Initializing.String(), "")
 					if updateErr != nil {
 						klog.Errorf("update status failed %v", updateErr)
 						return
@@ -132,7 +132,7 @@ func (p *InstallingApp) Exec(ctx context.Context) (StatefulInProgressApp, error)
 						if err != nil {
 							p.finally = func() {
 								klog.Info("update app manager status to installing canceling, ", p.manager.Name)
-								updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.InstallingCanceling, nil, appsv1.InstallingCanceling.String())
+								updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.InstallingCanceling, nil, appsv1.InstallingCanceling.String(), constants.AppStopDueToInitFailed)
 								if updateErr != nil {
 									klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.InstallingCanceling, updateErr)
 									return
@@ -145,7 +145,7 @@ func (p *InstallingApp) Exec(ctx context.Context) (StatefulInProgressApp, error)
 					p.finally = func() {
 						message := fmt.Sprintf(constants.InstallOperationCompletedTpl, p.manager.Spec.Type.String(), p.manager.Spec.AppName)
 						opRecord := makeRecord(p.manager, appsv1.Running, message)
-						updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.Running, opRecord, appsv1.Running.String())
+						updateErr := p.updateStatus(context.TODO(), p.manager, appsv1.Running, opRecord, appsv1.Running.String(), "")
 						if updateErr != nil {
 							klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.Running, updateErr)
 							return
@@ -160,7 +160,7 @@ func (p *InstallingApp) Exec(ctx context.Context) (StatefulInProgressApp, error)
 }
 
 func (p *InstallingApp) Cancel(ctx context.Context) error {
-	err := p.updateStatus(ctx, p.manager, appsv1.InstallingCanceling, nil, constants.OperationCanceledByTerminusTpl)
+	err := p.updateStatus(ctx, p.manager, appsv1.InstallingCanceling, nil, constants.OperationCanceledByTerminusTpl, "")
 	if err != nil {
 		klog.Errorf("update appmgr state to installingCanceling state failed %v", err)
 		return err

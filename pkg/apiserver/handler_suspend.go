@@ -55,6 +55,8 @@ func (h *Handler) suspend(req *restful.Request, resp *restful.Response) {
 		OpType:     v1alpha1.StopOp,
 		OpID:       opID,
 		State:      v1alpha1.Stopping,
+		Reason:     constants.AppStopByUser,
+		Message:    fmt.Sprintf("app %s was stop by user %s", am.Spec.AppName, am.Spec.AppOwner),
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
@@ -63,7 +65,18 @@ func (h *Handler) suspend(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
-	utils.PublishAppEvent(a.Spec.AppOwner, a.Spec.AppName, string(a.Status.OpType), opID, v1alpha1.Stopping.String(), "", nil, a.Spec.RawAppName)
+	utils.PublishAppEvent(utils.EventParams{
+		Owner:      a.Spec.AppOwner,
+		Name:       a.Spec.AppName,
+		OpType:     string(a.Status.OpType),
+		OpID:       opID,
+		State:      v1alpha1.Stopping.String(),
+		RawAppName: a.Spec.RawAppName,
+		Type:       "app",
+		Title:      apputils.AppTitle(a.Spec.Config),
+		Reason:     constants.AppStopByUser,
+		Message:    fmt.Sprintf("app %s was stop by user %s", a.Spec.AppName, a.Spec.AppOwner),
+	})
 
 	resp.WriteEntity(api.InstallationResponse{
 		Response: api.Response{Code: 200},
@@ -105,6 +118,7 @@ func (h *Handler) resume(req *restful.Request, resp *restful.Response) {
 		OpType:     v1alpha1.ResumeOp,
 		OpID:       opID,
 		State:      v1alpha1.Resuming,
+		Message:    fmt.Sprintf("app %s was resume by user %s", am.Spec.AppName, am.Spec.AppOwner),
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
@@ -113,7 +127,17 @@ func (h *Handler) resume(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
-	utils.PublishAppEvent(a.Spec.AppOwner, a.Spec.AppName, string(a.Status.OpType), opID, v1alpha1.Resuming.String(), "", nil, a.Spec.RawAppName)
+	utils.PublishAppEvent(utils.EventParams{
+		Owner:      a.Spec.AppOwner,
+		Name:       a.Spec.AppName,
+		OpType:     string(a.Status.OpType),
+		OpID:       opID,
+		State:      v1alpha1.Resuming.String(),
+		RawAppName: a.Spec.RawAppName,
+		Type:       "app",
+		Title:      apputils.AppTitle(a.Spec.Config),
+		Message:    fmt.Sprintf("app %s was resume by user %s", a.Spec.AppName, a.Spec.AppOwner),
+	})
 
 	resp.WriteEntity(api.InstallationResponse{
 		Response: api.Response{Code: 200},

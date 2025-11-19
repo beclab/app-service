@@ -1131,7 +1131,16 @@ func (h *Handler) applicationManagerMutate(req *restful.Request, resp *restful.R
 		return
 	}
 	if pam != nil {
-		utils.PublishAppEvent(pam.Spec.AppOwner, pam.Spec.AppName, string(pam.Spec.OpType), pam.Status.OpID, pam.Status.State.String(), "", nil, pam.Spec.RawAppName)
+		utils.PublishAppEvent(utils.EventParams{
+			Owner:      pam.Spec.AppOwner,
+			Name:       pam.Spec.AppName,
+			OpType:     string(pam.Spec.OpType),
+			OpID:       pam.Status.OpID,
+			State:      pam.Status.State.String(),
+			RawAppName: pam.Spec.RawAppName,
+			Type:       "app",
+			Title:      apputils.AppTitle(pam.Spec.Config),
+		})
 	}
 
 	klog.Infof("Done[application-manager inject] with uuid=%s in namespace=%s", proxyUUID, requestForNamespace)

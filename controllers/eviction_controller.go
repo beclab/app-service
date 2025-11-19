@@ -76,7 +76,7 @@ func (r *EvictionManagerController) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 		return ctrl.Result{}, err
 	}
-	nss := append(security.UnderLayerNamespaces, append(security.OSSystemNamespaces, security.GPUSystemNamespaces...)...)
+	nss := append(security.UnderLayerNamespaces, security.GPUSystemNamespaces...)
 	ignoredNs := sets.NewString(nss...)
 
 	podName := pod.GetName()
@@ -91,10 +91,6 @@ func (r *EvictionManagerController) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 	klog.Infof("pod.Name=%s, pod.Namespace=%s,pod.Status.Reason=%s,message=%s", podName, podNamespace, pod.Status.Reason, pod.Status.Message)
 
-	err = r.Delete(ctx, &pod)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
 	var nodes corev1.NodeList
 	err = r.List(ctx, &nodes, &client.ListOptions{})
 	if err != nil {
@@ -116,6 +112,10 @@ func (r *EvictionManagerController) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 	_, err = r.setDeployOrStsReplicas(ctx, podName, podNamespace, int32(0))
 	if err != nil {
+		return ctrl.Result{}, err
+	}
+	err = r.Delete(ctx, &pod)
+	if err != nil && !apierrors.IsNotFound(err) {
 		return ctrl.Result{}, err
 	}
 

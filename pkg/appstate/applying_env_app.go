@@ -65,7 +65,7 @@ func (a *ApplyingEnvApp) Exec(ctx context.Context) (StatefulInProgressApp, error
 						opRecord := makeRecord(a.manager, appsv1.ApplyEnvFailed,
 							fmt.Sprintf(constants.OperationFailedTpl, a.manager.Spec.OpType, err.Error()))
 
-						updateErr := a.updateStatus(context.Background(), a.manager, appsv1.ApplyEnvFailed, opRecord, err.Error())
+						updateErr := a.updateStatus(context.Background(), a.manager, appsv1.ApplyEnvFailed, opRecord, err.Error(), "")
 						if updateErr != nil {
 							klog.Errorf("update appmgr state to ApplyEnvFailed state failed %v", updateErr)
 							return
@@ -76,7 +76,7 @@ func (a *ApplyingEnvApp) Exec(ctx context.Context) (StatefulInProgressApp, error
 
 				a.finally = func() {
 					klog.Info("ApplyEnv operation success, update app status to Initializing, ", a.manager.Name)
-					updateErr := a.updateStatus(context.Background(), a.manager, appsv1.Initializing, nil, "Environment variables applied, waiting for application to initialize")
+					updateErr := a.updateStatus(context.Background(), a.manager, appsv1.Initializing, nil, "Environment variables applied, waiting for application to initialize", "")
 					if updateErr != nil {
 						klog.Errorf("update appmgr state to Initializing state failed %v", updateErr)
 					}
@@ -120,7 +120,7 @@ func (a *ApplyingEnvApp) exec(ctx context.Context) error {
 }
 
 func (a *ApplyingEnvApp) Cancel(ctx context.Context) error {
-	err := a.updateStatus(ctx, a.manager, appsv1.ApplyingEnvCanceling, nil, constants.OperationCanceledByTerminusTpl)
+	err := a.updateStatus(ctx, a.manager, appsv1.ApplyingEnvCanceling, nil, constants.OperationCanceledByTerminusTpl, "")
 	if err != nil {
 		klog.Errorf("update appmgr state to upgradingCanceling state failed %v", err)
 		return err

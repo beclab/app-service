@@ -222,7 +222,16 @@ func (r *AppEnvController) triggerApplyEnv(ctx context.Context, appEnv *sysv1alp
 	if err != nil {
 		return fmt.Errorf("failed to update ApplicationManager Status: %v", err)
 	}
-	utils.PublishAppEvent(am.Spec.AppOwner, am.Spec.AppName, string(am.Status.OpType), opID, appv1alpha1.ApplyingEnv.String(), "", nil, am.Spec.RawAppName)
+	utils.PublishAppEvent(utils.EventParams{
+		Owner:      am.Spec.AppOwner,
+		Name:       am.Spec.AppName,
+		OpType:     string(am.Status.OpType),
+		OpID:       opID,
+		State:      appv1alpha1.ApplyingEnv.String(),
+		RawAppName: am.Spec.RawAppName,
+		Type:       "app",
+		Title:      apputils.AppTitle(am.Spec.Config),
+	})
 
 	klog.Infof("Successfully triggered ApplyEnv for app: %s owner: %s", appEnv.AppName, appEnv.AppOwner)
 	return nil

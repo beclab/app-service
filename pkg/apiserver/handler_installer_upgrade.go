@@ -345,7 +345,7 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		OpType:     appv1alpha1.UpgradeOp,
 		OpID:       opID,
 		State:      appv1alpha1.Upgrading,
-		Message:    "waiting for upgrade",
+		Message:    fmt.Sprintf("app %s was upgrade by user %s", appCopy.Spec.AppName, appCopy.Spec.AppOwner),
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
@@ -355,7 +355,16 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
-	utils.PublishAppEvent(am.Spec.AppOwner, am.Spec.AppName, string(am.Status.OpType), opID, appv1alpha1.Upgrading.String(), "", nil, am.Spec.RawAppName)
+	utils.PublishAppEvent(utils.EventParams{
+		Owner:      am.Spec.AppOwner,
+		Name:       am.Spec.AppName,
+		OpType:     string(am.Status.OpType),
+		OpID:       opID,
+		State:      appv1alpha1.Upgrading.String(),
+		RawAppName: am.Spec.RawAppName,
+		Type:       "app",
+		Title:      apputils.AppTitle(am.Spec.Config),
+	})
 
 	resp.WriteEntity(api.InstallationResponse{
 		Response: api.Response{Code: 200},

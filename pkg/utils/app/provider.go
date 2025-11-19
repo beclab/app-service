@@ -118,6 +118,7 @@ func (c ProviderPermissionsConvertor) findProviderInMarket(ctx context.Context, 
 			Admin:        owner,
 			MarketSource: m,
 			IsAdmin:      false,
+			RawAppName:   appName,
 		}
 		appCfg, _, err = GetAppConfig(ctx, &o)
 		if err != nil {

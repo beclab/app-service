@@ -56,7 +56,7 @@ func (p *DownloadingCancelingApp) Exec(ctx context.Context) (StatefulInProgressA
 	opRecord := makeRecord(p.manager, appsv1.DownloadingCanceled, message)
 
 	// FIXME: should check if the image downloading is canceled successfully
-	updateErr := p.updateStatus(ctx, p.manager, appsv1.DownloadingCanceled, opRecord, message)
+	updateErr := p.updateStatus(ctx, p.manager, appsv1.DownloadingCanceled, opRecord, message, "")
 	if updateErr != nil {
 		klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.DownloadingCanceled.String(), updateErr)
 		return nil, updateErr
@@ -65,7 +65,7 @@ func (p *DownloadingCancelingApp) Exec(ctx context.Context) (StatefulInProgressA
 }
 
 func (p *DownloadingCancelingApp) Cancel(ctx context.Context) error {
-	err := p.updateStatus(ctx, p.manager, appsv1.DownloadingCancelFailed, nil, appsv1.DownloadingCancelFailed.String())
+	err := p.updateStatus(ctx, p.manager, appsv1.DownloadingCancelFailed, nil, appsv1.DownloadingCancelFailed.String(), "")
 	if err != nil {
 		klog.Errorf("update state to %s failed %v", appsv1.DownloadingCancelFailed.String(), err)
 		return err
