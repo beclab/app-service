@@ -155,7 +155,7 @@ func getEnvoyConfig(appcfg *appcfg.ApplicationConfig, injectPolicy, injectWs, in
 			return appcfg.ApiTimeout
 		}()}
 
-	ec := New(appcfg.OwnerName, setCookieInlineCode, getHTTProbePath(pod), opts)
+	ec := New(appcfg.OwnerName, setCookieInlineCode, nil, opts)
 	if injectPolicy {
 		ec.WithPolicy()
 	}
@@ -758,6 +758,11 @@ func (ec *envoyConfig) WithPolicy() *envoyConfig {
 									{
 										MatchPattern: &matcherv3.StringMatcher_Exact{
 											Exact: "terminus-nonce",
+										},
+									},
+									{
+										MatchPattern: &matcherv3.StringMatcher_Exact{
+											Exact: "user-agent",
 										},
 									},
 								},

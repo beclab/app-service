@@ -2,6 +2,8 @@ package webhook
 
 import (
 	"context"
+	"crypto"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -197,7 +199,73 @@ func (wh *Webhook) CreatePatch(
 		pod.Annotations = make(map[string]string)
 	}
 	pod.Annotations[UUIDAnnotation] = proxyUUID.String()
+
+	// add header to probes
+	if err := wh.patchProbeHeaders(ctx, pod); err != nil {
+		klog.Errorf("Failed to patch probe headers for pod=%s/%s err=%v", pod.Namespace, pod.Name, err)
+		return nil, err
+	}
 	return makePatches(req, pod)
+}
+
+func (wh *Webhook) getProbeUA(ctx context.Context, pod *corev1.Pod) (string, error) {
+	secret, err := wh.kubeClient.CoreV1().Secrets("os-framework").Get(ctx, "authelia-secrets", metav1.GetOptions{})
+	if err != nil {
+		klog.Errorf("Failed to get authelia-secrets in os-framework namespace err=%v", err)
+		return "", err
+	}
+	signSecret, ok := secret.Data["probe_secret"]
+	if !ok {
+		klog.Errorf("Failed to get probe_secret in authelia-secrets")
+		return "", fmt.Errorf("probe-secret not found in authelia-secrets")
+	}
+
+	uuid := pod.Annotations[UUIDAnnotation]
+	MD5 := func(str string) string {
+		h := crypto.MD5.New()
+		h.Write([]byte(str))
+		return hex.EncodeToString(h.Sum(nil))
+	}
+	sign := MD5(uuid + string(signSecret))
+	return fmt.Sprintf("%s/%s", uuid, sign), nil
+}
+
+func (wh *Webhook) patchProbeHeaders(ctx context.Context, pod *corev1.Pod) error {
+	const UA_HEADER = "User-Agent"
+	ua, err := wh.getProbeUA(ctx, pod)
+	if err != nil {
+		klog.Errorf("Failed to get probe UA for pod=%s/%s err=%v", pod.Namespace, pod.Name, err)
+		return err
+	}
+
+	setProbeUA := func(action *corev1.HTTPGetAction) {
+		for i, h := range action.HTTPHeaders {
+			if h.Name == UA_HEADER {
+				action.HTTPHeaders[i].Value = ua
+				return
+			}
+		}
+
+		// not found, add new header
+		action.HTTPHeaders = append(action.HTTPHeaders, corev1.HTTPHeader{
+			Name:  UA_HEADER,
+			Value: ua,
+		})
+	}
+
+	for _, c := range pod.Spec.Containers {
+		if c.LivenessProbe != nil && c.LivenessProbe.HTTPGet != nil {
+			setProbeUA(c.LivenessProbe.HTTPGet)
+		}
+		if c.ReadinessProbe != nil && c.ReadinessProbe.HTTPGet != nil {
+			setProbeUA(c.ReadinessProbe.HTTPGet)
+		}
+		if c.StartupProbe != nil && c.StartupProbe.HTTPGet != nil {
+			setProbeUA(c.StartupProbe.HTTPGet)
+		}
+	}
+
+	return nil
 }
 
 // PatchAdmissionResponse returns an admission response with patch data.
