@@ -87,7 +87,16 @@ func (h *Handler) cancel(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
-	utils.PublishAppEvent(a.Spec.AppOwner, a.Spec.AppName, string(a.Status.OpType), opID, cancelState.String(), "", nil, a.Spec.RawAppName)
+	utils.PublishAppEvent(utils.EventParams{
+		Owner:      a.Spec.AppOwner,
+		Name:       a.Spec.AppName,
+		OpType:     string(a.Status.OpType),
+		OpID:       opID,
+		State:      cancelState.String(),
+		RawAppName: a.Spec.RawAppName,
+		Type:       "app",
+		Title:      apputils.AppTitle(a.Spec.Config),
+	})
 
 	resp.WriteAsJson(api.InstallationResponse{
 		Response: api.Response{Code: 200},

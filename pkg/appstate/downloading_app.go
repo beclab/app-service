@@ -37,7 +37,7 @@ func (r *downloadingInProgressApp) WaitAsync(ctx context.Context) {
 	appFactory.waitForPolling(ctx, r, func(err error) {
 		if err != nil {
 			if !errors.Is(err, context.Canceled) {
-				updateErr := r.updateStatus(context.TODO(), r.manager, appsv1.DownloadFailed, nil, appsv1.DownloadFailed.String())
+				updateErr := r.updateStatus(context.TODO(), r.manager, appsv1.DownloadFailed, nil, err.Error(), "")
 				if updateErr != nil {
 					klog.Errorf("update app manager %s to %s state failed %v", r.manager.Name, appsv1.DownloadFailed.String(), updateErr)
 					return
@@ -47,7 +47,7 @@ func (r *downloadingInProgressApp) WaitAsync(ctx context.Context) {
 			return
 		}
 
-		updateErr := r.updateStatus(context.TODO(), r.manager, appsv1.Installing, nil, appsv1.Installing.String())
+		updateErr := r.updateStatus(context.TODO(), r.manager, appsv1.Installing, nil, appsv1.Installing.String(), "")
 		if updateErr != nil {
 			klog.Errorf("update app manager %s to %s state failed %v", r.manager.Name, appsv1.Installing.String(), updateErr)
 			return
@@ -92,7 +92,7 @@ func NewDownloadingApp(c client.Client,
 func (p *DownloadingApp) Cancel(ctx context.Context) error {
 	// only cancel the downloading operation when the app is timeout
 	klog.Infof("call timeout downloadingApp cancel....")
-	err := p.updateStatus(ctx, p.manager, appsv1.DownloadingCanceling, nil, constants.OperationCanceledByTerminusTpl)
+	err := p.updateStatus(ctx, p.manager, appsv1.DownloadingCanceling, nil, constants.OperationCanceledByTerminusTpl, "")
 	if err != nil {
 		klog.Errorf("update app manager name=%s to downloadingCanceling state failed %v", p.manager.Name, err)
 		return err
@@ -105,7 +105,7 @@ func (p *DownloadingApp) Exec(ctx context.Context) (StatefulInProgressApp, error
 	if err != nil {
 		klog.Errorf("app %s downloading failed %v", p.manager.Spec.AppName, err)
 		opRecord := makeRecord(p.manager, appsv1.DownloadFailed, fmt.Sprintf(constants.OperationFailedTpl, p.manager.Spec.OpType, err.Error()))
-		updateErr := p.updateStatus(ctx, p.manager, appsv1.DownloadFailed, opRecord, err.Error())
+		updateErr := p.updateStatus(ctx, p.manager, appsv1.DownloadFailed, opRecord, err.Error(), "")
 		if updateErr != nil {
 			klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.DownloadFailed.String(), updateErr)
 			err = errors.Wrapf(err, "update status failed %v", updateErr)

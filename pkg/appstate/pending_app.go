@@ -8,6 +8,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	appevent "bytetrade.io/web3os/app-service/pkg/event"
 	"bytetrade.io/web3os/app-service/pkg/helm"
+	"bytetrade.io/web3os/app-service/pkg/utils"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
 	corev1 "k8s.io/api/core/v1"
@@ -96,7 +97,16 @@ func (p *PendingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
 				klog.Error("update app manager status error, ", err, ", ", p.manager.Name)
 				return err
 			}
-			appevent.PublishAppEventToQueue(p.manager.Spec.AppOwner, p.manager.Spec.AppName, string(p.manager.Spec.OpType), p.manager.Status.OpID, appsv1.Downloading.String(), "", nil, p.manager.Spec.RawAppName)
+			appevent.PublishAppEventToQueue(utils.EventParams{
+				Owner:      p.manager.Spec.AppOwner,
+				Name:       p.manager.Spec.AppName,
+				OpType:     string(p.manager.Spec.OpType),
+				OpID:       p.manager.Status.OpID,
+				State:      appsv1.Downloading.String(),
+				RawAppName: p.manager.Spec.RawAppName,
+				Type:       "app",
+				Title:      apputils.AppTitle(p.manager.Spec.Config),
+			})
 
 			return nil
 		},
@@ -112,7 +122,7 @@ func (p *PendingApp) Exec(ctx context.Context) (StatefulInProgressApp, error) {
 }
 
 func (p *PendingApp) Cancel(ctx context.Context) error {
-	err := p.updateStatus(context.TODO(), p.manager, appsv1.PendingCanceled, nil, constants.OperationCanceledByUserTpl)
+	err := p.updateStatus(context.TODO(), p.manager, appsv1.PendingCanceled, nil, constants.OperationCanceledByUserTpl, "")
 	if err != nil {
 		klog.Infof("Failed to update applicationmanagers status name=%s err=%v", p.manager.Name, err)
 	}

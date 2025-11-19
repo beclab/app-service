@@ -12,6 +12,8 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/appinstaller"
 	"bytetrade.io/web3os/app-service/pkg/appinstaller/versioned"
 	appevent "bytetrade.io/web3os/app-service/pkg/event"
+	"bytetrade.io/web3os/app-service/pkg/utils"
+	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -46,7 +48,7 @@ func (b *baseStatefulApp) State() string {
 // }
 
 func (b *baseStatefulApp) updateStatus(ctx context.Context, am *appsv1.ApplicationManager, state appsv1.ApplicationManagerState,
-	opRecord *appsv1.OpRecord, message string) error {
+	opRecord *appsv1.OpRecord, message, reason string) error {
 	var err error
 
 	err = b.client.Get(ctx, types.NamespacedName{Name: am.Name}, am)
@@ -58,6 +60,9 @@ func (b *baseStatefulApp) updateStatus(ctx context.Context, am *appsv1.Applicati
 	amCopy := am.DeepCopy()
 	amCopy.Status.State = state
 	amCopy.Status.Message = message
+	if reason != "" {
+		amCopy.Status.Reason = reason
+	}
 	amCopy.Status.StatusTime = &now
 	amCopy.Status.UpdateTime = &now
 	amCopy.Status.OpGeneration += 1
@@ -72,7 +77,18 @@ func (b *baseStatefulApp) updateStatus(ctx context.Context, am *appsv1.Applicati
 		klog.Errorf("patch appmgr's  %s status failed %v", am.Name, err)
 		return err
 	}
-	appevent.PublishAppEventToQueue(b.manager.Spec.AppOwner, b.manager.Spec.AppName, string(b.manager.Spec.OpType), b.manager.Status.OpID, state.String(), "", nil, b.manager.Spec.RawAppName)
+	appevent.PublishAppEventToQueue(utils.EventParams{
+		Owner:      b.manager.Spec.AppOwner,
+		Name:       b.manager.Spec.AppName,
+		OpType:     string(b.manager.Spec.OpType),
+		OpID:       b.manager.Status.OpID,
+		State:      state.String(),
+		RawAppName: b.manager.Spec.RawAppName,
+		Type:       "app",
+		Title:      apputils.AppTitle(b.manager.Spec.Config),
+		Reason:     reason,
+		Message:    message,
+	})
 
 	return nil
 }
@@ -81,7 +97,7 @@ func (p *baseStatefulApp) forceDeleteApp(ctx context.Context) error {
 	token := p.manager.Annotations[api.AppTokenKey]
 	if p.manager.Spec.Config == "" && p.manager.Spec.Source == "system" {
 		klog.Infof("app %s config is empty, source is system", p.manager.Name)
-		err := p.updateStatus(ctx, p.manager, appsv1.Uninstalled, nil, appsv1.Uninstalled.String())
+		err := p.updateStatus(ctx, p.manager, appsv1.Uninstalled, nil, appsv1.Uninstalled.String(), "")
 		if err != nil {
 			klog.Errorf("update app manager %s to state %s failed", p.manager.Name, appsv1.Uninstalled)
 			return err
@@ -114,7 +130,7 @@ func (p *baseStatefulApp) forceDeleteApp(ctx context.Context) error {
 			return err
 		}
 	}
-	err = p.updateStatus(ctx, p.manager, appsv1.Uninstalled, nil, appsv1.Uninstalled.String())
+	err = p.updateStatus(ctx, p.manager, appsv1.Uninstalled, nil, appsv1.Uninstalled.String(), "")
 	if err != nil {
 		klog.Errorf("update app manager %s to state %s failed", p.manager.Name, appsv1.Uninstalled)
 		return err

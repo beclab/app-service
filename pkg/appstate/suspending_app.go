@@ -9,8 +9,10 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/kubeblocks"
 	"bytetrade.io/web3os/app-service/pkg/users/userspace"
+	"bytetrade.io/web3os/app-service/pkg/utils"
 
 	kbopv1alpha1 "github.com/apecloud/kubeblocks/apis/operations/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -44,7 +46,7 @@ func (p *SuspendingApp) Exec(ctx context.Context) (StatefulInProgressApp, error)
 	if err != nil {
 		klog.Errorf("suspend app %s failed %v", p.manager.Spec.AppName, err)
 		opRecord := makeRecord(p.manager, appsv1.StopFailed, fmt.Sprintf(constants.OperationFailedTpl, p.manager.Spec.OpType, err.Error()))
-		updateErr := p.updateStatus(ctx, p.manager, appsv1.StopFailed, opRecord, err.Error())
+		updateErr := p.updateStatus(ctx, p.manager, appsv1.StopFailed, opRecord, err.Error(), "")
 		if updateErr != nil {
 			klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.StopFailed, err)
 			return nil, updateErr
@@ -54,7 +56,16 @@ func (p *SuspendingApp) Exec(ctx context.Context) (StatefulInProgressApp, error)
 	}
 
 	opRecord := makeRecord(p.manager, appsv1.Stopped, fmt.Sprintf(constants.StopOperationCompletedTpl, p.manager.Spec.AppName))
-	updateErr := p.updateStatus(ctx, p.manager, appsv1.Stopped, opRecord, appsv1.Stopped.String())
+	// Read latest status directly from apiserver to avoid cache staleness
+	reason := p.manager.Status.Reason
+	if cli, err := utils.GetClient(); err == nil {
+		if am, err := cli.AppV1alpha1().ApplicationManagers().Get(ctx, p.manager.Name, metav1.GetOptions{}); err == nil && am != nil {
+			if am.Status.Reason != "" {
+				reason = am.Status.Reason
+			}
+		}
+	}
+	updateErr := p.updateStatus(ctx, p.manager, appsv1.Stopped, opRecord, fmt.Sprintf(constants.StopOperationCompletedTpl, p.manager.Spec.AppName), reason)
 	if updateErr != nil {
 		klog.Errorf("update app manager %s to %s state failed %v", p.manager.Name, appsv1.Stopped.String(), err)
 		return nil, updateErr

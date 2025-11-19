@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -171,6 +172,9 @@ func UpdateAppMgrStatus(name string, status v1alpha1.ApplicationManagerStatus) (
 		}
 		if status.Message == "" {
 			status.Message = appMgrCopy.Status.Message
+		}
+		if status.Reason == "" {
+			status.Reason = appMgrCopy.Status.Reason
 		}
 		payload := status.Payload
 		if payload == nil {
@@ -1070,4 +1074,13 @@ func IsClonedApp(appName, rawAppName string) bool {
 		return true
 	}
 	return false
+}
+
+func AppTitle(config string) string {
+	var cfg appcfg.ApplicationConfig
+	err := json.Unmarshal([]byte(config), &cfg)
+	if err != nil {
+		return ""
+	}
+	return cfg.Title
 }

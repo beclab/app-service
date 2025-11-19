@@ -74,7 +74,16 @@ func (h *Handler) appApplyEnv(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
-	utils.PublishAppEvent(am.Spec.AppOwner, am.Spec.AppName, string(am.Status.OpType), opID, appv1alpha1.ApplyingEnv.String(), "", nil, am.Spec.RawAppName)
+	utils.PublishAppEvent(utils.EventParams{
+		Owner:      am.Spec.AppOwner,
+		Name:       am.Spec.AppName,
+		OpType:     string(am.Status.OpType),
+		OpID:       opID,
+		State:      appv1alpha1.ApplyingEnv.String(),
+		RawAppName: am.Spec.RawAppName,
+		Type:       "app",
+		Title:      apputils.AppTitle(am.Spec.Config),
+	})
 
 	resp.WriteEntity(api.Response{Code: 200})
 }

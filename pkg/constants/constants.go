@@ -111,6 +111,13 @@ const (
 
 	// AppEnvSyncAnnotation triggers AppEnvController to sync environment values from SystemEnv or UserEnv changes
 	AppEnvSyncAnnotation = "appenv.bytetrade.io/sync-triggered-by"
+
+	AppForceUninstall      = "ForceUninstall"
+	AppForceUninstalled    = "ForceUninstalled"
+	AppUnschedulable       = "Unschedulable"
+	AppStopByUser          = "StopByUser"
+	AppStopDueToInitFailed = "InitFailed"
+	AppStopDueToEvicted    = "Evicted"
 )
 
 var (

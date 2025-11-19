@@ -6,6 +6,8 @@ import (
 
 	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
 	appevent "bytetrade.io/web3os/app-service/pkg/event"
+	"bytetrade.io/web3os/app-service/pkg/utils"
+	"bytetrade.io/web3os/app-service/pkg/utils/app"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -239,7 +241,18 @@ func (r *EntranceStatusManagerController) updateEntranceStatus(ctx context.Conte
 			return err
 		}
 		if err == nil {
-			appevent.PublishAppEventToQueue(appCopy.Spec.Owner, appCopy.Spec.Name, "", "", am.Status.State.String(), "", appCopy.Status.EntranceStatuses, appCopy.Spec.RawAppName)
+			klog.Infof("pushevent app Reason: %s", am.Status.Reason)
+			appevent.PublishAppEventToQueue(utils.EventParams{
+				Owner:            appCopy.Spec.Owner,
+				Name:             appCopy.Spec.Name,
+				OpType:           "",
+				OpID:             "",
+				State:            am.Status.State.String(),
+				EntranceStatuses: appCopy.Status.EntranceStatuses,
+				RawAppName:       appCopy.Spec.RawAppName,
+				Type:             "app",
+				Title:            app.AppTitle(am.Spec.Config),
+			})
 		}
 	}
 	return nil

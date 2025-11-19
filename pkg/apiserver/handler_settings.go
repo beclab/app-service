@@ -259,7 +259,7 @@ func (h *Handler) setupAppEntranceDomain(req *restful.Request, resp *restful.Res
 			OpType:     v1alpha1.UpgradeOp,
 			OpID:       opID,
 			State:      v1alpha1.Upgrading,
-			Message:    "waiting for upgrade",
+			Message:    fmt.Sprintf("app %s was upgrade via setup domain by user %s", appMgrCopy.Spec.AppName, appMgrCopy.Spec.AppOwner),
 			StatusTime: &now,
 			UpdateTime: &now,
 		}
@@ -269,7 +269,17 @@ func (h *Handler) setupAppEntranceDomain(req *restful.Request, resp *restful.Res
 			api.HandleError(resp, req, err)
 			return
 		}
-		utils.PublishAppEvent(am.Spec.AppOwner, am.Spec.AppName, string(am.Status.OpType), opID, v1alpha1.Upgrading.String(), "", nil, am.Spec.RawAppName)
+		utils.PublishAppEvent(utils.EventParams{
+			Owner:      am.Spec.AppOwner,
+			Name:       am.Spec.AppName,
+			OpType:     string(am.Status.OpType),
+			OpID:       opID,
+			State:      v1alpha1.Upgrading.String(),
+			RawAppName: am.Spec.RawAppName,
+			Type:       "app",
+			Title:      apputils.AppTitle(am.Spec.Config),
+			Message:    fmt.Sprintf("app %s was upgrade via setup domain by user %s", am.Spec.AppName, am.Spec.AppOwner),
+		})
 	}
 	resp.WriteAsJson(appUpdated.Spec.Settings)
 }

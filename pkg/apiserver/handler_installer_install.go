@@ -643,7 +643,16 @@ func (h *installHandlerHelper) applyApplicationManager(marketSource string) (opI
 		return
 	}
 
-	utils.PublishAppEvent(a.Spec.AppOwner, a.Spec.AppName, string(a.Status.OpType), opID, v1alpha1.Pending.String(), "", nil, a.Spec.RawAppName)
+	utils.PublishAppEvent(utils.EventParams{
+		Owner:      a.Spec.AppOwner,
+		Name:       a.Spec.AppName,
+		OpType:     string(a.Status.OpType),
+		OpID:       opID,
+		State:      v1alpha1.Pending.String(),
+		RawAppName: a.Spec.RawAppName,
+		Type:       "app",
+		Title:      apputils.AppTitle(a.Spec.Config),
+	})
 	return
 }
 

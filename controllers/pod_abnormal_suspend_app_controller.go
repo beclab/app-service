@@ -121,7 +121,7 @@ func (r *PodAbnormalSuspendAppController) Reconcile(ctx context.Context, req ctr
 
 	if pod.Status.Reason == "Evicted" {
 		klog.Infof("pod evicted name=%s namespace=%s, attempting to suspend app=%s owner=%s", pod.Name, pod.Namespace, appName, owner)
-		ok, err := r.trySuspendApp(ctx, owner, appName, "evicted pod: "+pod.Namespace+"/"+pod.Name)
+		ok, err := r.trySuspendApp(ctx, owner, appName, constants.AppStopDueToEvicted, "evicted pod: "+pod.Namespace+"/"+pod.Name)
 		if err != nil {
 			klog.Errorf("suspend attempt failed for app=%s owner=%s: %v", appName, owner, err)
 			return ctrl.Result{}, err
@@ -148,7 +148,7 @@ func (r *PodAbnormalSuspendAppController) Reconcile(ctx context.Context, req ctr
 		}
 
 		klog.Infof("attempting to suspend app=%s owner=%s due to pending unschedulable timeout", appName, owner)
-		ok, err := r.trySuspendApp(ctx, owner, appName, "pending unschedulable timeout on pod: "+pod.Namespace+"/"+pod.Name)
+		ok, err := r.trySuspendApp(ctx, owner, appName, constants.AppUnschedulable, "pending unschedulable timeout on pod: "+pod.Namespace+"/"+pod.Name)
 		if err != nil {
 			klog.Errorf("suspend attempt failed for app=%s owner=%s: %v", appName, owner, err)
 			return ctrl.Result{}, err
@@ -192,7 +192,7 @@ func pendingUnschedulableSince(pod *corev1.Pod) (time.Time, bool) {
 
 // trySuspendApp attempts to suspend the app and returns (true, nil) if a suspend request was issued.
 // If the app is not suspendable yet, returns (false, nil) to trigger a short requeue.
-func (r *PodAbnormalSuspendAppController) trySuspendApp(ctx context.Context, owner, appName, reason string) (bool, error) {
+func (r *PodAbnormalSuspendAppController) trySuspendApp(ctx context.Context, owner, appName, reason, message string) (bool, error) {
 	name, err := apputils.FmtAppMgrName(appName, owner, "")
 	if err != nil {
 		klog.Errorf("failed to format app manager name app=%s owner=%s: %v", appName, owner, err)
@@ -206,6 +206,9 @@ func (r *PodAbnormalSuspendAppController) trySuspendApp(ctx context.Context, own
 		}
 		klog.Errorf("failed to get applicationmanager name=%s for app=%s owner=%s: %v", name, appName, owner, err)
 		return false, err
+	}
+	if am.Status.State == appv1alpha1.Stopped {
+		return true, nil
 	}
 
 	if !appstate.IsOperationAllowed(am.Status.State, appv1alpha1.StopOp) {
@@ -227,13 +230,27 @@ func (r *PodAbnormalSuspendAppController) trySuspendApp(ctx context.Context, own
 		State:      appv1alpha1.Stopping,
 		StatusTime: &now,
 		UpdateTime: &now,
+		Reason:     reason,
+		Message:    message,
 	}
 	if _, err := apputils.UpdateAppMgrStatus(name, status); err != nil {
 		return false, err
 	}
 
-	utils.PublishAppEvent(am.Spec.AppOwner, am.Spec.AppName, string(status.OpType), opID, appv1alpha1.Stopping.String(), reason, nil, am.Spec.RawAppName)
-	klog.Infof("suspend requested for app=%s owner=%s, reason=%s", am.Spec.AppName, am.Spec.AppOwner, reason)
+	utils.PublishAppEvent(utils.EventParams{
+		Owner:      am.Spec.AppOwner,
+		Name:       am.Spec.AppName,
+		OpType:     string(status.OpType),
+		OpID:       opID,
+		State:      appv1alpha1.Stopping.String(),
+		Progress:   message,
+		RawAppName: am.Spec.RawAppName,
+		Type:       "app",
+		Title:      apputils.AppTitle(am.Spec.Config),
+		Reason:     reason,
+		Message:    message,
+	})
+	klog.Infof("suspend requested for app=%s owner=%s, reason=%s", am.Spec.AppName, am.Spec.AppOwner, message)
 	return true, nil
 }
 

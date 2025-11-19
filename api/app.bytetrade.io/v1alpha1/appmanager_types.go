@@ -33,6 +33,7 @@ type ApplicationManagerStatus struct {
 	OpID         string                  `json:"opId,omitempty"`
 	State        ApplicationManagerState `json:"state,omitempty"`
 	OpRecords    []OpRecord              `json:"opRecords,omitempty"`
+	Reason       string                  `json:"reason,omitempty"`
 	Message      string                  `json:"message,omitempty"`
 	Payload      map[string]string       `json:"payload,omitempty"`
 	Progress     string                  `json:"progress,omitempty"`
