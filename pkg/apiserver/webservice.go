@@ -453,6 +453,12 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Returns(http.StatusOK, "success to get list of app for all user", nil))
 
+	ws.Route(ws.GET("/all/appmanagers").
+		To(handler.allAppManagers).
+		Doc("get list of application managers for all user, exclude system apps").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Returns(http.StatusOK, "success to get list of application managers", nil))
+
 	ws.Route(ws.GET("/apps/{"+ParamAppName+"}").
 		To(handler.getApp).
 		Doc("get an app").

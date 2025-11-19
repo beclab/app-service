@@ -215,7 +215,8 @@ func CheckAppRequirement(token string, appConfig *appcfg.ApplicationConfig) (str
 
 	switch {
 	case appConfig.Requirement.Disk != nil &&
-		appConfig.Requirement.Disk.CmpInt64(int64(metrics.Disk.Total-metrics.Disk.Usage)) > 0:
+		appConfig.Requirement.Disk.CmpInt64(int64(metrics.Disk.Total*0.9-metrics.Disk.Usage)) > 0 ||
+		int64(metrics.Disk.Total*0.9-metrics.Disk.Usage) < 5*1024*1024*1024:
 		return "disk", errors.New("The app's DISK requirement cannot be satisfied")
 	case appConfig.Requirement.Memory != nil &&
 		appConfig.Requirement.Memory.CmpInt64(int64(metrics.Memory.Total*0.9-metrics.Memory.Usage)) > 0:
