@@ -677,6 +677,9 @@ func (h *installHandlerHelper) setAppEnv(overrides []sysv1alpha1.AppEnvVar) (err
 			if h.appConfig.Envs[i].EnvName == override.EnvName {
 				found = true
 				h.appConfig.Envs[i].Value = override.Value
+				if override.ValueFrom != nil {
+					h.appConfig.Envs[i].ValueFrom = override.ValueFrom
+				}
 			}
 		}
 		if !found {
