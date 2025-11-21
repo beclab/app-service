@@ -111,20 +111,21 @@ func (h *Handler) mutate(ctx context.Context, req *admissionv1.AdmissionRequest,
 	}
 	var (
 		injectPolicy, injectWs, injectUpload bool
+		injectSharedPod                      *bool
 		appMgr                               *v1alpha1.ApplicationManager
 		appCfg                               *appcfg_mod.ApplicationConfig
 		perms                                []appcfg.ProviderPermission
 	)
-	if injectPolicy, injectWs, injectUpload, perms, appCfg, appMgr, err = h.sidecarWebhook.MustInject(ctx, &pod, req.Namespace); err != nil {
+	if injectPolicy, injectWs, injectUpload, injectSharedPod, perms, appCfg, appMgr, err = h.sidecarWebhook.MustInject(ctx, &pod, req.Namespace); err != nil {
 		return h.sidecarWebhook.AdmissionError(req.UID, err)
 	}
-	klog.Infof("injectPolicy=%v, injectWs=%v, injectUpload=%v, perms=%v", injectPolicy, injectWs, injectUpload, perms)
-	if !injectPolicy && !injectWs && !injectUpload && len(perms) == 0 {
+	klog.Infof("injectPolicy=%v, injectWs=%v, injectUpload=%v, injectSharedPod=%v, perms=%v", injectPolicy, injectWs, injectUpload, injectSharedPod, perms)
+	if !injectPolicy && !injectWs && !injectUpload && injectSharedPod == nil && len(perms) == 0 {
 		klog.Infof("Skipping sidecar injection for pod with uuid=%s namespace=%s", proxyUUID, req.Namespace)
 		return resp
 	}
 
-	patchBytes, err := h.sidecarWebhook.CreatePatch(ctx, &pod, req, proxyUUID, injectPolicy, injectWs, injectUpload, appMgr, appCfg, perms)
+	patchBytes, err := h.sidecarWebhook.CreatePatch(ctx, &pod, req, proxyUUID, injectPolicy, injectWs, injectUpload, injectSharedPod, appMgr, appCfg, perms)
 	if err != nil {
 		klog.Errorf("Failed to create patch for pod uuid=%s name=%s namespace=%s err=%v", proxyUUID, pod.Name, req.Namespace, err)
 		return h.sidecarWebhook.AdmissionError(req.UID, err)

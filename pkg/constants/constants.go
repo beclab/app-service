@@ -118,6 +118,8 @@ const (
 	AppStopByUser          = "StopByUser"
 	AppStopDueToInitFailed = "InitFailed"
 	AppStopDueToEvicted    = "Evicted"
+
+	AppSharedEntrancesLabel = "app.bytetrade.io/shared-entrance"
 )
 
 var (

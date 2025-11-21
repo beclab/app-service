@@ -41,6 +41,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
@@ -137,6 +138,7 @@ func (wh *Webhook) CreatePatch(
 	pod *corev1.Pod,
 	req *admissionv1.AdmissionRequest,
 	proxyUUID uuid.UUID, injectPolicy, injectWs, injectUpload bool,
+	injectSharedPod *bool,
 	appmgr *v1alpha1.ApplicationManager,
 	appcfg *appcfg_mod.ApplicationConfig,
 	perms []appcfg.ProviderPermission,
@@ -192,6 +194,19 @@ func (wh *Webhook) CreatePatch(
 		uploadSidecar := sidecar.GetUploadSideCarContainerSpec(pod, &appcfg.Upload)
 		if uploadSidecar != nil {
 			pod.Spec.Containers = append(pod.Spec.Containers, *uploadSidecar)
+		}
+	}
+
+	if injectSharedPod != nil {
+		if *injectSharedPod {
+			if pod.Labels == nil {
+				pod.Labels = make(map[string]string)
+			}
+			pod.Labels[constants.AppSharedEntrancesLabel] = "true"
+		} else {
+			if pod.Labels != nil {
+				delete(pod.Labels, constants.AppSharedEntrancesLabel)
+			}
 		}
 	}
 
@@ -287,7 +302,7 @@ func (wh *Webhook) AdmissionError(uid types.UID, err error) *admissionv1.Admissi
 
 // MustInject checks which inject operation should do for a pod.
 func (wh *Webhook) MustInject(ctx context.Context, pod *corev1.Pod, namespace string) (
-	injectPolicy, injectWs, injectUpload bool, perms []appcfg.ProviderPermission,
+	injectPolicy, injectWs, injectUpload bool, injectSharedPod *bool, perms []appcfg.ProviderPermission,
 	appCfg *appcfg_mod.ApplicationConfig, appMgr *v1alpha1.ApplicationManager, err error) {
 
 	perms = make([]appcfg.ProviderPermission, 0)
@@ -349,21 +364,43 @@ func (wh *Webhook) MustInject(ctx context.Context, pod *corev1.Pod, namespace st
 		}
 
 	}
+
+	injectPolicy = false
 	for _, e := range appCfg.Entrances {
 		var isEntrancePod bool
 		isEntrancePod, err = wh.isAppEntrancePod(ctx, appCfg.AppName, e.Host, pod, namespace)
 		klog.Infof("entranceName=%s isEntrancePod=%v", e.Name, isEntrancePod)
 		if err != nil {
-			return false, false, false, perms, nil, nil, err
+			return false, false, false, nil, perms, nil, nil, err
 		}
 
 		if isEntrancePod {
 			injectPolicy = true
-			return
+			break
 		}
 	}
 
-	injectPolicy = false
+	for _, e := range appCfg.SharedEntrances {
+		var isEntrancePod bool
+		isEntrancePod, err = wh.isAppEntrancePod(ctx, appCfg.AppName, e.Host, pod, namespace)
+		klog.Infof("entranceName=%s isEntrancePod=%v", e.Name, isEntrancePod)
+		if err != nil {
+			return false, false, false, nil, perms, nil, nil, err
+		}
+
+		if isEntrancePod {
+			injectSharedPod = ptr.To(true)
+			break
+		}
+	}
+
+	// not a shared entrance pod, should not have the shared entrance label
+	if injectSharedPod == nil && pod.Labels != nil {
+		if v, ok := pod.Labels[constants.AppSharedEntrancesLabel]; ok && v == "false" {
+			injectSharedPod = ptr.To(false)
+		}
+	}
+
 	return
 }
 
