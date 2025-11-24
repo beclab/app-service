@@ -874,6 +874,7 @@ func toApplicationConfig(app, chart, rawAppName string, cfg *appcfg.AppConfigura
 		Images:               cfg.Options.Images,
 		AllowMultipleInstall: cfg.Options.AllowMultipleInstall,
 		PodsSelectors:        podSelectors,
+		SharedEntrances:      cfg.SharedEntrances,
 	}, chart, nil
 }
 

@@ -387,7 +387,7 @@ func (r *SecurityReconciler) reconcileNetworkPolicy(ctx context.Context, ns *cor
 			networkPolicy.SetNamespace(ns.Name)
 			npFix = nil
 		} else if security.IsOSSystemNamespace(ns.Name) {
-			networkPolicy = security.NetworkPolicies{security.NPOSSystem.DeepCopy(), security.NSFilesPolicy.DeepCopy(), security.NPSystemProvider.DeepCopy()}
+			networkPolicy = security.NetworkPolicies{security.NPOSSystem.DeepCopy(), security.NSFilesPolicy.DeepCopy(), security.NPSystemProvider.DeepCopy(), security.NPSystemMiddleware.DeepCopy()}
 			networkPolicy.SetName("os-system-np")
 			networkPolicy.SetNamespace(ns.Name)
 			npFix = nil
@@ -487,7 +487,7 @@ func (r *SecurityReconciler) reconcileNetworkPolicy(ctx context.Context, ns *cor
 			}
 		} else if shared, ok := ns.Labels[security.NamespaceSharedLabel]; ok && shared != "false" {
 			// shared namespace networkpolicy
-			networkPolicy = security.NetworkPolicies{security.NPSharedSpace.DeepCopy(), security.NPSystemProvider.DeepCopy()}
+			networkPolicy = security.NetworkPolicies{security.NPSharedSpace.DeepCopy(), security.NPSystemProvider.DeepCopy(), security.NPSharedEntrance.DeepCopy()}
 			networkPolicy.SetName("shared-np")
 			networkPolicy.SetNamespace(ns.Name)
 			npFix = func(np *netv1.NetworkPolicy) {

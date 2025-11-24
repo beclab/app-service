@@ -1,6 +1,7 @@
 package security
 
 import (
+	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/utils"
 
 	netv1 "k8s.io/api/networking/v1"
@@ -29,7 +30,7 @@ var (
 		},
 	} // end NPDenyAll
 
-	// NPAllowAll is a network policy template deny all ingress.
+	// NPAllowAll is a network policy template allow all ingress.
 	NPAllowAll = netv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{},
 		Spec: netv1.NetworkPolicySpec{
@@ -432,6 +433,59 @@ var (
 			},
 		},
 	} // end NPOSSystemProvider
+
+	// allow cluster scoped applications in shared namespace to access system middleware services
+	NPSystemMiddleware = netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "system-middleware-np",
+		},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					constants.AppSharedEntrancesLabel: "true",
+				},
+			},
+			Ingress: []netv1.NetworkPolicyIngressRule{
+				{
+					From: []netv1.NetworkPolicyPeer{
+						{
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									NamespaceSharedLabel: "true",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	} // end NPSystemMiddleware
+
+	NPSharedEntrance = netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "shared-entrance-np",
+		},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					constants.AppSharedEntrancesLabel: "true",
+				},
+			},
+			Ingress: []netv1.NetworkPolicyIngressRule{
+				{
+					From: []netv1.NetworkPolicyPeer{
+						{
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									NamespaceSharedLabel: "true",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	} // end NPSharedEntrance
 )
 
 // NodeTunnelRule returns node tunnel rule.

@@ -97,6 +97,7 @@ type ApplicationConfig struct {
 	AllowMultipleInstall bool
 	RawAppName           string
 	PodsSelectors        []metav1.LabelSelector
+	SharedEntrances      []v1alpha1.Entrance
 }
 
 func (c *ApplicationConfig) IsMiddleware() bool {

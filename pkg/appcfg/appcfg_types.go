@@ -39,6 +39,9 @@ type AppConfiguration struct {
 	Options       Options                 `yaml:"options" json:"options" description:"app options"`
 	Provider      []Provider              `yaml:"provider,omitempty" json:"provider,omitempty" description:"app provider information"`
 	Envs          []sysv1alpha1.AppEnvVar `yaml:"envs,omitempty" json:"envs,omitempty"`
+
+	// Only for v2 c/s apps to share the api to other cluster scope apps
+	SharedEntrances []v1alpha1.Entrance `yaml:"sharedEntrances,omitempty" json:"sharedEntrances,omitempty"`
 }
 
 type AppSpec struct {
