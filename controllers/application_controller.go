@@ -300,7 +300,7 @@ func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.
 	} else {
 		appid = appv1alpha1.AppName(name).GetAppID()
 	}
-	settings := r.getAppSettings(ctx, name, appid, owner, deployment, isMultiApp, entrancesMap[name])
+	settings, sharedEntrances := r.getAppSettings(ctx, name, appid, owner, deployment, isMultiApp, entrancesMap[name])
 
 	rawAppName := name
 	if deployment.GetLabels()[constants.ApplicationRawAppNameLabel] != "" {
@@ -313,17 +313,18 @@ func (r *ApplicationReconciler) createApplication(ctx context.Context, req ctrl.
 			Name: fmtAppName(name, req.Namespace),
 		},
 		Spec: appv1alpha1.ApplicationSpec{
-			Name:           name,
-			RawAppName:     rawAppName,
-			Appid:          appid,
-			IsSysApp:       isSysApp,
-			Namespace:      req.Namespace,
-			Owner:          owner, // get from deployment
-			DeploymentName: deployment.GetName(),
-			Entrances:      entrancesMap[name],
-			Ports:          servicePortsMap[name],
-			Icon:           icon[name],
-			Settings:       settings,
+			Name:            name,
+			RawAppName:      rawAppName,
+			Appid:           appid,
+			IsSysApp:        isSysApp,
+			Namespace:       req.Namespace,
+			Owner:           owner, // get from deployment
+			DeploymentName:  deployment.GetName(),
+			Entrances:       entrancesMap[name],
+			SharedEntrances: sharedEntrances,
+			Ports:           servicePortsMap[name],
+			Icon:            icon[name],
+			Settings:        settings,
 		},
 	}
 	if tailScale != nil {
@@ -504,8 +505,8 @@ func (r *ApplicationReconciler) getEntranceServiceAddress(ctx context.Context, d
 }
 
 func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, appId, owner string, deployment client.Object,
-	isMulti bool, entrances []appv1alpha1.Entrance) map[string]string {
-	settings := make(map[string]string)
+	isMulti bool, entrances []appv1alpha1.Entrance) (settings map[string]string, sharedEntrances []appv1alpha1.Entrance) {
+	settings = make(map[string]string)
 	settings["source"] = api.Unknown.String()
 	rawAppName := appName
 	if deployment.GetLabels()[constants.ApplicationRawAppNameLabel] != "" {
@@ -579,6 +580,8 @@ func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, app
 				if len(appCfg.AppScope.AppRef) > 0 {
 					settings["clusterAppRef"] = strings.Join(appCfg.AppScope.AppRef, ",")
 				}
+
+				sharedEntrances = appCfg.SharedEntrances
 			}
 			if appCfg.MobileSupported {
 				settings["mobileSupported"] = "true"
@@ -677,7 +680,7 @@ func (r *ApplicationReconciler) getAppSettings(ctx context.Context, appName, app
 		}
 	}
 
-	return settings
+	return
 }
 
 func (r *ApplicationReconciler) clearHelmHistory(appname, namespace string) error {

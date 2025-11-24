@@ -44,8 +44,11 @@ type ApplicationSpec struct {
 	// the owner of the application
 	Owner string `json:"owner,omitempty"`
 
-	//Entrances []Entrance `json:"entrances,omitempty"`
+	// Entrances []Entrance `json:"entrances,omitempty"`
 	Entrances []Entrance `json:"entrances,omitempty"`
+
+	// SharedEntrances contains entrances shared with other applications
+	SharedEntrances []Entrance `json:"sharedEntrances,omitempty"`
 
 	Ports         []ServicePort `json:"ports,omitempty"`
 	TailScale     TailScale     `json:"tailscale,omitempty"`

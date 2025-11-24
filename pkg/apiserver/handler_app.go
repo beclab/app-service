@@ -435,14 +435,15 @@ func (h *Handler) apps(req *restful.Request, resp *restful.Response) {
 				CreationTimestamp: am.CreationTimestamp,
 			},
 			Spec: v1alpha1.ApplicationSpec{
-				Name:       am.Spec.AppName,
-				RawAppName: am.Spec.RawAppName,
-				Appid:      v1alpha1.AppName(am.Spec.AppName).GetAppID(),
-				IsSysApp:   v1alpha1.AppName(am.Spec.AppName).IsSysApp(),
-				Namespace:  am.Spec.AppNamespace,
-				Owner:      owner,
-				Entrances:  appconfig.Entrances,
-				Icon:       appconfig.Icon,
+				Name:            am.Spec.AppName,
+				RawAppName:      am.Spec.RawAppName,
+				Appid:           v1alpha1.AppName(am.Spec.AppName).GetAppID(),
+				IsSysApp:        v1alpha1.AppName(am.Spec.AppName).IsSysApp(),
+				Namespace:       am.Spec.AppNamespace,
+				Owner:           owner,
+				Entrances:       appconfig.Entrances,
+				SharedEntrances: appconfig.SharedEntrances,
+				Icon:            appconfig.Icon,
 				Settings: map[string]string{
 					"title": am.Annotations[constants.ApplicationTitleLabel],
 				},
@@ -746,14 +747,15 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 				CreationTimestamp: am.CreationTimestamp,
 			},
 			Spec: v1alpha1.ApplicationSpec{
-				Name:       am.Spec.AppName,
-				RawAppName: am.Spec.RawAppName,
-				Appid:      v1alpha1.AppName(am.Spec.AppName).GetAppID(),
-				IsSysApp:   v1alpha1.AppName(am.Spec.AppName).IsSysApp(),
-				Namespace:  am.Spec.AppNamespace,
-				Owner:      am.Spec.AppOwner,
-				Entrances:  appconfig.Entrances,
-				Icon:       appconfig.Icon,
+				Name:            am.Spec.AppName,
+				RawAppName:      am.Spec.RawAppName,
+				Appid:           v1alpha1.AppName(am.Spec.AppName).GetAppID(),
+				IsSysApp:        v1alpha1.AppName(am.Spec.AppName).IsSysApp(),
+				Namespace:       am.Spec.AppNamespace,
+				Owner:           am.Spec.AppOwner,
+				Entrances:       appconfig.Entrances,
+				SharedEntrances: appconfig.SharedEntrances,
+				Icon:            appconfig.Icon,
 				Settings: map[string]string{
 					"title": am.Annotations[constants.ApplicationTitleLabel],
 				},
@@ -796,6 +798,14 @@ func (h *Handler) allUsersApps(req *restful.Request, resp *restful.Response) {
 			return
 		}
 		app.Spec.Entrances = entrances
+
+		sharedEntrances, err := app.GenSharedEntranceURL(req.Request.Context())
+		if err != nil {
+			api.HandleError(resp, req, err)
+			return
+		}
+		app.Spec.SharedEntrances = sharedEntrances
+
 		if v, ok := appsEntranceMap[app.Name]; ok {
 			app.Status.EntranceStatuses = v.Status.EntranceStatuses
 		}

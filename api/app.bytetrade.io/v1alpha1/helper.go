@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"bytetrade.io/web3os/app-service/pkg/constants"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
@@ -109,4 +110,24 @@ func (app *Application) GenEntranceURL(ctx context.Context) ([]Entrance, error) 
 		}
 	}
 	return app.Spec.Entrances, nil
+}
+
+func (app *Application) GenSharedEntranceURL(ctx context.Context) ([]Entrance, error) {
+	zone, err := kubesphere.GetUserZone(ctx, app.Spec.Owner)
+	if err != nil {
+		klog.Errorf("failed to get user zone: %v", err)
+	}
+
+	if len(zone) > 0 {
+		tokens := strings.Split(zone, ".")
+		tokens[0] = "shared"
+		sharedZone := strings.Join(tokens, ".")
+
+		appid := AppName(app.Spec.Name).GetAppID()
+		for i := range app.Spec.SharedEntrances {
+			app.Spec.SharedEntrances[i].URL = fmt.Sprintf("%s-%s.%s", appid, app.Spec.SharedEntrances[i].Name, sharedZone)
+		}
+	}
+
+	return app.Spec.SharedEntrances, nil
 }

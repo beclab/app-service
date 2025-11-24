@@ -274,6 +274,11 @@ func (in *ApplicationSpec) DeepCopyInto(out *ApplicationSpec) {
 		*out = make([]Entrance, len(*in))
 		copy(*out, *in)
 	}
+	if in.SharedEntrances != nil {
+		in, out := &in.SharedEntrances, &out.SharedEntrances
+		*out = make([]Entrance, len(*in))
+		copy(*out, *in)
+	}
 	if in.Ports != nil {
 		in, out := &in.Ports, &out.Ports
 		*out = make([]ServicePort, len(*in))

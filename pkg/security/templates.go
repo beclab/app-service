@@ -468,7 +468,7 @@ var (
 		Spec: netv1.NetworkPolicySpec{
 			PodSelector: metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"app.bytetrade.io/shared-entrance": "true",
+					constants.AppSharedEntrancesLabel: "true",
 				},
 			},
 			Ingress: []netv1.NetworkPolicyIngressRule{
