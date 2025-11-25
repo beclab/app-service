@@ -472,17 +472,18 @@ var (
 				},
 			},
 			Ingress: []netv1.NetworkPolicyIngressRule{
-				{
-					From: []netv1.NetworkPolicyPeer{
-						{
-							NamespaceSelector: &metav1.LabelSelector{
-								MatchLabels: map[string]string{
-									NamespaceSharedLabel: "true",
-								},
-							},
-						},
-					},
-				},
+				{},
+				// {
+				// 	From: []netv1.NetworkPolicyPeer{
+				// 		{
+				// 			NamespaceSelector: &metav1.LabelSelector{
+				// 				MatchLabels: map[string]string{
+				// 					NamespaceSharedLabel: "true",
+				// 				},
+				// 			},
+				// 		},
+				// 	},
+				// },
 			},
 		},
 	} // end NPSharedEntrance

@@ -188,6 +188,12 @@ func (h *Handler) listBackend(req *restful.Request, resp *restful.Response) {
 			api.HandleError(resp, req, err)
 			return
 		}
+
+		appconfig.SharedEntrances, err = appconfig.GenSharedEntranceURL(req.Request.Context())
+		if err != nil {
+			api.HandleError(resp, req, err)
+			return
+		}
 		now := metav1.Now()
 		name, _ := apputils.FmtAppMgrName(am.Spec.AppName, owner, appconfig.Namespace)
 		app := &appv1alpha1.Application{

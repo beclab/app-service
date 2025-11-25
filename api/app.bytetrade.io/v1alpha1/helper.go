@@ -125,7 +125,11 @@ func (app *Application) GenSharedEntranceURL(ctx context.Context) ([]Entrance, e
 
 		appid := AppName(app.Spec.Name).GetAppID()
 		for i := range app.Spec.SharedEntrances {
-			app.Spec.SharedEntrances[i].URL = fmt.Sprintf("%s-%s.%s", appid, app.Spec.SharedEntrances[i].Name, sharedZone)
+			if app.Spec.SharedEntrances[i].Port > 0 {
+				app.Spec.SharedEntrances[i].URL = fmt.Sprintf("%s-%s.%s:%d", appid, app.Spec.SharedEntrances[i].Name, sharedZone, app.Spec.SharedEntrances[i].Port)
+			} else {
+				app.Spec.SharedEntrances[i].URL = fmt.Sprintf("%s-%s.%s", appid, app.Spec.SharedEntrances[i].Name, sharedZone)
+			}
 		}
 	}
 

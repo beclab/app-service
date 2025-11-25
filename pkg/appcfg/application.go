@@ -145,6 +145,18 @@ func (c *ApplicationConfig) GetEntrances(ctx context.Context) (map[string]v1alph
 	}), nil
 }
 
+func (c *ApplicationConfig) GenSharedEntranceURL(ctx context.Context) ([]v1alpha1.Entrance, error) {
+	app := &v1alpha1.Application{
+		Spec: v1alpha1.ApplicationSpec{
+			Owner:           c.OwnerName,
+			Name:            c.AppName,
+			SharedEntrances: c.SharedEntrances,
+		},
+	}
+
+	return app.GenSharedEntranceURL(ctx)
+}
+
 func (p *ProviderPermission) GetNamespace(ownerName string) string {
 	if p.Namespace != "" {
 		if p.Namespace == "user-space" || p.Namespace == "user-system" {

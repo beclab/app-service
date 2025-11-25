@@ -285,7 +285,7 @@ func (h *Handler) gpuLimitMutate(ctx context.Context, req *admissionv1.Admission
 		UID:     req.UID,
 	}
 
-	_, appcfg, err := h.sidecarWebhook.GetAppConfig(req.Namespace)
+	_, appcfg, isShared, err := h.sidecarWebhook.GetAppConfig(req.Namespace)
 	if err != nil {
 		klog.Error(err)
 		return resp
@@ -293,6 +293,11 @@ func (h *Handler) gpuLimitMutate(ctx context.Context, req *admissionv1.Admission
 
 	if appcfg == nil {
 		klog.Error("get appcfg is empty")
+		return resp
+	}
+
+	if isShared {
+		klog.Infof("Skip gpu limit inject for shared namespace=%s", req.Namespace)
 		return resp
 	}
 
@@ -831,9 +836,14 @@ func (h *Handler) appLabelMutate(ctx context.Context, req *admissionv1.Admission
 		UID:     req.UID,
 	}
 
-	_, appCfg, _ := h.sidecarWebhook.GetAppConfig(req.Namespace)
+	_, appCfg, isShared, _ := h.sidecarWebhook.GetAppConfig(req.Namespace)
 	if appCfg == nil {
 		klog.Error("get appcfg is empty")
+		return resp
+	}
+
+	if isShared {
+		klog.Infof("Skip app label inject for shared namespace=%s", req.Namespace)
 		return resp
 	}
 

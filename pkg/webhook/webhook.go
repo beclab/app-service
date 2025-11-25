@@ -83,27 +83,41 @@ func New(config *rest.Config) (*Webhook, error) {
 }
 
 // GetAppConfig get app config by namespace.
-func (wh *Webhook) GetAppConfig(namespace string) (*v1alpha1.ApplicationManager, *appcfg_mod.ApplicationConfig, error) {
+func (wh *Webhook) GetAppConfig(namespace string) (appMgr *v1alpha1.ApplicationManager, appCfg *appcfg_mod.ApplicationConfig, isShared bool, err error) {
 	list, err := wh.dynamicClient.AppV1alpha1().ApplicationManagers().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 	sorted := list.Items
 	sort.Slice(sorted, func(i, j int) bool {
 		return sorted[j].CreationTimestamp.Before(&sorted[i].CreationTimestamp)
 	})
 
+	ns, err := wh.kubeClient.CoreV1().Namespaces().Get(context.TODO(), namespace, metav1.GetOptions{})
+	if err != nil {
+		klog.Error("failed to get namespace, namespace=", namespace, " err=", err)
+		return nil, nil, false, err
+	}
+
+	refAppName := ns.Labels[constants.ApplicationNameLabel]
+	sharedNamespace := ns.Labels["bytetrade.io/ns-shared"]
+	installedUser := ns.Labels["applications.app.bytetrade.io/install_user"]
+
 	var appconfig appcfg.ApplicationConfig
 	for _, a := range sorted {
-		if a.Spec.AppNamespace == namespace && (a.Spec.Type == v1alpha1.App || a.Spec.Type == v1alpha1.Middleware) {
+		switch {
+		case a.Spec.AppNamespace == namespace && (a.Spec.Type == v1alpha1.App || a.Spec.Type == v1alpha1.Middleware),
+			// shared server namespace
+			sharedNamespace == "true" && a.Spec.AppName == refAppName && a.Spec.AppOwner == installedUser &&
+				(a.Spec.Type == v1alpha1.App || a.Spec.Type == v1alpha1.Middleware):
 			err = json.Unmarshal([]byte(a.Spec.Config), &appconfig)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, false, err
 			}
-			return &a, &appconfig, nil
+			return &a, &appconfig, (sharedNamespace == "true" && a.Spec.AppName == refAppName), nil
 		}
 	}
-	return nil, nil, api.ErrApplicationManagerNotFound
+	return nil, nil, false, api.ErrApplicationManagerNotFound
 }
 
 // GetAdmissionRequestBody returns admission request body.
@@ -151,51 +165,54 @@ func (wh *Webhook) CreatePatch(
 		return makePatches(req, pod)
 	}
 
-	configMapName, err := wh.createSidecarConfigMap(ctx, pod, proxyUUID.String(), req.Namespace, injectPolicy, injectWs, injectUpload, appmgr, appcfg, perms)
-	if err != nil {
-		return nil, err
-	}
-
-	volume := sidecar.GetSidecarVolumeSpec(configMapName)
-
-	if pod.Spec.Volumes == nil {
-		pod.Spec.Volumes = []corev1.Volume{}
-	}
-
-	pod.Spec.Volumes = append(pod.Spec.Volumes, volume, sidecar.GetEnvoyConfigWorkVolume())
-
-	clusterID := fmt.Sprintf("%s.%s", pod.Spec.ServiceAccountName, req.Name)
-	envoyFilename := constants.EnvoyConfigFilePath + "/" + constants.EnvoyConfigFileName
-	// pod is not an entrance pod, just inject outbound proxy
-	if !injectPolicy {
-		envoyFilename = constants.EnvoyConfigFilePath + "/" + constants.EnvoyConfigOnlyOutBoundFileName
-	}
-	appKey, appSecret, _ := wh.getAppKeySecret(req.Namespace)
-
-	if injectPolicy || len(appcfg.PodsSelectors) == 0 || wh.isSelected(appcfg.PodsSelectors, pod) {
-		initContainer := sidecar.GetInitContainerSpec(appcfg)
-		pod.Spec.InitContainers = append(pod.Spec.InitContainers, initContainer)
-		policySidecar := sidecar.GetEnvoySidecarContainerSpec(clusterID, envoyFilename, appKey, appSecret)
-		pod.Spec.Containers = append(pod.Spec.Containers, policySidecar)
-
-		pod.Spec.InitContainers = append(
-			[]corev1.Container{
-				sidecar.GetInitContainerSpecForWaitFor(appcfg.OwnerName),
-				sidecar.GetInitContainerSpecForRenderEnvoyConfig(),
-			},
-			pod.Spec.InitContainers...)
-	}
-
-	if injectWs {
-		wsSidecar := sidecar.GetWebSocketSideCarContainerSpec(&appcfg.WsConfig)
-		pod.Spec.Containers = append(pod.Spec.Containers, wsSidecar)
-	}
-	if injectUpload {
-		uploadSidecar := sidecar.GetUploadSideCarContainerSpec(pod, &appcfg.Upload)
-		if uploadSidecar != nil {
-			pod.Spec.Containers = append(pod.Spec.Containers, *uploadSidecar)
+	// inject sidecar only for the app's namespace
+	if req.Namespace == appmgr.Spec.AppNamespace {
+		configMapName, err := wh.createSidecarConfigMap(ctx, pod, proxyUUID.String(), req.Namespace, injectPolicy, injectWs, injectUpload, appmgr, appcfg, perms)
+		if err != nil {
+			return nil, err
 		}
-	}
+
+		volume := sidecar.GetSidecarVolumeSpec(configMapName)
+
+		if pod.Spec.Volumes == nil {
+			pod.Spec.Volumes = []corev1.Volume{}
+		}
+
+		pod.Spec.Volumes = append(pod.Spec.Volumes, volume, sidecar.GetEnvoyConfigWorkVolume())
+
+		clusterID := fmt.Sprintf("%s.%s", pod.Spec.ServiceAccountName, req.Name)
+		envoyFilename := constants.EnvoyConfigFilePath + "/" + constants.EnvoyConfigFileName
+		// pod is not an entrance pod, just inject outbound proxy
+		if !injectPolicy {
+			envoyFilename = constants.EnvoyConfigFilePath + "/" + constants.EnvoyConfigOnlyOutBoundFileName
+		}
+		appKey, appSecret, _ := wh.getAppKeySecret(req.Namespace)
+
+		if injectPolicy || len(appcfg.PodsSelectors) == 0 || wh.isSelected(appcfg.PodsSelectors, pod) {
+			initContainer := sidecar.GetInitContainerSpec(appcfg)
+			pod.Spec.InitContainers = append(pod.Spec.InitContainers, initContainer)
+			policySidecar := sidecar.GetEnvoySidecarContainerSpec(clusterID, envoyFilename, appKey, appSecret)
+			pod.Spec.Containers = append(pod.Spec.Containers, policySidecar)
+
+			pod.Spec.InitContainers = append(
+				[]corev1.Container{
+					sidecar.GetInitContainerSpecForWaitFor(appcfg.OwnerName),
+					sidecar.GetInitContainerSpecForRenderEnvoyConfig(),
+				},
+				pod.Spec.InitContainers...)
+		}
+
+		if injectWs {
+			wsSidecar := sidecar.GetWebSocketSideCarContainerSpec(&appcfg.WsConfig)
+			pod.Spec.Containers = append(pod.Spec.Containers, wsSidecar)
+		}
+		if injectUpload {
+			uploadSidecar := sidecar.GetUploadSideCarContainerSpec(pod, &appcfg.Upload)
+			if uploadSidecar != nil {
+				pod.Spec.Containers = append(pod.Spec.Containers, *uploadSidecar)
+			}
+		}
+	} // end of inject sidecar
 
 	if injectSharedPod != nil {
 		if *injectSharedPod {
@@ -304,6 +321,7 @@ func (wh *Webhook) AdmissionError(uid types.UID, err error) *admissionv1.Admissi
 func (wh *Webhook) MustInject(ctx context.Context, pod *corev1.Pod, namespace string) (
 	injectPolicy, injectWs, injectUpload bool, injectSharedPod *bool, perms []appcfg.ProviderPermission,
 	appCfg *appcfg_mod.ApplicationConfig, appMgr *v1alpha1.ApplicationManager, err error) {
+	var isShared bool
 
 	perms = make([]appcfg.ProviderPermission, 0)
 	if !isNamespaceInjectable(namespace) {
@@ -319,7 +337,7 @@ func (wh *Webhook) MustInject(ctx context.Context, pod *corev1.Pod, namespace st
 		return
 	}
 
-	appMgr, appCfg, err = wh.GetAppConfig(namespace)
+	appMgr, appCfg, isShared, err = wh.GetAppConfig(namespace)
 	if err != nil {
 		if errors.Is(err, api.ErrApplicationManagerNotFound) {
 			err = nil
@@ -337,48 +355,50 @@ func (wh *Webhook) MustInject(ctx context.Context, pod *corev1.Pod, namespace st
 		return
 	}
 
-	if appCfg.WsConfig.URL != "" && appCfg.WsConfig.Port > 0 {
-		injectWs = true
-	}
-	if appCfg.Upload.Dest != "" {
-		injectUpload = true
-	}
-	for _, p := range appCfg.Permission {
-		klog.Info("found permission: ", p)
-		if providerP, ok := p.([]interface{}); ok {
-			for _, v := range providerP {
-				provider := v.(map[string]interface{})
-				var ns string
-				if val, ok := provider["namespace"].(string); ok {
-					ns = val
-				}
-				providerAppName := provider["appName"].(string)
-				providerName := provider["providerName"].(string)
-				perms = append(perms, appcfg_mod.ProviderPermission{
-					AppName:      providerAppName,
-					Namespace:    ns,
-					ProviderName: providerName,
-				})
+	if !isShared {
+		if appCfg.WsConfig.URL != "" && appCfg.WsConfig.Port > 0 {
+			injectWs = true
+		}
+		if appCfg.Upload.Dest != "" {
+			injectUpload = true
+		}
+		for _, p := range appCfg.Permission {
+			klog.Info("found permission: ", p)
+			if providerP, ok := p.([]interface{}); ok {
+				for _, v := range providerP {
+					provider := v.(map[string]interface{})
+					var ns string
+					if val, ok := provider["namespace"].(string); ok {
+						ns = val
+					}
+					providerAppName := provider["appName"].(string)
+					providerName := provider["providerName"].(string)
+					perms = append(perms, appcfg_mod.ProviderPermission{
+						AppName:      providerAppName,
+						Namespace:    ns,
+						ProviderName: providerName,
+					})
 
+				}
+			}
+
+		}
+
+		injectPolicy = false
+		for _, e := range appCfg.Entrances {
+			var isEntrancePod bool
+			isEntrancePod, err = wh.isAppEntrancePod(ctx, appCfg.AppName, e.Host, pod, namespace)
+			klog.Infof("entranceName=%s isEntrancePod=%v", e.Name, isEntrancePod)
+			if err != nil {
+				return false, false, false, nil, perms, nil, nil, err
+			}
+
+			if isEntrancePod {
+				injectPolicy = true
+				break
 			}
 		}
-
-	}
-
-	injectPolicy = false
-	for _, e := range appCfg.Entrances {
-		var isEntrancePod bool
-		isEntrancePod, err = wh.isAppEntrancePod(ctx, appCfg.AppName, e.Host, pod, namespace)
-		klog.Infof("entranceName=%s isEntrancePod=%v", e.Name, isEntrancePod)
-		if err != nil {
-			return false, false, false, nil, perms, nil, nil, err
-		}
-
-		if isEntrancePod {
-			injectPolicy = true
-			break
-		}
-	}
+	} // end of non-shared namespace's pod
 
 	for _, e := range appCfg.SharedEntrances {
 		var isEntrancePod bool
@@ -644,10 +664,15 @@ func (wh *Webhook) getAppKeySecret(namespace string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	_, appcfg, err := wh.GetAppConfig(namespace)
+	_, appcfg, isShared, err := wh.GetAppConfig(namespace)
 	if err != nil {
 		klog.Errorf("Failed to get app config err=%v", err)
 		return "", "", err
+	}
+
+	if isShared {
+		// shared namespace, no need to get appkey/secret
+		return "", "", nil
 	}
 
 	apClient := provider.NewApplicationPermissionRequest(client)
