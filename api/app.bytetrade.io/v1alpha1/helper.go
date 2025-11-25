@@ -79,6 +79,12 @@ func (s AppName) IsGeneratedApp() bool {
 	return userspace.IsGeneratedApp(string(s))
 }
 
+func (s AppName) SharedEntranceIdPrefix() string {
+	hash := md5.Sum([]byte(s + "shared"))
+	hashString := hex.EncodeToString(hash[:])
+	return hashString[:8]
+}
+
 func (app *Application) GenEntranceURL(ctx context.Context) ([]Entrance, error) {
 	zone, err := kubesphere.GetUserZone(ctx, app.Spec.Owner)
 	if err != nil {
@@ -123,12 +129,13 @@ func (app *Application) GenSharedEntranceURL(ctx context.Context) ([]Entrance, e
 		tokens[0] = "shared"
 		sharedZone := strings.Join(tokens, ".")
 
-		appid := AppName(app.Spec.Name).GetAppID()
+		appName := AppName(app.Spec.Name)
+		sharedEntranceIdPrefix := appName.SharedEntranceIdPrefix()
 		for i := range app.Spec.SharedEntrances {
 			if app.Spec.SharedEntrances[i].Port > 0 {
-				app.Spec.SharedEntrances[i].URL = fmt.Sprintf("%s-%s.%s:%d", appid, app.Spec.SharedEntrances[i].Name, sharedZone, app.Spec.SharedEntrances[i].Port)
+				app.Spec.SharedEntrances[i].URL = fmt.Sprintf("%s%d.%s:%d", sharedEntranceIdPrefix, i, sharedZone, app.Spec.SharedEntrances[i].Port)
 			} else {
-				app.Spec.SharedEntrances[i].URL = fmt.Sprintf("%s-%s.%s", appid, app.Spec.SharedEntrances[i].Name, sharedZone)
+				app.Spec.SharedEntrances[i].URL = fmt.Sprintf("%s%d.%s", sharedEntranceIdPrefix, i, sharedZone)
 			}
 		}
 	}
