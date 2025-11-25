@@ -1361,6 +1361,7 @@ func (h *Handler) validateApplicationManagerOperation(ctx context.Context, newAm
 			MarketSource: annotations[api.AppMarketSourceKey],
 			Admin:        admin,
 			IsAdmin:      isAdmin,
+			RawAppName:   apputils.GetRawAppName(newAm.Spec.AppName, newAm.Spec.RawAppName),
 		}
 		appConfig, _, err = apputils.GetAppConfig(ctx, opt)
 		if err != nil {

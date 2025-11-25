@@ -1085,3 +1085,11 @@ func AppTitle(config string) string {
 	}
 	return cfg.Title
 }
+
+func GetRawAppName(AppName, rawAppName string) string {
+	if rawAppName == "" {
+		return AppName
+	}
+	return rawAppName
+
+}
