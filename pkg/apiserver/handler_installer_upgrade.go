@@ -169,6 +169,7 @@ func (h *upgradeHandlerHelperV2) getAppConfig(prevCfg *appcfg.ApplicationConfig,
 		Admin:        admin,
 		MarketSource: marketSource,
 		IsAdmin:      isAdmin,
+		RawAppName:   h.rawAppName,
 	})
 	if err != nil {
 		api.HandleError(h.resp, h.req, err)
