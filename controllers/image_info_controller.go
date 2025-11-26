@@ -21,7 +21,6 @@ import (
 	"github.com/containers/image/v5/image"
 	"github.com/containers/image/v5/transports/alltransports"
 	imagetypes "github.com/containers/image/v5/types"
-	"github.com/opencontainers/go-digest"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -244,7 +243,7 @@ func (r *AppImageInfoController) GetManifest(ctx context.Context, instance *appv
 		klog.Infof("failed to unmarshal image info %v", err)
 		return r.getManifestViaNetwork(ctx, imageName)
 	}
-	var archManifest *api.ImageManifest
+	var manifest *api.ImageInfoV2
 	imageRef, err := refdocker.ParseDockerRef(imageName)
 	if err != nil {
 		klog.Errorf("invalid docker ref %s %v", imageName, err)
@@ -255,16 +254,21 @@ func (r *AppImageInfoController) GetManifest(ctx context.Context, instance *appv
 		if err != nil {
 			return nil, err
 		}
-		if name.String() == imageRef.String() && imageInfo.ArchManifest != nil {
-			archManifest = imageInfo.ArchManifest[fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH)]
-			break
+		for _, l := range imageInfo.InfoV2 {
+			if name.String() == imageRef.String() {
+				if l.Os == runtime.GOOS && l.Architecture == runtime.GOARCH {
+					manifest = &l
+					break
+				}
+			}
 		}
+
 	}
-	if archManifest == nil || len(archManifest.Layers) == 0 {
+	if manifest == nil || len(manifest.LayersData) == 0 {
 		return r.getManifestViaNetwork(ctx, imageName)
 	}
 	klog.Infof("get app %s image manifest from annotations", imageName)
-	return r.buildImageInspectFromManifest(archManifest), nil
+	return r.buildImageInspectFromManifest(manifest), nil
 }
 
 func newSystemContext() *imagetypes.SystemContext {
@@ -366,12 +370,12 @@ func (r *AppImageInfoController) GetImageInfo(ctx context.Context, instance *app
 	return imageInfos, firstErr
 }
 
-func (r *AppImageInfoController) buildImageInspectFromManifest(manifest *api.ImageManifest) *imagetypes.ImageInspectInfo {
+func (r *AppImageInfoController) buildImageInspectFromManifest(manifest *api.ImageInfoV2) *imagetypes.ImageInspectInfo {
 	layersData := make([]imagetypes.ImageInspectLayer, 0, len(manifest.Layers))
-	for _, layer := range manifest.Layers {
+	for _, layer := range manifest.LayersData {
 		layersData = append(layersData, imagetypes.ImageInspectLayer{
-			MIMEType: layer.MediaType,
-			Digest:   digest.Digest(layer.Digest),
+			MIMEType: layer.MIMEType,
+			Digest:   layer.Digest,
 			Size:     layer.Size,
 		})
 	}

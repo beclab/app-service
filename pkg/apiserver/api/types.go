@@ -3,6 +3,7 @@ package api
 import (
 	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/constants"
+	imagetypes "github.com/containers/image/v5/types"
 )
 
 const (
@@ -179,47 +180,22 @@ type ImageInfoRequest struct {
 	Images  []ImageInfo `json:"images"`
 }
 type ImageInfo struct {
-	ImageName    string                    `json:"name"`
-	ManifestList ManifestList              `json:"manifest_list"`
-	ArchManifest map[string]*ImageManifest `json:"arch_manifest"`
+	ImageName string        `json:"name"`
+	InfoV2    []ImageInfoV2 `json:"image_info_v2"`
 }
 
-type Config struct {
-	MediaType string `json:"mediaType"`
-	Size      int64  `json:"size"`
-	Digest    string `json:"digest"`
-}
-
-type Layer struct {
-	MediaType string `json:"mediaType"`
-	Size      int64  `json:"size"`
-	Digest    string `json:"digest"`
-}
-
-type Platform struct {
-	Architecture string `json:"architecture"`
-	OS           string `json:"os"`
-	Variant      string `json:"variant,omitempty"`
-}
-
-type ManifestItem struct {
-	MediaType string   `json:"mediaType"`
-	Size      int64    `json:"size"`
-	Digest    string   `json:"digest"`
-	Platform  Platform `json:"platform"`
-}
-
-type ImageManifest struct {
-	SchemaVersion int     `json:"schemaVersion"`
-	MediaType     string  `json:"mediaType"`
-	Config        Config  `json:"config"`
-	Layers        []Layer `json:"layers"`
-}
-
-type ManifestList struct {
-	SchemaVersion int            `json:"schemaVersion"`
-	MediaType     string         `json:"mediaType"`
-	Manifests     []ManifestItem `json:"manifests"`
+type ImageInfoV2 struct {
+	Tag           string                         `json:"Tag"`
+	Created       string                         `json:"Created"`
+	DockerVersion string                         `json:"DockerVersion"`
+	Labels        map[string]string              `json:"Labels"`
+	Architecture  string                         `json:"Architecture"`
+	Variant       string                         `json:"Variant"`
+	Os            string                         `json:"Os"`
+	Layers        []string                       `json:"Layers"` // Array of layer digests
+	LayersData    []imagetypes.ImageInspectLayer `json:"LayersData"`
+	Env           []string                       `json:"Env"`
+	Author        string                         `json:"Author"`
 }
 
 var (
