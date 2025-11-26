@@ -131,6 +131,7 @@ type InstallRequest struct {
 	Envs       []sysv1alpha1.AppEnvVar `json:"envs"`
 	RawAppName string                  `json:"rawAppName"`
 	Title      string                  `json:"title"`
+	Entrances  []EntranceClone         `json:"entrances"`
 }
 
 type Image struct {
@@ -199,7 +200,8 @@ type ImageInfoV2 struct {
 }
 
 var (
-	CheckTypeAppEnv = "appenv"
+	CheckTypeAppEnv      = "appenv"
+	CheckTypeAppEntrance = "appEntrance"
 )
 
 type FailedCheckResponse struct {
@@ -225,4 +227,22 @@ type CanDeployResponse struct {
 
 type CanDeployResponseData struct {
 	CanOp bool `json:"canOp"`
+}
+
+type EntranceClone struct {
+	Name    string `json:"name,omitempty"`
+	Title   string `json:"title"`
+	Message string `json:"message,omitempty"`
+}
+
+type AppTitle struct {
+	Title   string `json:"title"`
+	IsValid bool   `json:"isValid"`
+	Message string `json:"message"`
+}
+
+type AppEntranceCheckResult struct {
+	MissingValues   []EntranceClone `json:"missingValues"`
+	InvalidValues   []EntranceClone `json:"invalidValues"`
+	TitleValidation AppTitle        `json:"titleValidation"`
 }
