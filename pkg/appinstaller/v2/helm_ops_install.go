@@ -15,6 +15,8 @@ import (
 	"helm.sh/helm/v3/pkg/action"
 	helmrelease "helm.sh/helm/v3/pkg/release"
 	"helm.sh/helm/v3/pkg/storage/driver"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -71,6 +73,13 @@ func (h *HelmOpsV2) Install() error {
 		return err
 	}
 
+	// add application labels to shared namespace
+	err = h.addApplicationLabelsToSharedNamespace()
+	if err != nil {
+		klog.Errorf("Failed to add application labels to shared namespace err=%v", err)
+		return err
+	}
+
 	err, sharedInstalled := h.install(values)
 	clear := func() {
 		if sharedInstalled {
@@ -89,14 +98,6 @@ func (h *HelmOpsV2) Install() error {
 	err = h.AddApplicationLabelsToDeployment()
 	if err != nil {
 		klog.Errorf("Failed to add application labels to deployment err=%v", err)
-		clear()
-		return err
-	}
-
-	// add application labels to shared namespace
-	err = h.addApplicationLabelsToSharedNamespace()
-	if err != nil {
-		klog.Errorf("Failed to add application labels to shared namespace err=%v", err)
 		clear()
 		return err
 	}
@@ -240,9 +241,23 @@ func (h *HelmOpsV2) addApplicationLabelsToSharedNamespace() error {
 		// Use the shared namespace defined in the chart
 		sharedNamespace := chart.Namespace(h.App().OwnerName)
 		ns, err := k8s.CoreV1().Namespaces().Get(h.Context(), sharedNamespace, metav1.GetOptions{})
+		create := false
 		if err != nil {
-			klog.Errorf("Failed to get namespace %s: %v", sharedNamespace, err)
-			return err
+			if !apierrors.IsNotFound(err) {
+				klog.Errorf("Failed to get namespace %s: %v", sharedNamespace, err)
+				return err
+			}
+			// try to create the namespace if not found
+			create = true
+			ns = &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: sharedNamespace,
+					Labels: map[string]string{
+						"name":                   sharedNamespace,
+						"bytetrade.io/ns-shared": "true",
+					},
+				},
+			}
 		}
 
 		if ns.Labels == nil {
@@ -254,9 +269,16 @@ func (h *HelmOpsV2) addApplicationLabelsToSharedNamespace() error {
 			ns.Labels[constants.ApplicationInstallUserLabel] = h.App().OwnerName
 		}
 
-		if _, err := k8s.CoreV1().Namespaces().Update(h.Context(), ns, metav1.UpdateOptions{}); err != nil {
-			klog.Errorf("Failed to update namespace %s: %v", sharedNamespace, err)
-			return err
+		if create {
+			if _, err := k8s.CoreV1().Namespaces().Create(h.Context(), ns, metav1.CreateOptions{}); err != nil {
+				klog.Errorf("Failed to create namespace %s: %v", sharedNamespace, err)
+				return err
+			}
+		} else {
+			if _, err := k8s.CoreV1().Namespaces().Update(h.Context(), ns, metav1.UpdateOptions{}); err != nil {
+				klog.Errorf("Failed to update namespace %s: %v", sharedNamespace, err)
+				return err
+			}
 		}
 	}
 

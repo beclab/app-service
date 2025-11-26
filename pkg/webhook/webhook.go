@@ -101,7 +101,7 @@ func (wh *Webhook) GetAppConfig(namespace string) (appMgr *v1alpha1.ApplicationM
 
 	refAppName := ns.Labels[constants.ApplicationNameLabel]
 	sharedNamespace := ns.Labels["bytetrade.io/ns-shared"]
-	installedUser := ns.Labels["applications.app.bytetrade.io/install_user"]
+	installedUser := ns.Labels[constants.ApplicationInstallUserLabel]
 
 	var appconfig appcfg.ApplicationConfig
 	for _, a := range sorted {
