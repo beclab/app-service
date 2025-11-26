@@ -8,6 +8,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/appcfg"
 	"bytetrade.io/web3os/app-service/pkg/prometheus"
+	"bytetrade.io/web3os/app-service/pkg/utils"
 	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
 
 	"github.com/emicklei/go-restful/v3"
@@ -104,4 +105,13 @@ func (h *Handler) clusterResource(req *restful.Request, resp *restful.Response) 
 		"nodes":   supportArch,
 		"apps":    apps,
 	})
+}
+
+func (h *Handler) clusterNodeInfo(req *restful.Request, resp *restful.Response) {
+	nodeInfo, err := utils.GetNodeInfo(req.Request.Context())
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	resp.WriteAsJson(nodeInfo)
 }

@@ -120,6 +120,11 @@ const (
 	AppStopDueToEvicted    = "Evicted"
 
 	AppSharedEntrancesLabel = "app.bytetrade.io/shared-entrance"
+
+	OneContainerMultiDeviceSplitSymbol = ":"
+	ArchLabelKey                       = "kubernetes.io/arch"
+	CudaVersionLabelKey                = "gpu.bytetrade.io/cuda"
+	NodeNvidiaRegistryKey              = "hami.io/node-nvidia-register"
 )
 
 var (

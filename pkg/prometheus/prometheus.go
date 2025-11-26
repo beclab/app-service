@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
+	apiserver_api "bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
-
 	"github.com/prometheus/client_golang/api"
 	apiv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
@@ -160,6 +160,72 @@ func makeExpr(metric string, opts QueryOptions) string {
 	}
 }
 
+func GetNodeCpuResource(ctx context.Context) (map[string]apiserver_api.CPUInfo, error) {
+	p, err := New(Endpoint)
+	if err != nil {
+		return nil, err
+	}
+	opts := QueryOptions{Level: LevelCluster}
+	result := make(map[string]apiserver_api.CPUInfo)
+
+	metrics := p.GetNamedMetrics(ctx, []string{"node_cpu_frequency_max_hertz", "node_cpu_info"}, time.Now(), opts)
+
+	freqByInstance := make(map[string]float64)
+	vendorByInstance := make(map[string]string)
+	modelNameByInstance := make(map[string]string)
+	modelByInstance := make(map[string]string)
+
+	for _, m := range metrics {
+		switch m.MetricName {
+		case "node_cpu_frequency_max_hertz":
+			for _, mv := range m.MetricData.MetricValues {
+				inst := mv.Metadata["instance"]
+				if inst == "" || mv.Sample == nil {
+					continue
+				}
+				val := mv.Sample[1]
+				if val > freqByInstance[inst] {
+					freqByInstance[inst] = val
+				}
+			}
+		case "node_cpu_info":
+			for _, mv := range m.MetricData.MetricValues {
+				inst := mv.Metadata["instance"]
+				if inst == "" {
+					continue
+				}
+				if _, ok := vendorByInstance[inst]; !ok {
+					v := mv.Metadata["vendor"]
+					if v == "" {
+						v = mv.Metadata["vendor_id"]
+					}
+					vendorByInstance[inst] = v
+				}
+				if _, ok := modelNameByInstance[inst]; !ok {
+					if mn, ok := mv.Metadata["model_name"]; ok && mn != "" {
+						modelNameByInstance[inst] = mn
+					}
+				}
+				if _, ok := modelByInstance[inst]; !ok {
+					if ms, ok := mv.Metadata["model"]; ok {
+						modelByInstance[inst] = ms
+					}
+				}
+			}
+		}
+	}
+
+	for inst := range freqByInstance {
+		result[inst] = apiserver_api.CPUInfo{
+			Frequency: int(freqByInstance[inst]),
+			Model:     modelByInstance[inst],
+			ModelName: modelNameByInstance[inst],
+			Vendor:    vendorByInstance[inst],
+		}
+	}
+	return result, nil
+}
+
 func GetCurUserResource(ctx context.Context, username string) (*ClusterMetrics, error) {
 	p, err := New(Endpoint)
 	if err != nil {
@@ -170,9 +236,6 @@ func GetCurUserResource(ctx context.Context, username string) (*ClusterMetrics, 
 		UserName: username,
 	}
 	metrics := p.GetNamedMetrics(ctx, []string{"user_cpu_usage", "user_memory_usage"}, time.Now(), opts)
-	if err != nil {
-		return nil, err
-	}
 	cpuS, err := kubesphere.GetUserCPULimit(ctx, username)
 	if err != nil && err.Error() != "user annotation bytetrade.io/user-cpu-limit not found" {
 		return nil, err

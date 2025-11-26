@@ -229,6 +229,34 @@ type CanDeployResponseData struct {
 	CanOp bool `json:"canOp"`
 }
 
+type NodeInfo struct {
+	CudaVersion string    `json:"cudaVersion"`
+	CPU         []CPUInfo `json:"cpu"`
+	Memory      MemInfo   `json:"memory"`
+	GPUS        []GPUInfo `json:"gpus"`
+}
+
+type CPUInfo struct {
+	CoreNumber int    `json:"coreNumber"`
+	Arch       string `json:"arch"`
+	Frequency  int    `json:"frequency"`
+	Model      string `json:"model"`
+	ModelName  string `json:"modelName"`
+	Vendor     string `json:"vendor"`
+}
+
+type MemInfo struct {
+	Total int64 `json:"total"`
+}
+
+type GPUInfo struct {
+	Vendor       string `json:"vendor"`
+	Architecture string `json:"arch"`
+	Model        string `json:"model"`
+	Memory       int64  `json:"memory"`
+	ModelName    string `json:"modelName"`
+}
+
 type EntranceClone struct {
 	Name    string `json:"name,omitempty"`
 	Title   string `json:"title"`

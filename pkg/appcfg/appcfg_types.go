@@ -63,6 +63,25 @@ type AppSpec struct {
 	RunAsInternal       bool          `yaml:"runAsInternal" json:"runAsInternal"`
 	PodGPUConsumePolicy string        `yaml:"podGpuConsumePolicy" json:"podGpuConsumePolicy"`
 	SubCharts           []Chart       `yaml:"subCharts" json:"subCharts"`
+	Hardware            Hardware      `yaml:"hardware" json:"hardware"`
+}
+
+type Hardware struct {
+	Cpu CpuConfig `yaml:"cpu" json:"cpu"`
+	Gpu GpuConfig `yaml:"gpu" json:"gpu"`
+}
+
+type CpuConfig struct {
+	Vendor string `yaml:"vendor" json:"vendor"`
+	Arch   string `yaml:"arch" json:"arch"`
+}
+type GpuConfig struct {
+	Vendor string   `yaml:"vendor" json:"vendor"`
+	Arch   []string `yaml:"arch" json:"arch"`
+	// SingleMemory specifies the minimum memory size required for a single GPU
+	SingleMemory string `yaml:"singleMemory" json:"singleMemory"`
+	// TotalMemory specifies the total GPU memory required across all GPUs within one node
+	TotalMemory string `yaml:"totalMemory" json:"totalMemory"`
 }
 
 type SupportClient struct {

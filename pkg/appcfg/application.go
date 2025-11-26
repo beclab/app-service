@@ -97,6 +97,7 @@ type ApplicationConfig struct {
 	AllowMultipleInstall bool
 	RawAppName           string
 	PodsSelectors        []metav1.LabelSelector
+	HardwareRequirement  Hardware
 	SharedEntrances      []v1alpha1.Entrance
 }
 

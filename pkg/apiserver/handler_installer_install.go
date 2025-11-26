@@ -194,7 +194,6 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		klog.Errorf("Failed to get app config err=%v", err)
 		return
 	}
-
 	err = helper.setAppEnv(insReq.Envs)
 	if err != nil {
 		klog.Errorf("Failed to set app env err=%v", err)
@@ -206,7 +205,6 @@ func (h *Handler) install(req *restful.Request, resp *restful.Response) {
 		klog.Errorf("Failed to validate app install request err=%v", err)
 		return
 	}
-	// replace title and appName if app is cloned
 	if insReq.RawAppName != "" && insReq.Title != "" {
 		helper.setAppConfig(insReq, app)
 	}
@@ -276,6 +274,23 @@ func (h *installHandlerHelper) validate(isAdmin bool, installedApps []*v1alpha1.
 	if result != nil {
 		api.HandleFailedCheck(h.resp, api.CheckTypeAppEntrance, result, 104222)
 		return fmt.Errorf("invalid entrance config, check result: %#v", result)
+	}
+
+	reasons, err := apputils.CheckHardwareRequirement(h.req.Request.Context(), h.appConfig)
+
+	if err != nil {
+		api.HandleError(h.resp, h.req, err)
+		return
+	}
+	if len(reasons) > 0 {
+		err = h.resp.WriteHeaderAndEntity(http.StatusBadRequest, map[string]any{
+			"code":   http.StatusBadRequest,
+			"result": reasons,
+		})
+		if err != nil {
+			klog.Infof("failed to write hardware reason: %v", err)
+		}
+		return errors.New("invalid spec.hardware config or no node satisfied hardware requirement")
 	}
 
 	err = apputils.CheckDependencies2(h.req.Request.Context(), h.h.ctrlClient, h.appConfig.Dependencies, h.owner, true)

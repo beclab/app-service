@@ -249,6 +249,15 @@ func (h *HelmOps) SetValues() (values map[string]interface{}, err error) {
 		return values, err
 	}
 
+	nodeInfo, err := utils.GetNodeInfo(ctx)
+	if err != nil {
+		klog.Errorf("failed to get cluster node info")
+		return values, err
+	}
+	values["nodes"] = nodeInfo
+
+	klog.Infof("values[node]: %#v", values["nodes"])
+
 	return values, err
 }
 

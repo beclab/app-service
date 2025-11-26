@@ -6,12 +6,15 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
+	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
 	"bytetrade.io/web3os/app-service/pkg/client/clientset"
 	"bytetrade.io/web3os/app-service/pkg/constants"
+	"bytetrade.io/web3os/app-service/pkg/prometheus"
 	"bytetrade.io/web3os/app-service/pkg/users"
 	iamv1alpha2 "github.com/beclab/api/iam/v1alpha2"
 
@@ -298,4 +301,100 @@ func GetTerminus(ctx context.Context, ctrlClient client.Client) (*sysv1alpha1.Te
 		return nil, err
 	}
 	return &terminus, nil
+}
+
+var ArchNameMap = map[int64]string{
+	2:  "Kepler",
+	3:  "Maxwell",
+	4:  "Pascal",
+	5:  "Volta",
+	6:  "Turing",
+	7:  "Ampere",
+	8:  "Ada Lovelace",
+	9:  "Hopper",
+	10: "Blackwell",
+}
+
+func DecodeNodeGPU(str string) ([]api.GPUInfo, error) {
+	if !strings.Contains(str, constants.OneContainerMultiDeviceSplitSymbol) {
+		return []api.GPUInfo{}, errors.New("node annotations not decode successfully")
+	}
+	gpusStr := strings.Split(str, constants.OneContainerMultiDeviceSplitSymbol)
+	var ret []api.GPUInfo
+	for _, val := range gpusStr {
+		if strings.Contains(val, ",") {
+			items := strings.Split(val, ",")
+			if len(items) == 7 || len(items) == 9 || len(items) == 10 {
+				architecture := int64(0)
+				modelName := items[4]
+				memory, _ := strconv.ParseInt(items[2], 10, 32)
+				if len(items) == 10 {
+					architecture, _ = strconv.ParseInt(items[9], 10, 32)
+				}
+				archStr := ArchNameMap[architecture]
+				info := api.GPUInfo{
+					Vendor: "NVIDIA",
+					Architecture: func() string {
+						if archStr != "" {
+							return archStr
+						}
+						return "unknown"
+					}(),
+					Memory:    memory,
+					ModelName: modelName,
+					Model:     ExtractGPUVersion(modelName),
+				}
+				ret = append(ret, info)
+
+			}
+		}
+	}
+	return ret, nil
+}
+
+func GetNodeInfo(ctx context.Context) (ret []api.NodeInfo, err error) {
+	config, err := ctrl.GetConfig()
+	if err != nil {
+		return nil, err
+	}
+	client, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, err
+	}
+
+	cpuMap, err := prometheus.GetNodeCpuResource(ctx)
+	if err != nil {
+		return nil, err
+	}
+	nodes, err := client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	for _, n := range nodes.Items {
+		cpuInfo, ok := cpuMap[n.Name]
+		if !ok {
+			continue
+		}
+		cpuInfo.Arch = n.Labels[constants.ArchLabelKey]
+		coreNumber, _ := n.Status.Capacity.Cpu().AsInt64()
+		cpuInfo.CoreNumber = int(coreNumber)
+		cudaVersion := n.Labels[constants.CudaVersionLabelKey]
+		gpus, _ := DecodeNodeGPU(n.Annotations[constants.NodeNvidiaRegistryKey])
+		for i := range gpus {
+			gpus[i].Memory *= 1024 * 1024
+		}
+
+		ret = append(ret, api.NodeInfo{
+			CudaVersion: cudaVersion,
+			CPU:         []api.CPUInfo{cpuInfo},
+			Memory: api.MemInfo{
+				Total: func() int64 {
+					total, _ := n.Status.Capacity.Memory().AsInt64()
+					return total
+				}(),
+			},
+			GPUS: gpus,
+		})
+	}
+	return
 }
