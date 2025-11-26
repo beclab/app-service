@@ -20,6 +20,7 @@ import (
 	"bytetrade.io/web3os/app-service/pkg/kubesphere"
 	"bytetrade.io/web3os/app-service/pkg/prometheus"
 	"bytetrade.io/web3os/app-service/pkg/tapr"
+	"bytetrade.io/web3os/app-service/pkg/users/userspace"
 
 	"bytetrade.io/web3os/app-service/pkg/utils"
 
@@ -576,4 +577,125 @@ func CheckAppEnvs(ctx context.Context, ctrlClient client.Client, envs []sysv1alp
 	}
 	return nil, nil
 
+}
+
+func CheckCloneEntrances(ctrlClient client.Client, appConfig *appcfg.ApplicationConfig, insReq *api.InstallRequest) (*api.AppEntranceCheckResult, error) {
+	if appConfig == nil {
+		return nil, nil
+	}
+	// Only check when app itself supports multiple install and this installation is a clone
+	if !appConfig.AllowMultipleInstall || insReq.RawAppName == "" {
+		return nil, nil
+	}
+
+	result := new(api.AppEntranceCheckResult)
+
+	reqEntranceMap := make(map[string]bool)
+	for _, e := range insReq.Entrances {
+		reqEntranceMap[e.Name] = true
+	}
+
+	for _, e := range appConfig.Entrances {
+		if e.Invisible {
+			continue
+		}
+		if _, ok := reqEntranceMap[e.Name]; !ok {
+			result.MissingValues = append(result.MissingValues, api.EntranceClone{
+				Name:  e.Name,
+				Title: e.Title,
+			})
+			continue
+		}
+	}
+
+	entranceMap := make(map[string]bool)
+	titleMap := make(map[string]bool)
+
+	var amList v1alpha1.ApplicationManagerList
+	err := ctrlClient.List(context.TODO(), &amList)
+	if err != nil {
+		return nil, err
+	}
+	for _, am := range amList.Items {
+		if am.Status.State == v1alpha1.Uninstalled ||
+			am.Status.State == v1alpha1.InstallFailed ||
+			am.Status.State == v1alpha1.DownloadingCanceled ||
+			am.Status.State == v1alpha1.DownloadFailed ||
+			am.Status.State == v1alpha1.PendingCanceled ||
+			am.Status.State == v1alpha1.InstallingCanceled {
+			continue
+		}
+		if am.Spec.AppOwner != appConfig.OwnerName {
+			continue
+		}
+		if am.Spec.AppName == appConfig.AppName {
+			continue
+		}
+		if userspace.IsSysApp(am.Spec.AppName) {
+			continue
+		}
+
+		var cfg appcfg.ApplicationConfig
+		err = json.Unmarshal([]byte(am.Spec.Config), &cfg)
+		if err != nil {
+			return nil, err
+		}
+		titleMap[cfg.Title] = true
+		for _, e := range cfg.Entrances {
+			entranceMap[e.Title] = true
+		}
+	}
+
+	for _, e := range insReq.Entrances {
+		if entranceMap[e.Title] {
+			result.InvalidValues = append(result.InvalidValues, api.EntranceClone{
+				Name:    e.Name,
+				Title:   e.Title,
+				Message: fmt.Sprintf("entrance %s title is duplicated", e.Name),
+			})
+		} else if len(e.Title) > 30 {
+			result.InvalidValues = append(result.InvalidValues, api.EntranceClone{
+				Name:    e.Name,
+				Title:   e.Title,
+				Message: fmt.Sprintf("entrance %s title cannot exceed 30 characters", e.Name),
+			})
+		} else if len(e.Title) == 0 {
+			result.InvalidValues = append(result.InvalidValues, api.EntranceClone{
+				Name:    e.Name,
+				Title:   e.Title,
+				Message: fmt.Sprintf("entrance %s title cannot be empty", e.Name),
+			})
+		}
+	}
+
+	if titleMap[insReq.Title] {
+		result.TitleValidation = api.AppTitle{
+			Title:   insReq.Title,
+			IsValid: false,
+			Message: fmt.Sprintf("title %s is duplicated", insReq.Title),
+		}
+	} else if len(insReq.Title) > 30 {
+		result.TitleValidation = api.AppTitle{
+			Title:   insReq.Title,
+			IsValid: false,
+			Message: "Title cannot exceed 30 characters",
+		}
+	} else if len(insReq.Title) == 0 {
+		result.TitleValidation = api.AppTitle{
+			Title:   insReq.Title,
+			IsValid: false,
+			Message: "Title cannot be empty",
+		}
+	} else {
+		result.TitleValidation = api.AppTitle{
+			Title:   insReq.Title,
+			IsValid: true,
+		}
+	}
+
+	if len(result.MissingValues) > 0 || len(result.InvalidValues) > 0 || !result.TitleValidation.IsValid {
+		return result, nil
+	}
+
+	return nil, nil
 }
