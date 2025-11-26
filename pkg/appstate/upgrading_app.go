@@ -228,6 +228,13 @@ func (p *UpgradingApp) exec(ctx context.Context) error {
 	}
 	values["sysVersion"] = terminus.Spec.Version
 
+	nodeInfo, err := utils.GetNodeInfo(ctx)
+	if err != nil {
+		klog.Errorf("failed to get node info %v", err)
+		return err
+	}
+	values["nodes"] = nodeInfo
+
 	refs, err := p.getRefsForImageManager(appConfig, values)
 	if err != nil {
 		klog.Errorf("get image refs from resources failed %v", err)

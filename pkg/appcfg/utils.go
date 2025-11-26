@@ -203,5 +203,6 @@ func getAppConfigFromConfigurationFile(app, chart, owner string) (*ApplicationCo
 		Type:                 cfg.ConfigType,
 		Envs:                 cfg.Envs,
 		Images:               cfg.Options.Images,
+		HardwareRequirement:  cfg.Spec.Hardware,
 	}, nil
 }

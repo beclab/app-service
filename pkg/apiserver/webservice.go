@@ -167,6 +167,12 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
 		Returns(http.StatusOK, "Success to get", nil))
 
+	ws.Route(ws.GET("/cluster/node_info").
+		To(handler.clusterNodeInfo).
+		Doc("get cluster resource and resource usage").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Returns(http.StatusOK, "Success to get", nil))
+
 	// handler_system
 	ws.Route(ws.POST("/system/service/enable/sync").
 		To(handler.enableServiceSync).
