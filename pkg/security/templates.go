@@ -442,7 +442,7 @@ var (
 		Spec: netv1.NetworkPolicySpec{
 			PodSelector: metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					constants.AppSharedEntrancesLabel: "true",
+					constants.AppMiddlewareLabel: "true",
 				},
 			},
 			Ingress: []netv1.NetworkPolicyIngressRule{

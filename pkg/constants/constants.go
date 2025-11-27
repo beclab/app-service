@@ -120,6 +120,7 @@ const (
 	AppStopDueToEvicted    = "Evicted"
 
 	AppSharedEntrancesLabel = "app.bytetrade.io/shared-entrance"
+	AppMiddlewareLabel      = "app.bytetrade.io/middleware"
 
 	OneContainerMultiDeviceSplitSymbol = ":"
 	ArchLabelKey                       = "kubernetes.io/arch"
