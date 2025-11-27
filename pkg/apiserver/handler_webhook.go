@@ -836,16 +836,16 @@ func (h *Handler) appLabelMutate(ctx context.Context, req *admissionv1.Admission
 		UID:     req.UID,
 	}
 
-	_, appCfg, isShared, _ := h.sidecarWebhook.GetAppConfig(req.Namespace)
+	_, appCfg, _, _ := h.sidecarWebhook.GetAppConfig(req.Namespace)
 	if appCfg == nil {
 		klog.Error("get appcfg is empty")
 		return resp
 	}
 
-	if isShared {
-		klog.Infof("Skip app label inject for shared namespace=%s", req.Namespace)
-		return resp
-	}
+	//if isShared {
+	//	klog.Infof("Skip app label inject for shared namespace=%s", req.Namespace)
+	//	return resp
+	//}
 
 	appName := appCfg.AppName
 	if len(appName) == 0 {
