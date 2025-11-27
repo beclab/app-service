@@ -216,22 +216,44 @@ func CheckAppRequirement(token string, appConfig *appcfg.ApplicationConfig) (str
 	klog.Infof("Current resource=%s", utils.PrettyJSON(metrics))
 	klog.Infof("App required resource=%s", utils.PrettyJSON(appConfig.Requirement))
 
-	switch {
-	case appConfig.Requirement.Disk != nil &&
+	if appConfig.Requirement.Disk != nil &&
 		appConfig.Requirement.Disk.CmpInt64(int64(metrics.Disk.Total*0.9-metrics.Disk.Usage)) > 0 ||
-		int64(metrics.Disk.Total*0.9-metrics.Disk.Usage) < 5*1024*1024*1024:
+		int64(metrics.Disk.Total*0.9-metrics.Disk.Usage) < 5*1024*1024*1024 {
 		return "disk", errors.New("The app's DISK requirement cannot be satisfied")
-	case appConfig.Requirement.Memory != nil &&
-		appConfig.Requirement.Memory.CmpInt64(int64(metrics.Memory.Total*0.9-metrics.Memory.Usage)) > 0:
+	}
+
+	if appConfig.Requirement.Memory != nil &&
+		appConfig.Requirement.Memory.CmpInt64(int64(metrics.Memory.Total*0.9-metrics.Memory.Usage)) > 0 {
 		return "memory", errors.New("The app's MEMORY requirement cannot be satisfied")
-	case appConfig.Requirement.CPU != nil:
+	}
+	if appConfig.Requirement.CPU != nil {
 		availableCPU, _ := resource.ParseQuantity(strconv.FormatFloat(metrics.CPU.Total*0.9-metrics.CPU.Usage, 'f', -1, 64))
 		if appConfig.Requirement.CPU.Cmp(availableCPU) > 0 {
 			return "cpu", errors.New("The app's CPU requirement cannot be satisfied")
 		}
-	case appConfig.Requirement.GPU != nil && !appConfig.Requirement.GPU.IsZero() &&
-		metrics.GPU.Total <= 0:
-		return "gpu", errors.New("The app's GPU requirement cannot be satisfied")
+	}
+	if appConfig.Requirement.GPU != nil {
+		if !appConfig.Requirement.GPU.IsZero() && metrics.GPU.Total <= 0 {
+			return "gpu", errors.New("The app's GPU requirement cannot be satisfied")
+		}
+		nodes, err := utils.GetNodeInfo(context.TODO())
+		if err != nil {
+			klog.Errorf("failed to get node info %v", err)
+			return "", err
+		}
+		var maxNodeGPUMem int64
+		for _, n := range nodes {
+			var sum int64
+			for _, g := range n.GPUS {
+				sum += g.Memory
+			}
+			if sum > maxNodeGPUMem {
+				maxNodeGPUMem = sum
+			}
+		}
+		if appConfig.Requirement.GPU.CmpInt64(maxNodeGPUMem) > 0 {
+			return "gpu", errors.New("The app's GPU requirement cannot found satisfied node")
+		}
 	}
 
 	allocatedResources, err := getRequestResources()
