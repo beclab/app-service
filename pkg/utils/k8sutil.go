@@ -366,6 +366,7 @@ func GetNodeInfo(ctx context.Context) (ret []api.NodeInfo, err error) {
 	if err != nil {
 		return nil, err
 	}
+	klog.Errorf("CpuMaP: %#v", cpuMap)
 	nodes, err := client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
@@ -373,7 +374,7 @@ func GetNodeInfo(ctx context.Context) (ret []api.NodeInfo, err error) {
 	for _, n := range nodes.Items {
 		cpuInfo, ok := cpuMap[n.Name]
 		if !ok {
-			continue
+			cpuInfo = api.CPUInfo{}
 		}
 		cpuInfo.Arch = n.Labels[constants.ArchLabelKey]
 		coreNumber, _ := n.Status.Capacity.Cpu().AsInt64()
