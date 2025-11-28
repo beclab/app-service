@@ -80,7 +80,7 @@ func (s AppName) IsGeneratedApp() bool {
 }
 
 func (s AppName) SharedEntranceIdPrefix() string {
-	hash := md5.Sum([]byte(s + "shared"))
+	hash := md5.Sum([]byte(s.GetAppID() + "shared"))
 	hashString := hex.EncodeToString(hash[:])
 	return hashString[:8]
 }
