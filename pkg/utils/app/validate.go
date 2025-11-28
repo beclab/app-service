@@ -241,6 +241,7 @@ func CheckAppRequirement(token string, appConfig *appcfg.ApplicationConfig) (str
 			klog.Errorf("failed to get node info %v", err)
 			return "", err
 		}
+		klog.Infof("nodes info: %#v", nodes)
 		var maxNodeGPUMem int64
 		for _, n := range nodes {
 			var sum int64
@@ -251,6 +252,7 @@ func CheckAppRequirement(token string, appConfig *appcfg.ApplicationConfig) (str
 				maxNodeGPUMem = sum
 			}
 		}
+
 		if appConfig.Requirement.GPU.CmpInt64(maxNodeGPUMem) > 0 {
 			return "gpu", errors.New("The app's GPU requirement cannot found satisfied node")
 		}

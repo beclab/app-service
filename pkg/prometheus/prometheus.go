@@ -215,7 +215,7 @@ func GetNodeCpuResource(ctx context.Context) (map[string]apiserver_api.CPUInfo, 
 		}
 	}
 
-	for inst := range freqByInstance {
+	for inst := range vendorByInstance {
 		result[inst] = apiserver_api.CPUInfo{
 			Frequency: int(freqByInstance[inst]),
 			Model:     modelByInstance[inst],
