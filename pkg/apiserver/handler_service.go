@@ -169,9 +169,6 @@ func (h *Handler) listBackend(req *restful.Request, resp *restful.Response) {
 		if am.Spec.Type != appv1alpha1.App {
 			continue
 		}
-		if am.Spec.AppOwner != owner {
-			continue
-		}
 		if len(isSysApp) > 0 && isSysApp == "true" {
 			continue
 		}
@@ -194,6 +191,11 @@ func (h *Handler) listBackend(req *restful.Request, resp *restful.Response) {
 			api.HandleError(resp, req, err)
 			return
 		}
+
+		if am.Spec.AppOwner != owner && len(appconfig.SharedEntrances) == 0 {
+			continue
+		}
+
 		now := metav1.Now()
 		name, _ := apputils.FmtAppMgrName(am.Spec.AppName, owner, appconfig.Namespace)
 		app := &appv1alpha1.Application{
@@ -223,6 +225,14 @@ func (h *Handler) listBackend(req *restful.Request, resp *restful.Response) {
 				UpdateTime: &now,
 			},
 		}
+
+		if am.Spec.AppOwner != owner {
+			// only show shared entrances
+			// mask other infos
+			app.Spec.Entrances = []appv1alpha1.Entrance{}
+			app.Spec.Settings = map[string]string{}
+		}
+
 		appsMap[app.Name] = app
 	}
 
