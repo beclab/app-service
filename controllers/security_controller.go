@@ -271,10 +271,10 @@ func (r *SecurityReconciler) reconcileNamespaceLabels(ctx context.Context, ns *c
 				delete(ns.Labels, security.NamespaceOwnerLabel)
 				updated = true
 			}
-
-			if system {
-				ns.Labels[security.NamespaceTypeLabel] = security.System
-			}
+		}
+		if system {
+			ns.Labels[security.NamespaceTypeLabel] = security.System
+			updated = true
 		}
 
 		if shared {
