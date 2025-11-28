@@ -165,6 +165,8 @@ func (h *Handler) listBackend(req *restful.Request, resp *restful.Response) {
 		api.HandleError(resp, req, err)
 		return
 	}
+
+	sharedEntranceApps := make(map[string]*appv1alpha1.Application)
 	for _, am := range ams {
 		if am.Spec.Type != appv1alpha1.App {
 			continue
@@ -231,8 +233,28 @@ func (h *Handler) listBackend(req *restful.Request, resp *restful.Response) {
 			// mask other infos
 			app.Spec.Entrances = []appv1alpha1.Entrance{}
 			app.Spec.Settings = map[string]string{}
-		}
+			app.Spec.Owner = ""
+			app.Spec.Namespace = ""
 
+			if _, ok := sharedEntranceApps[app.Spec.Appid]; !ok {
+				sharedEntranceApps[app.Spec.Appid] = app
+			}
+		} else {
+
+			if len(appconfig.SharedEntrances) > 0 {
+				// force to set the shared entrance app with my app
+				sharedEntranceApps[app.Spec.Appid] = app
+			}
+
+			appsMap[app.Name] = app
+		}
+	}
+
+	// add shared entrance apps
+	for _, app := range sharedEntranceApps {
+		if _, ok := appsMap[app.Name]; ok {
+			continue
+		}
 		appsMap[app.Name] = app
 	}
 
