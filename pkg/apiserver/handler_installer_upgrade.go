@@ -30,7 +30,7 @@ type upgradeHelperIntf interface {
 	getAppConfig(prevCfg *appcfg.ApplicationConfig, adminUsers []string, marketSource string, isAdmin bool) (err error)
 	validate() error
 	applyAppEnv(ctx context.Context) error
-	encodingAppCofnig() (string, error)
+	setAndEncodingAppCofnig(prevCfg *appcfg.ApplicationConfig) (string, error)
 }
 
 var _ upgradeHelperIntf = (upgradeHelperIntf)(nil)
@@ -126,7 +126,26 @@ func (h *upgradeHandlerHelper) validate() error {
 	return nil
 }
 
-func (h *upgradeHandlerHelper) encodingAppCofnig() (string, error) {
+func (h *upgradeHandlerHelper) setAndEncodingAppCofnig(prevCfg *appcfg.ApplicationConfig) (string, error) {
+	// cloned app
+	if h.app != h.rawAppName {
+		h.appConfig.Title = prevCfg.Title
+		entranceTitleMap := make(map[string]string)
+		for _, e := range prevCfg.Entrances {
+			if e.Invisible {
+				continue
+			}
+			entranceTitleMap[e.Name] = e.Title
+		}
+		for i, e := range h.appConfig.Entrances {
+			if e.Invisible {
+				continue
+			}
+			if title, ok := entranceTitleMap[e.Name]; ok {
+				h.appConfig.Entrances[i].Title = title
+			}
+		}
+	}
 	encoding, err := json.Marshal(h.appConfig)
 	if err != nil {
 		klog.Errorf("Failed to marshal app config err=%v", err)
@@ -236,7 +255,6 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 	if appMgr.Spec.RawAppName != "" {
 		rawAppName = appMgr.Spec.RawAppName
 	}
-
 	apiVersion, _, err := apputils.GetApiVersionFromAppConfig(req.Request.Context(), &apputils.ConfigOptions{
 		App:          app,
 		RawAppName:   rawAppName,
@@ -295,7 +313,7 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 	}
 
 	var prevCfg appcfg.ApplicationConfig
-	err = appMgr.GetAppConfig(prevCfg)
+	err = appMgr.GetAppConfig(&prevCfg)
 	if err != nil {
 		klog.Errorf("Failed to get previous app config err=%v", err)
 		api.HandleError(resp, req, err)
@@ -321,7 +339,7 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 	}
 
 	appCopy := appMgr.DeepCopy()
-	config, err := helper.encodingAppCofnig()
+	config, err := helper.setAndEncodingAppCofnig(&prevCfg)
 	if err != nil {
 		klog.Errorf("Failed to encoding app config err=%v", err)
 		return
