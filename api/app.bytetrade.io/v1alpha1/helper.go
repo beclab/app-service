@@ -31,7 +31,7 @@ func (a *Application) IsClusterScoped() bool {
 }
 
 func (a *ApplicationManager) GetAppConfig(appConfig any) (err error) {
-	err = json.Unmarshal([]byte(a.Spec.Config), &appConfig)
+	err = json.Unmarshal([]byte(a.Spec.Config), appConfig)
 	if err != nil {
 		klog.Errorf("unmarshal to appConfig failed %v", err)
 		return err
