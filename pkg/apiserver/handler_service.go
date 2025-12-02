@@ -232,9 +232,6 @@ func (h *Handler) listBackend(req *restful.Request, resp *restful.Response) {
 			// only show shared entrances
 			// mask other infos
 			app.Spec.Entrances = []appv1alpha1.Entrance{}
-			app.Spec.Settings = map[string]string{}
-			app.Spec.Owner = ""
-			app.Spec.Namespace = ""
 
 			if _, ok := sharedEntranceApps[app.Spec.Appid]; !ok {
 				sharedEntranceApps[app.Spec.Appid] = app
