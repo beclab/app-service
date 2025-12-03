@@ -1,7 +1,12 @@
 package apiserver
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"time"
 
 	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
 	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
@@ -11,6 +16,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+type remoteOptionsProxyRequest struct {
+	Endpoint string `json:"endpoint"`
+}
 
 func (h *Handler) getAppEnv(req *restful.Request, resp *restful.Response) {
 	appName := req.PathParameter(ParamAppName)
@@ -104,4 +113,55 @@ func (h *Handler) updateAppEnv(req *restful.Request, resp *restful.Response) {
 	}
 
 	resp.WriteAsJson(targetAppEnv.Envs)
+}
+
+func (h *Handler) proxyRemoteOptions(req *restful.Request, resp *restful.Response) {
+	var body remoteOptionsProxyRequest
+	if err := req.ReadEntity(&body); err != nil {
+		api.HandleBadRequest(resp, req, err)
+		return
+	}
+	if body.Endpoint == "" {
+		api.HandleBadRequest(resp, req, fmt.Errorf("endpoint is required"))
+		return
+	}
+	u, err := url.Parse(body.Endpoint)
+	if err != nil {
+		api.HandleBadRequest(resp, req, fmt.Errorf("invalid endpoint: %w", err))
+		return
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		api.HandleBadRequest(resp, req, fmt.Errorf("unsupported scheme: %s", u.Scheme))
+		return
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	httpReq, err := http.NewRequestWithContext(req.Request.Context(), http.MethodGet, body.Endpoint, nil)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+
+	r, err := client.Do(httpReq)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+	defer r.Body.Close()
+	if r.StatusCode < 200 || r.StatusCode >= 300 {
+		api.HandleBadRequest(resp, req, fmt.Errorf("unexpected status code: %d", r.StatusCode))
+		return
+	}
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		api.HandleError(resp, req, err)
+		return
+	}
+
+	var items []sysv1alpha1.EnvValueOptionItem
+	if err := json.Unmarshal(data, &items); err != nil {
+		api.HandleBadRequest(resp, req, fmt.Errorf("invalid RemoteOptions body: %w", err))
+		return
+	}
+	resp.WriteAsJson(items)
 }
