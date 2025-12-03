@@ -56,7 +56,7 @@ const (
 
 	EnvoyUID                        int64 = 1555
 	DefaultEnvoyLogLevel                  = "debug"
-	EnvoyImageVersion                     = "bytetrade/envoy:v1.25.11.1"
+	EnvoyImageVersion                     = "beclab/envoy:v1.25.11.1"
 	EnvoyContainerName                    = "olares-envoy-sidecar"
 	EnvoyAdminPort                        = 15000
 	EnvoyAdminPortName                    = "proxy-admin"

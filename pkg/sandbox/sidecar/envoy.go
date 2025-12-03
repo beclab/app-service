@@ -284,7 +284,7 @@ func GetInitContainerSpec(appCfg *appcfg.ApplicationConfig) corev1.Container {
 
 	return corev1.Container{
 		Name:            constants.SidecarInitContainerName,
-		Image:           "openservicemesh/init:v1.2.3", // TODO:
+		Image:           "beclab/init:v1.2.3", // TODO:
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: &enablePrivilegedInitContainer,
@@ -1314,7 +1314,7 @@ func createSocketAddress(addr string, port uint32) *envoy_core.Address {
 func GetInitContainerSpecForWaitFor(username string) corev1.Container {
 	return corev1.Container{
 		Name:            "check-auth",
-		Image:           "owncloudci/wait-for:latest",
+		Image:           "beclab/wait-for:0.1.0",
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Args: []string{
 			"-it",
@@ -1326,7 +1326,7 @@ func GetInitContainerSpecForWaitFor(username string) corev1.Container {
 func GetInitContainerSpecForRenderEnvoyConfig() corev1.Container {
 	return corev1.Container{
 		Name:            "render-envoy-config",
-		Image:           "busybox:1.28",
+		Image:           "beclab/busybox:1.28",
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Command: []string{
 			"sh", "-c",
