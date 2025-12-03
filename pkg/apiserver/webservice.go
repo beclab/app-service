@@ -734,6 +734,14 @@ func addServiceToContainer(c *restful.Container, handler *Handler) error {
 		Consumes(restful.MIME_JSON).
 		Returns(http.StatusOK, "Success to create user env", nil))
 
+	ws.Route(ws.POST("/appenv/remote-options-proxy").
+		To(handler.proxyRemoteOptions).
+		Doc("proxy to fetch remote options for envs (GET the provided endpoint and return []EnvValueOptionItem)").
+		Metadata(restfulspec.KeyOpenAPITags, MODULE_TAGS).
+		Reads(remoteOptionsProxyRequest{}).
+		Consumes(restful.MIME_JSON).
+		Returns(http.StatusOK, "Success to fetch remote options", []sysv1alpha1.EnvValueOptionItem{}))
+
 	ws.Route(ws.GET("/userenvs").
 		To(handler.listUserEnvs).
 		Doc("list user environment variables").
